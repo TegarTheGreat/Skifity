@@ -630,3 +630,69 @@ func TestSnapshotRefusesToOverwrite(t *testing.T) {
 		t.Fatal("a path with a quote in it was accepted into a literal SQL statement")
 	}
 }
+
+// TestPanelWideAuditEventsAreVisible: a password change, a two-factor change, a
+// settings change, a key rotation and a panel upgrade are all recorded with no
+// team, because there is one panel however many teams share it. The audit list
+// filtered on the team alone, so every one of them went into the table and came
+// out of nothing — which is the half of the log an operator most wants.
+func TestPanelWideAuditEventsAreVisible(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	user, team, _, _ := seedTeam(t, db)
+
+	events := []AuditEvent{
+		{TeamID: team.ID, ActorID: user.ID, ActorLabel: user.Email, Action: "app.created"},
+		{ActorID: user.ID, ActorLabel: user.Email, Action: "auth.password_changed"},
+		{Action: "security.key_rotated"}, // nobody's: the panel did it
+	}
+	for i := range events {
+		if err := db.RecordAudit(ctx, &events[i]); err != nil {
+			t.Fatalf("RecordAudit: %v", err)
+		}
+	}
+
+	listed, err := db.ListAudit(ctx, team.ID, "", "", 100)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, e := range listed {
+		seen[e.Action] = true
+	}
+	for _, want := range []string{"app.created", "auth.password_changed", "security.key_rotated"} {
+		if !seen[want] {
+			t.Errorf("%s was recorded and is not in the audit log", want)
+		}
+	}
+}
+
+// TestAnotherTeamsPeopleStayOutOfTheAuditLog: a panel-wide event carries the
+// actor's address, and a team's admin should not learn from it that somebody in
+// another team exists.
+func TestAnotherTeamsPeopleStayOutOfTheAuditLog(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, _ := seedTeam(t, db)
+
+	outsider := User{Email: "elsewhere@example.test", PasswordHash: "x"}
+	if err := db.CreateUser(ctx, &outsider); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	theirs := AuditEvent{
+		ActorID: outsider.ID, ActorLabel: outsider.Email, Action: "auth.password_changed",
+	}
+	if err := db.RecordAudit(ctx, &theirs); err != nil {
+		t.Fatalf("RecordAudit: %v", err)
+	}
+
+	listed, err := db.ListAudit(ctx, team.ID, "", "", 100)
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	for _, e := range listed {
+		if e.ActorID == outsider.ID {
+			t.Fatalf("the audit log shows %s, who is in no team of this one", e.ActorLabel)
+		}
+	}
+}

@@ -108,9 +108,21 @@ func (db *DB) ListAudit(ctx context.Context, teamID, action, targetID string, li
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
+	// Panel-wide events are recorded with no team, because there is one set of
+	// settings, one keyring and one panel however many teams share them. They
+	// were written and then invisible: this list filtered on the team alone, so
+	// every password change, two-factor change, settings change, key rotation
+	// and panel upgrade went into the table and came out of nothing.
+	//
+	// They are included here, narrowed to the ones this team's own people did,
+	// plus the ones nobody did — so a team's admin does not learn that somebody
+	// in another team exists from the audit log.
 	query := `SELECT id, team_id, actor_id, actor_label, action, target_type, target_id, target_label,
-		ip, user_agent, metadata, at FROM audit_events WHERE team_id = ?`
-	args := []any{teamID}
+		ip, user_agent, metadata, at FROM audit_events
+		WHERE (team_id = ?
+		  OR (team_id = '' AND (actor_id = ''
+		      OR actor_id IN (SELECT user_id FROM memberships WHERE team_id = ?))))`
+	args := []any{teamID, teamID}
 	if action != "" {
 		query += ` AND action = ?`
 		args = append(args, action)

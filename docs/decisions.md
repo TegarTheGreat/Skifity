@@ -160,3 +160,30 @@ MCP server (`skifity mcp`).
 **Reason.** One artifact to build, sign, ship and upgrade. The CLI and MCP paths share the API client
 and the error-formatting code, so an error looks the same in the panel, the terminal and an AI
 assistant.
+
+---
+
+## ADR-0012 - Logical dumps with presigned URLs, not an in-cluster backup agent
+
+**Context.** Backups need to reach S3-compatible storage. CloudNativePG can do
+continuous WAL archiving to an object store, but Redis and MySQL cannot, and
+putting the storage credentials into every environment's namespace widens the
+blast radius of one compromised app.
+
+**Options.** (a) Per-engine native backup with credentials in each namespace,
+(b) stream dumps through the panel, (c) a Job per backup that uploads to a
+presigned URL the panel generates.
+
+**Decision.** (c). The panel generates a short-lived presigned PUT URL and runs a
+Job that pipes `pg_dump` / `mysqldump` / `redis-cli --rdb` through gzip and
+`curl -T -` to that URL. Restore is the same in reverse with a presigned GET.
+
+**Reason.** The storage credentials never leave the panel: a namespace only ever
+sees a URL that expires. It is one mechanism for all three engines, so restore,
+retention and the UI have no per-engine branches. Streaming through the panel
+(b) would make the panel a bottleneck and tie a backup's life to the panel's.
+
+**Consequences.** A logical dump is heavier than WAL archiving on a large
+PostgreSQL database and gives point-in-time recovery only to the last dump.
+CloudNativePG's `barmanObjectStore` remains available for operators who need
+continuous archiving, and is documented as the advanced option.

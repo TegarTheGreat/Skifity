@@ -57,7 +57,7 @@ func embeddedHandler() http.Handler {
 			return
 		}
 		info, statErr := file.Stat()
-		file.Close()
+		_ = file.Close()
 		if statErr != nil || info.IsDir() {
 			serveIndex(w, r, root)
 			return

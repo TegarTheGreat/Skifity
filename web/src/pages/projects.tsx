@@ -1,0 +1,176 @@
+import { useState } from "react"
+import { Link } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import { FolderIcon, PlusIcon } from "lucide-react"
+
+import { EmptyState } from "@/components/empty-state"
+import { ErrorDisplay } from "@/components/error-display"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
+import { useSession } from "@/hooks/use-session"
+import { api, type List } from "@/lib/api"
+import { formatRelative } from "@/lib/format"
+import { queryClient } from "@/lib/query"
+import type { Project } from "@/lib/types"
+
+export function ProjectsPage() {
+  const { t } = useTranslation()
+  const { team } = useSession()
+  const [creating, setCreating] = useState(false)
+
+  const projects = useQuery({
+    queryKey: ["projects", team?.id],
+    queryFn: () => api.get<List<Project>>(`/api/teams/${team!.id}/projects`),
+    enabled: Boolean(team),
+  })
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("projects.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("projects.emptyHelp")}</p>
+        </div>
+        <Button onClick={() => setCreating(true)}>
+          <PlusIcon className="size-4" />
+          {t("projects.newProject")}
+        </Button>
+      </div>
+
+      {projects.isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
+      ) : projects.error ? (
+        <ErrorDisplay error={projects.error} onRetry={() => void projects.refetch()} />
+      ) : (projects.data?.items.length ?? 0) === 0 ? (
+        <EmptyState
+          icon={FolderIcon}
+          title={t("projects.empty")}
+          description={t("projects.emptyHelp")}
+          action={
+            <Button onClick={() => setCreating(true)}>
+              <PlusIcon className="size-4" />
+              {t("projects.newProject")}
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.data?.items.map((project) => (
+            <Link key={project.id} to={`/projects/${project.id}`} className="group">
+              <Card className="h-full transition-colors group-hover:border-primary/50">
+                <CardHeader>
+                  <CardTitle className="truncate text-base">{project.name}</CardTitle>
+                  <CardDescription className="line-clamp-2">
+                    {project.description || t("projects.emptyHelp")}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  {t("common.created")} {formatRelative(project.created_at)}
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <NewProjectDialog open={creating} onOpenChange={setCreating} />
+    </div>
+  )
+}
+
+function NewProjectDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const { team } = useSession()
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post<Project>(`/api/teams/${team!.id}/projects`, {
+        name: name.trim(),
+        description: description.trim(),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects", team?.id] })
+      setName("")
+      setDescription("")
+      onOpenChange(false)
+    },
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("projects.newProject")}</DialogTitle>
+          <DialogDescription>{t("projects.emptyHelp")}</DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            create.mutate()
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="project-name">{t("projects.projectName")}</Label>
+            <Input
+              id="project-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="project-description">
+              {t("projects.description")}{" "}
+              <span className="text-muted-foreground">({t("common.optional")})</span>
+            </Label>
+            <Textarea
+              id="project-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+            />
+          </div>
+
+          {create.error && <ErrorDisplay error={create.error} compact />}
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button type="submit" disabled={!name.trim() || create.isPending}>
+              {create.isPending ? t("common.saving") : t("common.create")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}

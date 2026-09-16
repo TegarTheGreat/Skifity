@@ -1,0 +1,409 @@
+/** The shapes the API returns. These mirror the Go types in internal/store. */
+
+export type Role = "owner" | "admin" | "member"
+
+export type User = {
+  id: string
+  email: string
+  name: string
+  totp_enabled: boolean
+  is_admin: boolean
+  disabled: boolean
+  locale: string
+  theme: string
+  recovery_saved: boolean
+  created_at: string
+  last_login_at?: string
+}
+
+export type Team = { id: string; name: string; slug: string; created_at: string; role?: Role }
+
+export type Project = {
+  id: string
+  team_id: string
+  name: string
+  slug: string
+  description: string
+  created_at: string
+}
+
+export type Environment = {
+  id: string
+  project_id: string
+  name: string
+  slug: string
+  kind: "standard" | "preview"
+  namespace: string
+  source_ref?: string
+  created_at: string
+}
+
+export type ServerStatus =
+  "pending" | "provisioning" | "ready" | "not_ready" | "failed" | "removing"
+
+export type Server = {
+  id: string
+  team_id: string
+  name: string
+  host: string
+  ssh_port: number
+  ssh_user: string
+  host_key: string
+  role: "control-plane" | "worker"
+  status: ServerStatus
+  status_detail: string
+  node_name: string
+  external_ip: string
+  internal_ip: string
+  os_info: string
+  arch: string
+  cpu_cores: number
+  memory_mb: number
+  disk_gb: number
+  created_at: string
+  last_seen_at?: string
+}
+
+export type StepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped"
+
+export type OperationStep = {
+  id: string
+  seq: number
+  key: string
+  status: StepStatus
+  message: string
+  detail?: string
+  started_at?: string
+  finished_at?: string
+}
+
+export type Operation = {
+  id: string
+  team_id: string
+  kind: string
+  target_type: string
+  target_id: string
+  status: "pending" | "running" | "succeeded" | "failed" | "cancelled"
+  error_code?: string
+  error_message?: string
+  created_at: string
+  finished_at?: string
+  steps?: OperationStep[]
+}
+
+export type App = {
+  id: string
+  environment_id: string
+  name: string
+  slug: string
+  source_type: "git" | "image" | "compose"
+  git_source_id?: string
+  repo_url: string
+  branch: string
+  root_dir: string
+  builder: string
+  dockerfile_path: string
+  image: string
+  port: number
+  health_path: string
+  start_command: string
+  replicas: number
+  autoscale: boolean
+  min_replicas: number
+  max_replicas: number
+  cpu_target: number
+  memory_target: number
+  scale_to_zero: boolean
+  cpu_request_m: number
+  cpu_limit_m: number
+  mem_request_mb: number
+  mem_limit_mb: number
+  auto_deploy: boolean
+  preview_deploys: boolean
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export type Instance = {
+  name: string
+  status: string
+  ready: boolean
+  restarts: number
+  node: string
+  started_at?: string
+  message?: string
+  cpu_m: number
+  memory_mb: number
+}
+
+export type AppStatus = {
+  phase: string
+  detail?: string
+  desired_replicas: number
+  ready_replicas: number
+  instances: Instance[]
+  image?: string
+  urls?: string[]
+}
+
+export type DeploymentStatus =
+  "queued" | "building" | "deploying" | "succeeded" | "failed" | "cancelled" | "superseded"
+
+export type Deployment = {
+  id: string
+  app_id: string
+  number: number
+  status: DeploymentStatus
+  trigger: string
+  commit_sha: string
+  commit_message: string
+  commit_author: string
+  image: string
+  build_fingerprint: string
+  error_code?: string
+  error_message?: string
+  error_hint?: string
+  created_by: string
+  created_at: string
+  started_at?: string
+  finished_at?: string
+}
+
+export type LogLine = { seq: number; stream: string; line: string; at: string }
+
+export type Variable = {
+  id: string
+  app_id: string
+  key: string
+  value?: string
+  is_secret: boolean
+  build_time: boolean
+  updated_at: string
+}
+
+export type Domain = {
+  id: string
+  app_id: string
+  hostname: string
+  path: string
+  tls: boolean
+  auto: boolean
+  status: string
+  status_detail?: string
+  created_at: string
+}
+
+export type Volume = {
+  id: string
+  app_id: string
+  name: string
+  mount_path: string
+  size_gb: number
+  created_at: string
+}
+
+export type Database = {
+  id: string
+  environment_id: string
+  name: string
+  slug: string
+  engine: "postgres" | "redis" | "mysql"
+  engine_version: string
+  status: string
+  status_detail?: string
+  instances: number
+  storage_gb: number
+  created_at: string
+}
+
+export type DatabaseCredentials = {
+  engine: string
+  host: string
+  port: number
+  database: string
+  username: string
+  password: string
+  url: string
+}
+
+export type Backup = {
+  id: string
+  target_type: string
+  target_id: string
+  status: "running" | "succeeded" | "failed"
+  kind: string
+  location: string
+  size_bytes: number
+  error_message?: string
+  created_at: string
+  finished_at?: string
+}
+
+export type BackupPolicy = {
+  id?: string
+  target_type: string
+  target_id: string
+  schedule: string
+  retention: number
+  destination: string
+  enabled: boolean
+}
+
+export type NodeInfo = {
+  name: string
+  ready: boolean
+  reason?: string
+  roles: string[]
+  internal_ip: string
+  external_ip: string
+  os: string
+  architecture: string
+  kubelet_version: string
+  cpu_capacity_m: number
+  memory_capacity_mb: number
+  cpu_used_m: number
+  memory_used_mb: number
+  pod_count: number
+  schedulable: boolean
+}
+
+export type ClusterSummary = {
+  reachable: boolean
+  kubernetes_version?: string
+  nodes: NodeInfo[]
+  ready_nodes: number
+  total_cpu_m: number
+  total_memory_mb: number
+  used_cpu_m: number
+  used_memory_mb: number
+  high_availability: boolean
+  message?: string
+}
+
+export type ScalingFinding = {
+  code: string
+  severity: "error" | "warning" | "info"
+  title: string
+  detail: string
+  fix: string
+}
+
+export type Scaling = {
+  replicas: number
+  autoscale: boolean
+  min_replicas: number
+  max_replicas: number
+  cpu_target: number
+  memory_target: number
+  scale_to_zero: boolean
+}
+
+export type AuditEvent = {
+  id: string
+  team_id: string
+  actor_id: string
+  actor_label: string
+  action: string
+  target_type: string
+  target_id: string
+  target_label: string
+  ip: string
+  metadata: string
+  at: string
+}
+
+export type Setting = {
+  key: string
+  value?: string
+  secret: boolean
+  configured: boolean
+  label: string
+  group: string
+  help: string
+  placeholder?: string
+}
+
+export type Component = {
+  name: string
+  status: string
+  version: string
+  installed_at?: string
+  detail?: string
+  title: string
+  description: string
+  optional: boolean
+  beta: boolean
+  approximate_memory_mb: number
+}
+
+export type Template = {
+  id: string
+  name: string
+  description: string
+  category: string
+  icon: string
+  website: string
+  beta?: boolean
+  services: { name: string; image: string; port: number; public: boolean }[]
+  databases: { name: string; engine: string }[]
+  inputs?: {
+    key: string
+    label: string
+    help?: string
+    default?: string
+    secret?: boolean
+    required?: boolean
+    generate?: boolean
+  }[]
+  notes?: string
+}
+
+export type APIToken = {
+  id: string
+  name: string
+  prefix: string
+  scopes: string
+  created_at: string
+  last_used_at?: string
+  expires_at?: string
+}
+
+export type Session = {
+  id: string
+  ip: string
+  user_agent: string
+  created_at: string
+  last_seen_at: string
+  expires_at: string
+  current: boolean
+}
+
+export type Meta = {
+  product: string
+  version: string
+  commit: string
+  tagline: string
+  locales: string[]
+  dev_mode: boolean
+  server_now: string
+}
+
+export type CanvasNode = {
+  id: string
+  kind: "app" | "database"
+  name: string
+  status: string
+  detail?: string
+  urls?: string[]
+  environment: string
+}
+
+export type CanvasEdge = { from: string; to: string; label: string }
+
+export type DatabaseLink = {
+  database_id: string
+  app_id: string
+  var_name: string
+  created_at: string
+}

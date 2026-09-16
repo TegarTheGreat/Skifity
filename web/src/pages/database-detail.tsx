@@ -1,0 +1,547 @@
+import { useState } from "react"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { useMutation, useQuery } from "@tanstack/react-query"
+import {
+  ArchiveRestoreIcon,
+  DatabaseBackupIcon,
+  EyeIcon,
+  LinkIcon,
+  Trash2Icon,
+  UnlinkIcon,
+} from "lucide-react"
+import { toast } from "sonner"
+
+import { EmptyState } from "@/components/empty-state"
+import { ErrorDisplay } from "@/components/error-display"
+import { StatusBadge } from "@/components/status-badge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { api, type List } from "@/lib/api"
+import { formatBytes, formatDateTime, formatRelative } from "@/lib/format"
+import { queryClient } from "@/lib/query"
+import type {
+  App,
+  Backup,
+  BackupPolicy,
+  Database,
+  DatabaseCredentials,
+  DatabaseLink,
+} from "@/lib/types"
+
+export function DatabaseDetailPage() {
+  const { t } = useTranslation()
+  const { databaseId = "" } = useParams()
+  const navigate = useNavigate()
+
+  const database = useQuery({
+    queryKey: ["database", databaseId],
+    queryFn: () =>
+      api.get<{ database: Database; links: DatabaseLink[] }>(`/api/databases/${databaseId}`),
+    refetchInterval: (query) => (query.state.data?.database.status === "running" ? false : 5_000),
+  })
+
+  const remove = useMutation({
+    mutationFn: () => api.delete(`/api/databases/${databaseId}`),
+    onSuccess: () => navigate("/databases"),
+  })
+
+  if (database.error) {
+    return <ErrorDisplay error={database.error} onRetry={() => void database.refetch()} />
+  }
+  if (database.isLoading || !database.data) return <Skeleton className="h-96" />
+
+  const record = database.data.database
+  const links = database.data.links ?? []
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{record.name}</h1>
+          <p className="mt-1 font-mono text-sm text-muted-foreground">
+            {record.engine} {record.engine_version} · {record.storage_gb} GB
+          </p>
+        </div>
+        <StatusBadge
+          status={record.status}
+          label={t(`databases.status.${record.status}`, { defaultValue: record.status })}
+        />
+      </div>
+
+      {record.status_detail && (
+        <p className="text-sm text-muted-foreground">{record.status_detail}</p>
+      )}
+
+      <Tabs defaultValue="connection">
+        <TabsList>
+          <TabsTrigger value="connection">{t("databases.connectionDetails")}</TabsTrigger>
+          <TabsTrigger value="apps">{t("databases.linkedApps")}</TabsTrigger>
+          <TabsTrigger value="backups">{t("databases.backups")}</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="connection" className="pt-4">
+          <ConnectionPanel databaseId={databaseId} />
+        </TabsContent>
+
+        <TabsContent value="apps" className="pt-4">
+          <LinkedApps database={record} links={links} />
+        </TabsContent>
+
+        <TabsContent value="backups" className="pt-4">
+          <BackupsPanel databaseId={databaseId} />
+        </TabsContent>
+      </Tabs>
+
+      <Card className="border-destructive/30">
+        <CardHeader>
+          <CardTitle className="text-base text-destructive">{t("common.delete")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t("databases.restoreWarning")}</p>
+          {remove.error != null && <ErrorDisplay error={remove.error} compact />}
+          <Button
+            variant="destructive"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (window.confirm(t("projects.deleteProjectWarning"))) remove.mutate()
+            }}
+          >
+            <Trash2Icon className="size-4" />
+            {t("common.delete")}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+/**
+ * Credentials are fetched only when asked for.
+ *
+ * The panel audits every read of a database password, so showing them on page
+ * load would fill the audit log with entries nobody meant to create.
+ */
+function ConnectionPanel({ databaseId }: { databaseId: string }) {
+  const { t } = useTranslation()
+  const [revealed, setRevealed] = useState(false)
+
+  const credentials = useQuery({
+    queryKey: ["credentials", databaseId],
+    queryFn: () => api.get<DatabaseCredentials>(`/api/databases/${databaseId}/credentials`),
+    enabled: revealed,
+    gcTime: 0,
+  })
+
+  const copy = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(t("common.copied"))
+    } catch {
+      toast.error(t("errors.somethingWentWrong"))
+    }
+  }
+
+  if (!revealed) {
+    return (
+      <Card>
+        <CardContent className="space-y-4 pt-6">
+          <Alert>
+            <AlertTitle>{t("databases.showCredentials")}</AlertTitle>
+            <AlertDescription>{t("databases.credentialsWarning")}</AlertDescription>
+          </Alert>
+          <Button variant="outline" onClick={() => setRevealed(true)}>
+            <EyeIcon className="size-4" />
+            {t("databases.showCredentials")}
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (credentials.isLoading) return <Skeleton className="h-64" />
+  if (credentials.error) {
+    return <ErrorDisplay error={credentials.error} onRetry={() => void credentials.refetch()} />
+  }
+
+  const data = credentials.data!
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Host" value={data.host} onCopy={copy} />
+          <Field label="Port" value={String(data.port)} onCopy={copy} />
+          <Field label={t("databases.databaseName")} value={data.database} onCopy={copy} />
+          <Field label="User" value={data.username} onCopy={copy} />
+        </div>
+        <Field label={t("auth.password")} value={data.password} onCopy={copy} secret />
+        <Field label={t("databases.connectionString")} value={data.url} onCopy={copy} secret />
+        <p className="text-xs text-muted-foreground">{t("databases.credentialsWarning")}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function Field({
+  label,
+  value,
+  onCopy,
+  secret,
+}: {
+  label: string
+  value: string
+  onCopy: (value: string) => Promise<void>
+  secret?: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          readOnly
+          value={value}
+          className="font-mono text-xs"
+          type={secret ? "text" : "text"}
+        />
+        <Button variant="outline" size="sm" onClick={() => void onCopy(value)}>
+          {t("common.copy")}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function LinkedApps({ database, links }: { database: Database; links: DatabaseLink[] }) {
+  const { t } = useTranslation()
+  const [appId, setAppId] = useState("")
+  const [varName, setVarName] = useState("")
+
+  const apps = useQuery({
+    queryKey: ["apps", database.environment_id],
+    queryFn: () => api.get<List<App>>(`/api/environments/${database.environment_id}/apps`),
+  })
+
+  const link = useMutation({
+    mutationFn: () =>
+      api.post(`/api/databases/${database.id}/link`, {
+        app_id: appId,
+        var_name: varName.trim(),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["database", database.id] })
+      setAppId("")
+      setVarName("")
+    },
+  })
+
+  const unlink = useMutation({
+    mutationFn: (target: string) => api.delete(`/api/databases/${database.id}/link/${target}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["database", database.id] }),
+  })
+
+  const byId = new Map((apps.data?.items ?? []).map((app) => [app.id, app]))
+  const available = (apps.data?.items ?? []).filter(
+    (app) => !links.some((entry) => entry.app_id === app.id),
+  )
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t("databases.linkAppHelp")}</p>
+
+      {links.length === 0 ? (
+        <EmptyState
+          icon={LinkIcon}
+          title={t("databases.linkedApps")}
+          description={t("databases.linkAppHelp")}
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("nav.apps")}</TableHead>
+                  <TableHead>{t("databases.variableName")}</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {links.map((entry) => (
+                  <TableRow key={entry.app_id}>
+                    <TableCell className="font-medium">
+                      <Link to={`/apps/${entry.app_id}`} className="hover:text-primary">
+                        {byId.get(entry.app_id)?.name ?? entry.app_id}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{entry.var_name}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("databases.unlink")}
+                        disabled={unlink.isPending}
+                        onClick={() => unlink.mutate(entry.app_id)}
+                      >
+                        <UnlinkIcon className="size-4 text-muted-foreground" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {available.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                link.mutate()
+              }}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="link-app">{t("databases.linkApp")}</Label>
+                  <Select value={appId} onValueChange={setAppId}>
+                    <SelectTrigger id="link-app">
+                      <SelectValue placeholder={t("databases.linkApp")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {available.map((app) => (
+                        <SelectItem key={app.id} value={app.id}>
+                          {app.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="link-var">
+                    {t("databases.variableName")}{" "}
+                    <span className="text-muted-foreground">({t("common.optional")})</span>
+                  </Label>
+                  <Input
+                    id="link-var"
+                    value={varName}
+                    onChange={(event) => setVarName(event.target.value)}
+                    placeholder="DATABASE_URL"
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              {link.error != null && <ErrorDisplay error={link.error} compact />}
+              <div className="flex justify-end">
+                <Button type="submit" disabled={!appId || link.isPending}>
+                  <LinkIcon className="size-4" />
+                  {link.isPending ? t("common.saving") : t("databases.linkApp")}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {unlink.error != null && <ErrorDisplay error={unlink.error} compact />}
+    </div>
+  )
+}
+
+function BackupsPanel({ databaseId }: { databaseId: string }) {
+  const { t } = useTranslation()
+
+  const backups = useQuery({
+    queryKey: ["backups", databaseId],
+    queryFn: () => api.get<List<Backup>>(`/api/databases/${databaseId}/backups`),
+    refetchInterval: (query) =>
+      (query.state.data?.items ?? []).some((backup) => backup.status === "running") ? 5_000 : false,
+  })
+
+  const policy = useQuery({
+    queryKey: ["backup-policy", databaseId],
+    queryFn: () => api.get<BackupPolicy>(`/api/databases/${databaseId}/backup-policy`),
+  })
+
+  const [schedule, setSchedule] = useState<string | null>(null)
+  const [retention, setRetention] = useState<string | null>(null)
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+
+  const current = policy.data
+  const scheduleValue = schedule ?? current?.schedule ?? "0 3 * * *"
+  const retentionValue = retention ?? String(current?.retention ?? 7)
+  const enabledValue = enabled ?? current?.enabled ?? false
+
+  const savePolicy = useMutation({
+    mutationFn: () =>
+      api.put(`/api/databases/${databaseId}/backup-policy`, {
+        schedule: scheduleValue,
+        retention: Number(retentionValue) || 7,
+        enabled: enabledValue,
+      }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ["backup-policy", databaseId] }),
+  })
+
+  const backupNow = useMutation({
+    mutationFn: () => api.post(`/api/databases/${databaseId}/backups`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["backups", databaseId] }),
+  })
+
+  const restore = useMutation({
+    mutationFn: (backupID: string) => api.post(`/api/databases/${databaseId}/restore/${backupID}`),
+    onSuccess: () => toast.success(t("databases.restoreStarted")),
+  })
+
+  const items = backups.data?.items ?? []
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("databases.backupSchedule")}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{t("databases.backupScheduleHelp")}</p>
+          <label className="flex items-center justify-between gap-4">
+            <span className="text-sm">{t("databases.backupSchedule")}</span>
+            <Switch checked={enabledValue} onCheckedChange={setEnabled} />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="backup-schedule">{t("databases.backupSchedule")}</Label>
+              <Input
+                id="backup-schedule"
+                value={scheduleValue}
+                onChange={(event) => setSchedule(event.target.value)}
+                className="font-mono"
+                placeholder="0 3 * * *"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="backup-retention">{t("databases.retention")}</Label>
+              <Input
+                id="backup-retention"
+                type="number"
+                min={1}
+                value={retentionValue}
+                onChange={(event) => setRetention(event.target.value)}
+              />
+            </div>
+          </div>
+          {savePolicy.error != null && <ErrorDisplay error={savePolicy.error} compact />}
+          <div className="flex justify-end">
+            <Button disabled={savePolicy.isPending} onClick={() => savePolicy.mutate()}>
+              {savePolicy.isPending ? t("common.saving") : t("common.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-medium">{t("databases.backups")}</h2>
+        <Button size="sm" disabled={backupNow.isPending} onClick={() => backupNow.mutate()}>
+          <DatabaseBackupIcon className="size-4" />
+          {t("databases.backupNow")}
+        </Button>
+      </div>
+
+      {backupNow.error != null && <ErrorDisplay error={backupNow.error} />}
+      {restore.error != null && <ErrorDisplay error={restore.error} />}
+
+      {backups.isLoading ? (
+        <Skeleton className="h-40" />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={DatabaseBackupIcon}
+          title={t("databases.noBackups")}
+          description={t("databases.backupScheduleHelp")}
+          action={<Button onClick={() => backupNow.mutate()}>{t("databases.backupNow")}</Button>}
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("common.created")}</TableHead>
+                  <TableHead>{t("common.status")}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t("common.size")}</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((backup) => (
+                  <TableRow key={backup.id}>
+                    <TableCell>
+                      <div className="text-sm">{formatDateTime(backup.created_at)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatRelative(backup.created_at)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        status={backup.status}
+                        label={t(`databases.backupStatus.${backup.status}`, {
+                          defaultValue: backup.status,
+                        })}
+                      />
+                      {backup.error_message && (
+                        <p className="mt-1 text-xs text-destructive">{backup.error_message}</p>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums sm:table-cell">
+                      {backup.size_bytes ? formatBytes(backup.size_bytes) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {backup.status === "succeeded" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={restore.isPending}
+                          onClick={() => {
+                            if (window.confirm(t("databases.restoreWarning"))) {
+                              restore.mutate(backup.id)
+                            }
+                          }}
+                        >
+                          <ArchiveRestoreIcon className="size-4" />
+                          {t("databases.restore")}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}

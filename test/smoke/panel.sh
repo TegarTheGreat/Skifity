@@ -159,6 +159,14 @@ pass "an app can be created"
 "$BINARY" apps --json | grep -q "$APP_ID" || fail "the CLI does not list the new app"
 pass "the CLI lists the new app"
 
+# An app created without a port used to get zero, which renders no Service, no
+# Ingress and no URL: a deploy that succeeds and cannot be reached.
+PORTLESS=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" -X POST "$BASE/api/environments/$ENV_ID/apps" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Portless","source_type":"image","image":"nginx:1.27-alpine"}')
+echo "$PORTLESS" | grep -q '"port":8080' || fail "an app created without a port did not get the default one"
+pass "an app created without a port still gets one"
+
 # Variables: a runtime one must not require a rebuild.
 "$BINARY" env set --app "$APP_ID" LOG_LEVEL=debug | grep -q 'No rebuild was needed' \
   || fail "setting a runtime variable reported a rebuild"
@@ -242,6 +250,18 @@ curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/teams/$TEAM_ID/notifications"
 CHANNELS=$(curl -fsS -b "$WORKDIR/cookies" "$BASE/api/teams/$TEAM_ID/notifications")
 echo "$CHANNELS" | grep -q 'verysecrethook' && fail "a channel's webhook URL was returned by the API"
 pass "a notification channel is stored without its address coming back"
+
+# Two-factor recovery codes are the only way back in on a panel with no email
+# reset by design, so they have to be handed out and then actually remembered.
+TOTP=$(curl -fsS -b "$WORKDIR/cookies" -H "X-Skifity-CSRF: $CSRF" -X POST "$BASE/api/me/totp")
+echo "$TOTP" | grep -q '"recovery_codes":\[' || fail "two-factor setup returned no recovery codes"
+echo "$TOTP" | grep -qE '"[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}"' \
+  || fail "the recovery codes are not in the shape the account page prints"
+pass "two-factor setup hands out recovery codes"
+
+curl -fsS -b "$WORKDIR/cookies" "$BASE/api/me" | grep -q '"recovery_codes_left":8' \
+  || fail "the recovery codes were printed and not stored"
+pass "the recovery codes are stored, not just printed"
 
 # Nobody can sign in is the one situation the API cannot fix, so the recovery
 # path has to work: it reads the database directly, on the server.

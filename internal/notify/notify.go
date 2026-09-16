@@ -187,7 +187,8 @@ func sendEmail(ctx context.Context, config map[string]string, msg Message) error
 
 	// Port 465 is implicit TLS; everything else starts plain and upgrades.
 	if port == 465 {
-		conn, err := tls.Dial("tcp", address, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		dialer := &tls.Dialer{Config: &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}}
+		conn, err := dialer.DialContext(ctx, "tcp", address)
 		if err != nil {
 			return fmt.Errorf("connect to %s over TLS: %w", address, err)
 		}

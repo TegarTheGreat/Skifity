@@ -80,12 +80,6 @@ func (s *setupState) complete() {
 	s.mu.Unlock()
 }
 
-func (s *setupState) isComplete() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.completed
-}
-
 type setupStatusResponse struct {
 	// NeedsSetup is what the frontend routes on.
 	NeedsSetup bool   `json:"needs_setup"`

@@ -111,7 +111,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 			if rec := recover(); rec != nil {
 				// http.ErrAbortHandler is how a handler intentionally drops a
 				// connection; re-panicking preserves that meaning.
-				if rec == http.ErrAbortHandler {
+				if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 					panic(rec)
 				}
 				s.log.Error("panic serving request",

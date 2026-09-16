@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"skifity/internal/errdoc"
-	"skifity/internal/events"
 	"skifity/internal/logging"
 	"skifity/internal/store"
 )
@@ -243,9 +242,4 @@ func jsonString(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
-}
-
-// publishOperationStep is the helper orchestrators use to report progress.
-func (s *Server) publishOperationStep(op store.Operation, step store.OperationStep) {
-	s.hub.Publish(events.OperationTopic(op.ID), "step", step)
 }

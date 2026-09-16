@@ -1,8 +1,8 @@
 package provision
 
 import (
-	"log/slog"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"

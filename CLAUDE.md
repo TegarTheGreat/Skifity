@@ -1,0 +1,97 @@
+# Skifity
+
+Self-hosted apps, powered by Kubernetes.
+
+One binary is the panel, the CLI and an MCP server. Kubernetes runs underneath and
+stays out of sight: the product talks about Apps, Instances, Servers, Domains and
+Databases, and shows Kubernetes objects only under "Advanced".
+
+Read `docs/progress.md` for where the work stands, `docs/decisions.md` for why
+things are the way they are, and `docs/architecture.md` for how it fits together.
+
+## Working rules
+
+* **English only** in code, comments, commit messages, documentation and CLI
+  output. The user interface is translated; the source is not.
+* The panel ships in five languages (`en`, `id`, `hi`, `ru`, `zh-CN`). Every
+  user-visible string is a key in `web/src/locales/*.json`, and
+  `npm --prefix web run check:i18n` fails the build if any language is missing
+  one. There are no hardcoded strings in the UI.
+* The UI is built **only** with shadcn/ui components in `web/src/components/ui`.
+  No second component library.
+* Conventional Commits, small and often.
+* Never run an installer, k3s, or anything system-level on a development
+  machine. Infrastructure work happens inside a VM or a container.
+* Never commit a secret. `.env.example` documents every setting; tests and
+  fixtures use obviously fake credentials.
+
+## Layout
+
+```
+cmd/skifity/        The single binary's entry point.
+internal/
+  api/              HTTP surface, authentication, authorization, SSE.
+  auth/             Passwords (Argon2id), sessions, TOTP, API tokens.
+  crypto/           Envelope encryption, the keyring, key rotation, recovery keys.
+  store/            SQLite schema and repositories. Hand-written SQL.
+  errdoc/           The error catalogue: cause, impact, fix, for every failure.
+  kube/             Manifest generation, naming, namespaces, the cluster client.
+  cluster/          What the panel asks a live cluster to do.
+  provision/        Adding, promoting and removing a server over SSH.
+  sshx/             The SSH client, plus a real in-process server for tests.
+  builder/          Source detection and the build Job.
+  deploy/           Deployments, rollbacks, scaling and the readiness checker.
+  dbsvc/, backup/   Managed databases and their backups.
+  cli/, mcpserver/  The CLI and the MCP server, both against the same API.
+  settings/, templates/, notify/, gitsrc/, audit/, events/, logging/, config/
+web/                The frontend. Built into web/dist and embedded in the binary.
+test/smoke/         End-to-end shell tests that run a real panel.
+docs/               Research, architecture, decisions, progress.
+```
+
+## Commands
+
+```
+make build       Frontend and binary, in that order.
+make dev-api     The panel in dev mode, proxying the UI to Vite.
+make dev         The Vite dev server (a second terminal).
+make check       What CI runs: every linter, then the tests.
+make smoke       Build and run the panel smoke test.
+make release     Static binaries for linux and darwin, amd64 and arm64.
+```
+
+`CGO_ENABLED=0` everywhere: the SQLite driver is pure Go, so a release binary is
+static and needs no toolchain to run. The race detector is the one exception and
+turns cgo back on for that run only.
+
+## Conventions
+
+* **Errors are documented, not printed.** A failure returns an `errdoc.Problem`
+  with a cause, an impact and a fix. If a new failure has no entry in
+  `internal/errdoc/catalogue.go`, add one rather than returning a bare error.
+* **Nothing is logged that a secret could be inside.** `internal/logging`
+  redacts by key and by value pattern. A value that genuinely has to be logged
+  is wrapped in `logging.Public`, and that should stay rare.
+* **Authorization lives in `internal/api`**, in `authorizeTeam`, `authorizeApp`
+  and friends. A handler that reaches into the store without one of those is a
+  tenant-isolation bug.
+* **Secrets are sealed with context.** `keyring.Seal(value, context)` binds the
+  ciphertext to where it is stored, so a row copied elsewhere will not open.
+* **A config change must not rebuild an app.** The build fingerprint
+  (ADR-0007) separates what goes into the image from what the container reads at
+  runtime. Keep that line clean.
+* **Derive, do not synchronise.** In the frontend, state that follows other
+  state is computed during render rather than copied into `useState` by an
+  effect.
+
+## Testing policy
+
+Lean on purpose. Unit tests cover the logic that is expensive to get wrong:
+encryption and key rotation, manifest generation, config parsing, permission
+checks, preflight parsing, the scaling readiness checker. One smoke test covers
+each core flow, running the real binary rather than mocks. No snapshot tests, no
+coverage targets.
+
+The sandbox this was built in refuses privileged containers, so a real k3s
+cluster could never be started here (ADR-0010). Where something has not been
+executed, `docs/progress.md` says so plainly.

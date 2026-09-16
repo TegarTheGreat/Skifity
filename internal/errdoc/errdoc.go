@@ -148,7 +148,7 @@ func (p *Problem) With(key, value string) *Problem {
 func (p *Problem) Wrap(err error) *Problem {
 	p.Err = err
 	if err != nil {
-		p.With("underlying_error", err.Error())
+		return p.With("underlying_error", err.Error())
 	}
 	return p
 }

@@ -6,7 +6,7 @@ coverage.out
 
 # Frontend
 node_modules/
-web/dist/
+# web/dist keeps its own .gitignore: the directory is tracked, its contents are not.
 .vite/
 
 # Local development

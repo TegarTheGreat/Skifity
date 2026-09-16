@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -899,7 +898,9 @@ func writeJSON(w io.Writer, v any) error {
 func prompt(w io.Writer, label string) string {
 	fmt.Fprint(w, label)
 	var line string
-	fmt.Scanln(&line)
+	// A read that fails leaves line empty, which the caller already handles as
+	// "the user gave nothing".
+	_, _ = fmt.Scanln(&line)
 	return strings.TrimSpace(line)
 }
 
@@ -907,12 +908,13 @@ func prompt(w io.Writer, label string) string {
 // screenshot or a shared terminal's scrollback.
 func promptSecret(w io.Writer, label string) string {
 	fmt.Fprint(w, label)
-	if !term.IsTerminal(int(syscall.Stdin)) {
+	stdin := int(os.Stdin.Fd())
+	if !term.IsTerminal(stdin) {
 		var line string
-		fmt.Scanln(&line)
+		_, _ = fmt.Scanln(&line)
 		return strings.TrimSpace(line)
 	}
-	data, err := term.ReadPassword(int(syscall.Stdin))
+	data, err := term.ReadPassword(stdin)
 	fmt.Fprintln(w)
 	if err != nil {
 		return ""

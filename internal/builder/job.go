@@ -269,7 +269,7 @@ func cloneScript(s JobSpec) string {
 		// appears in the Job spec, which anyone with read access could see.
 		b.WriteString(`URL=$(printf '%s' "` + url + `" | sed "s#https://#https://x-access-token:${GIT_TOKEN}@#")` + "\n")
 	} else {
-		b.WriteString(fmt.Sprintf("URL=%q\n", url))
+		fmt.Fprintf(&b, "URL=%q\n", url)
 	}
 
 	b.WriteString("cd " + workspace + "\n")

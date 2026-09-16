@@ -35,6 +35,10 @@ type PushEvent struct {
 	SourceBranch string
 	// Deleted marks a branch deletion, which tears a preview environment down.
 	Deleted bool
+	// Fork is true when a pull request comes from a repository other than the
+	// one it targets — which means its author does not necessarily have write
+	// access, and its code must not be handed the project's secrets.
+	Fork bool
 }
 
 // ErrUnsupportedEvent is returned for events we deliberately ignore, such as a
@@ -115,9 +119,18 @@ type githubPullRequest struct {
 	Number      int    `json:"number"`
 	PullRequest struct {
 		Head struct {
-			Ref string `json:"ref"`
-			SHA string `json:"sha"`
+			Ref  string `json:"ref"`
+			SHA  string `json:"sha"`
+			Repo struct {
+				FullName string `json:"full_name"`
+				Fork     bool   `json:"fork"`
+			} `json:"repo"`
 		} `json:"head"`
+		Base struct {
+			Repo struct {
+				FullName string `json:"full_name"`
+			} `json:"repo"`
+		} `json:"base"`
 		Title string `json:"title"`
 		User  struct {
 			Login string `json:"login"`
@@ -126,6 +139,7 @@ type githubPullRequest struct {
 	Repository struct {
 		CloneURL string `json:"clone_url"`
 		HTMLURL  string `json:"html_url"`
+		FullName string `json:"full_name"`
 	} `json:"repository"`
 }
 
@@ -171,6 +185,15 @@ func parseGitHub(event string, body []byte) (PushEvent, error) {
 		default:
 			return PushEvent{}, ErrUnsupportedEvent
 		}
+		// A pull request whose head is in a different repository was opened by
+		// somebody who does not necessarily have write access here. Anything
+		// unexpected — a head repository GitHub did not send, a name that does
+		// not match — counts as a fork, because the safe answer to "whose code
+		// is this" is the cautious one.
+		head := payload.PullRequest.Head.Repo.FullName
+		base := firstNonEmpty(payload.PullRequest.Base.Repo.FullName, payload.Repository.FullName)
+		fork := head == "" || base == "" || !strings.EqualFold(head, base)
+
 		return PushEvent{
 			Kind:          kind,
 			RepoURL:       NormaliseRepoURL(firstNonEmpty(payload.Repository.CloneURL, payload.Repository.HTMLURL)),
@@ -180,6 +203,7 @@ func parseGitHub(event string, body []byte) (PushEvent, error) {
 			CommitMessage: payload.PullRequest.Title,
 			CommitAuthor:  payload.PullRequest.User.Login,
 			PullRequest:   payload.Number,
+			Fork:          fork,
 		}, nil
 
 	default:
@@ -206,10 +230,12 @@ type gitlabPush struct {
 
 type gitlabMergeRequest struct {
 	ObjectAttributes struct {
-		Action       string `json:"action"`
-		IID          int    `json:"iid"`
-		SourceBranch string `json:"source_branch"`
-		LastCommit   struct {
+		Action          string `json:"action"`
+		IID             int    `json:"iid"`
+		SourceBranch    string `json:"source_branch"`
+		SourceProjectID int    `json:"source_project_id"`
+		TargetProjectID int    `json:"target_project_id"`
+		LastCommit      struct {
 			ID      string `json:"id"`
 			Message string `json:"message"`
 		} `json:"last_commit"`
@@ -263,15 +289,22 @@ func parseGitLab(event string, body []byte) (PushEvent, error) {
 		default:
 			return PushEvent{}, ErrUnsupportedEvent
 		}
+		// GitLab calls it a fork when the source project is a different one.
+		// As with GitHub, anything missing counts as a fork.
+		attrs := payload.ObjectAttributes
+		fork := attrs.SourceProjectID == 0 || attrs.TargetProjectID == 0 ||
+			attrs.SourceProjectID != attrs.TargetProjectID
+
 		return PushEvent{
 			Kind:          kind,
 			RepoURL:       NormaliseRepoURL(payload.Project.GitHTTPURL),
-			Branch:        payload.ObjectAttributes.SourceBranch,
-			SourceBranch:  payload.ObjectAttributes.SourceBranch,
-			CommitSHA:     payload.ObjectAttributes.LastCommit.ID,
-			CommitMessage: payload.ObjectAttributes.Title,
+			Branch:        attrs.SourceBranch,
+			SourceBranch:  attrs.SourceBranch,
+			CommitSHA:     attrs.LastCommit.ID,
+			CommitMessage: attrs.Title,
 			CommitAuthor:  payload.User.Name,
-			PullRequest:   payload.ObjectAttributes.IID,
+			PullRequest:   attrs.IID,
+			Fork:          fork,
 		}, nil
 
 	default:

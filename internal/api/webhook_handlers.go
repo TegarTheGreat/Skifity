@@ -278,8 +278,12 @@ func (s *Server) deployPreview(r *http.Request, app store.App, event gitsrc.Push
 		if err := s.db.CreateApp(r.Context(), &previewApp); err != nil {
 			return "", err
 		}
-		if err := s.copyVariables(r, app.ID, previewApp.ID); err != nil {
+		if err := s.copyPreviewVariables(r, app.ID, previewApp.ID, event.Fork); err != nil {
 			return "", err
+		}
+		if event.Fork {
+			s.log.Info("a preview from a fork was given no secrets",
+				"app", previewApp.ID, "pull_request", event.PullRequest)
 		}
 	}
 
@@ -292,15 +296,26 @@ func (s *Server) deployPreview(r *http.Request, app store.App, event gitsrc.Push
 	return deployment.ID, nil
 }
 
-// copyVariables duplicates an app's variables into a preview copy. Values are
-// resealed under the new app's context rather than copied as ciphertext, so the
-// context binding keeps meaning something.
-func (s *Server) copyVariables(r *http.Request, fromAppID, toAppID string) error {
+// copyPreviewVariables duplicates an app's variables into a preview copy.
+//
+// Values are resealed under the new app's context rather than copied as
+// ciphertext, so the context binding keeps meaning something.
+//
+// A preview built from a fork gets no secrets. A pull request from another
+// repository can be opened by anyone, and its code decides what runs in the
+// container the secrets would be handed to: an attacker's first commit would
+// be one that prints the environment. Somebody with write access to the
+// repository could read them from a deploy anyway, so a same-repository pull
+// request is treated as it was. This is the same line GitHub Actions draws.
+func (s *Server) copyPreviewVariables(r *http.Request, fromAppID, toAppID string, fork bool) error {
 	rows, err := s.db.ListVariables(r.Context(), fromAppID)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
+		if fork && row.IsSecret {
+			continue
+		}
 		plaintext, err := s.keyring.Open(row.Sealed, variableContext(fromAppID, row.Key))
 		if err != nil {
 			return err

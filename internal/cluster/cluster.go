@@ -1,0 +1,297 @@
+// Package cluster adapts the Kubernetes client to the interfaces the API layer
+// declares, and owns installing the optional components.
+package cluster
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"reflect"
+	"strings"
+	"sync"
+	"time"
+
+	"sigs.k8s.io/yaml"
+
+	"skifity/internal/api"
+	"skifity/internal/errdoc"
+	"skifity/internal/kube"
+	"skifity/internal/settings"
+	"skifity/internal/store"
+)
+
+// Cluster implements api.Cluster.
+type Cluster struct {
+	client *kube.Client
+	db     *store.DB
+	log    *slog.Logger
+
+	// installMu serialises component installation, so two apps enabling
+	// scale-to-zero at the same moment do not both install KEDA.
+	installMu sync.Mutex
+}
+
+// New builds a Cluster.
+func New(client *kube.Client, db *store.DB, log *slog.Logger) *Cluster {
+	return &Cluster{client: client, db: db, log: log}
+}
+
+// Client exposes the underlying Kubernetes client to the orchestrators.
+func (c *Cluster) Client() *kube.Client { return c.client }
+
+// Ping reports whether the Kubernetes API is reachable.
+func (c *Cluster) Ping(ctx context.Context) error { return c.client.Ping(ctx) }
+
+// Summary describes the cluster for the dashboard.
+func (c *Cluster) Summary(ctx context.Context) (api.ClusterSummary, error) {
+	raw, err := c.client.Summary(ctx)
+	if err != nil {
+		if kube.IsUnreachable(err) {
+			return api.ClusterSummary{}, errdoc.ClusterUnreachable(err)
+		}
+		return api.ClusterSummary{}, err
+	}
+	out := api.ClusterSummary{
+		Reachable:        raw.Reachable,
+		KubernetesVer:    raw.KubernetesVersion,
+		ReadyNodes:       raw.ReadyNodes,
+		TotalCPUM:        raw.TotalCPUM,
+		TotalMemoryMB:    raw.TotalMemoryMB,
+		UsedCPUM:         raw.UsedCPUM,
+		UsedMemoryMB:     raw.UsedMemoryMB,
+		HighAvailability: raw.HighAvailability,
+		Message:          raw.Message,
+	}
+	for _, n := range raw.Nodes {
+		out.Nodes = append(out.Nodes, api.NodeInfo{
+			Name: n.Name, Ready: n.Ready, Reason: n.Reason, Roles: n.Roles,
+			InternalIP: n.InternalIP, ExternalIP: n.ExternalIP, OS: n.OS,
+			Architecture: n.Architecture, KubeletVer: n.KubeletVer,
+			CPUCapacityM: n.CPUCapacityM, MemCapacityMB: n.MemCapacityMB,
+			CPUUsedM: n.CPUUsedM, MemUsedMB: n.MemUsedMB, PodCount: n.PodCount,
+			Labels: n.Labels, Schedulable: n.Schedulable,
+		})
+	}
+	return out, nil
+}
+
+// AppStatus describes one app's live state.
+func (c *Cluster) AppStatus(ctx context.Context, namespace, appSlug string) (api.AppRuntimeStatus, error) {
+	raw, err := c.client.AppStatus(ctx, namespace, appSlug)
+	if err != nil {
+		if kube.IsUnreachable(err) {
+			return api.AppRuntimeStatus{}, errdoc.ClusterUnreachable(err)
+		}
+		return api.AppRuntimeStatus{}, err
+	}
+	out := api.AppRuntimeStatus{
+		Phase: raw.Phase, Detail: raw.Detail,
+		DesiredReplicas: raw.DesiredReplicas, ReadyReplicas: raw.ReadyReplicas,
+		Image: raw.Image,
+	}
+	for _, inst := range raw.Instances {
+		out.Instances = append(out.Instances, api.InstanceInfo{
+			Name: inst.Name, Status: inst.Status, Ready: inst.Ready,
+			Restarts: inst.Restarts, Node: inst.Node, StartedAt: inst.StartedAt,
+			Message: inst.Message, CPUM: inst.CPUM, MemoryMB: inst.MemoryMB,
+		})
+	}
+	return out, nil
+}
+
+// AppLogs streams an app's logs.
+func (c *Cluster) AppLogs(ctx context.Context, namespace, appSlug string, tailLines int64, follow bool) (io.ReadCloser, error) {
+	return c.client.AppLogs(ctx, namespace, appSlug, tailLines, follow)
+}
+
+// RestartApp triggers a rolling restart.
+func (c *Cluster) RestartApp(ctx context.Context, namespace, appSlug string) error {
+	return c.client.RestartApp(ctx, namespace, appSlug)
+}
+
+// DeleteApp removes an app's Kubernetes objects.
+func (c *Cluster) DeleteApp(ctx context.Context, namespace, appSlug string) error {
+	return c.client.DeleteApp(ctx, namespace, appSlug)
+}
+
+// EnsureNamespace creates an environment's namespace with its guards.
+func (c *Cluster) EnsureNamespace(ctx context.Context, namespace, teamID, projectID string) error {
+	return c.client.EnsureNamespace(ctx, namespace, teamID, projectID)
+}
+
+// DeleteNamespace removes an environment's namespace.
+func (c *Cluster) DeleteNamespace(ctx context.Context, namespace string) error {
+	return c.client.DeleteNamespace(ctx, namespace)
+}
+
+// Manifests renders an app's Kubernetes objects as YAML, for the Advanced view.
+//
+// This is generated from the same code that applies them, so what a user reads
+// here is what is actually running, not a hand-written approximation.
+func (c *Cluster) Manifests(ctx context.Context, app store.App, env store.Environment) (string, error) {
+	spec, err := c.SpecFor(ctx, app, env, app.Image)
+	if err != nil {
+		return "", err
+	}
+	objects := []any{
+		kube.BuildDeployment(spec),
+		kube.BuildService(spec),
+		kube.BuildIngress(spec),
+		kube.BuildHPA(spec),
+		kube.BuildPDB(spec),
+	}
+	for _, claim := range kube.BuildPVCs(spec) {
+		objects = append(objects, claim)
+	}
+
+	var b strings.Builder
+	for _, obj := range objects {
+		if obj == nil || isNilPointer(obj) {
+			continue
+		}
+		data, err := yaml.Marshal(obj)
+		if err != nil {
+			return "", fmt.Errorf("render manifest: %w", err)
+		}
+		b.WriteString("---\n")
+		b.Write(data)
+	}
+	// The env Secret is shown by name only: printing an app's secrets into a
+	// read-only view would undo the point of encrypting them.
+	fmt.Fprintf(&b, "---\n# Secret/%s holds this app's environment variables.\n"+
+		"# Its values are not shown here: secrets are write-only once set.\n",
+		kube.ResourceName(app.Slug, "env"))
+	return b.String(), nil
+}
+
+// SpecFor builds the AppSpec for an app, reading the settings that affect it.
+func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environment, image string) (kube.AppSpec, error) {
+	project, err := c.db.GetProject(ctx, env.ProjectID)
+	if err != nil {
+		return kube.AppSpec{}, err
+	}
+
+	spec := kube.AppSpec{
+		Name:          app.Slug,
+		Namespace:     env.Namespace,
+		AppID:         app.ID,
+		ProjectID:     project.ID,
+		TeamID:        project.TeamID,
+		Environment:   env.Slug,
+		DisplayName:   app.Name,
+		Image:         image,
+		Port:          app.Port,
+		HealthPath:    app.HealthPath,
+		Replicas:      app.Replicas,
+		CPURequestM:   app.CPURequestM,
+		CPULimitM:     app.CPULimitM,
+		MemRequestMB:  app.MemRequestMB,
+		MemLimitMB:    app.MemLimitMB,
+		Autoscale:     app.Autoscale,
+		MinReplicas:   app.MinReplicas,
+		MaxReplicas:   app.MaxReplicas,
+		CPUTarget:     app.CPUTarget,
+		MemoryTarget:  app.MemoryTarget,
+		ScaleToZero:   app.ScaleToZero,
+		EnvFromSecret: kube.ResourceName(app.Slug, "env"),
+		// Spreading matters as soon as there is more than one instance, and
+		// costs nothing when there is one.
+		SpreadAcrossServers: true,
+	}
+	if app.StartCommand != "" {
+		// A start command is a shell line, so it runs through a shell rather
+		// than being split here and getting quoting subtly wrong.
+		spec.Command = []string{"/bin/sh", "-c"}
+		spec.Args = []string{app.StartCommand}
+	}
+
+	volumes, err := c.db.ListVolumes(ctx, app.ID)
+	if err != nil {
+		return spec, err
+	}
+	for _, v := range volumes {
+		spec.Volumes = append(spec.Volumes, kube.VolumeSpec{
+			Name: v.Name, MountPath: v.MountPath, SizeGB: v.SizeGB, StorageClass: v.StorageClass,
+		})
+	}
+
+	domains, err := c.db.ListDomains(ctx, app.ID)
+	if err != nil {
+		return spec, err
+	}
+	for _, d := range domains {
+		spec.Domains = append(spec.Domains, kube.DomainSpec{Hostname: d.Hostname, Path: d.Path, TLS: d.TLS})
+	}
+
+	// The issuer only exists once an ACME email has been configured, and
+	// referencing a missing issuer leaves certificates stuck forever.
+	if email, _, err := c.db.GetSetting(ctx, settings.KeyACMEEmail); err == nil && email != "" {
+		spec.ClusterIssuer = ClusterIssuerName
+	}
+	return spec, nil
+}
+
+// ClusterIssuerName is the cert-manager ClusterIssuer the panel creates.
+const ClusterIssuerName = "skifity-letsencrypt"
+
+// ComponentStatus reports whether an optional add-on is installed.
+func (c *Cluster) ComponentStatus(ctx context.Context, name string) (store.ClusterComponent, error) {
+	return c.db.GetComponent(ctx, name)
+}
+
+// InstallComponent installs an optional add-on, once.
+//
+// Components are installed on first use rather than at install time, which is
+// what keeps a fresh install small enough for a 2 GB VPS.
+func (c *Cluster) InstallComponent(ctx context.Context, name string) error {
+	def, ok := settings.LookupComponent(name)
+	if !ok {
+		return fmt.Errorf("%q is not a component Skifity installs", name)
+	}
+
+	c.installMu.Lock()
+	defer c.installMu.Unlock()
+
+	current, err := c.db.GetComponent(ctx, name)
+	if err != nil {
+		return err
+	}
+	if current.Status == "installed" {
+		return nil
+	}
+
+	if err := c.db.SetComponent(ctx, store.ClusterComponent{
+		Name: name, Status: "installing", Detail: "",
+	}); err != nil {
+		return err
+	}
+
+	c.log.Info("installing cluster component", "component", name, "title", def.Title)
+	// Installation can take minutes; it must not be bound to a request that the
+	// browser may have already abandoned.
+	installCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+	defer cancel()
+
+	if err := c.installComponent(installCtx, name); err != nil {
+		_ = c.db.SetComponent(ctx, store.ClusterComponent{
+			Name: name, Status: "failed", Detail: err.Error(),
+		})
+		return fmt.Errorf("install %s: %w", def.Title, err)
+	}
+
+	return c.db.SetComponent(ctx, store.ClusterComponent{
+		Name: name, Status: "installed", InstalledAt: time.Now(), Detail: "",
+	})
+}
+
+// isNilPointer reports whether a non-nil interface holds a nil pointer, which
+// the builders return for objects an app does not need, such as an Ingress for
+// an app with no domains.
+func isNilPointer(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Ptr && rv.IsNil()
+}

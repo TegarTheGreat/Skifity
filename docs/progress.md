@@ -180,6 +180,6 @@ English one.
 
 ## Idle resource usage
 
-`docs/performance.md`. The panel is measured: 34 MiB resident idle, 36 MiB after
-400 requests, 37 MiB of binary. k3s's own footprint is not measured here, for
+`docs/performance.md`. The panel is measured: 34 MiB resident idle, 38 MiB after
+400 requests, 39 MiB of binary. k3s's own footprint is not measured here, for
 the same reason as everything else that needs a cluster.

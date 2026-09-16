@@ -10,14 +10,16 @@ Numbers that were measured, and numbers that were not. Anything not marked
 | | |
 |---|---|
 | Resident memory, idle | **34 MiB** |
-| Resident memory, after 400 requests | **36 MiB** |
+| Resident memory, after 400 requests | **38 MiB** |
 | Binary, stripped | 39 MiB |
 | Frontend, gzipped over the wire | 278 KiB across five files |
 | Cold start to answering `/api/health` | under a second |
 
-The memory figure does not drift: 400 requests against the interface and the
-API moved it by 1.5 MiB, and it did not come back down because Go's allocator
-keeps the arena, not because anything leaked.
+The memory figure does not drift: 400 requests against the interface, the API
+and the documentation moved it by 4 MiB, most of which is the documentation
+pages being touched in the binary's read-only data for the first time. It does
+not come back down because Go's allocator keeps the arena, not because anything
+leaked.
 
 The binary is large because the whole user interface, in five languages, and the
 whole documentation set with its screenshots, are inside it, along with the
@@ -35,7 +37,7 @@ single-node install:
 |---|---|
 | k3s server, with embedded etcd | 500 MiB |
 | Traefik, metrics-server, CoreDNS, local-path | included above |
-| Skifity panel | 36 MiB, measured |
+| Skifity panel | 38 MiB, measured |
 | **A fresh install, total** | **around 550 MiB** |
 
 Which is why the requirement is 1 GB: the other 450 MiB is for your apps.

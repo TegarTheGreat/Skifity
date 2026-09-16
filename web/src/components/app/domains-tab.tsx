@@ -153,6 +153,17 @@ export function DomainsTab({ app }: { app: App }) {
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* A certificate that stopped trying says why, and cert-manager's
+                  reason is the only thing that actually explains it. */}
+              {domain.status === "failed" && (
+                <Alert variant="destructive">
+                  <AlertTitle>{t("domains.certificateFailed")}</AlertTitle>
+                  <AlertDescription>
+                    {domain.status_detail || t("domains.certificateFailedHelp")}
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         ))}

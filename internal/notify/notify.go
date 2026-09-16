@@ -27,6 +27,10 @@ type Message struct {
 	Level string `json:"level"`
 	// URL links back into the panel.
 	URL string `json:"url,omitempty"`
+	// Path is where in the panel this happened, such as "/apps/app_123". The
+	// dispatcher turns it into a URL using the configured panel address, so a
+	// producer does not need to know what that is.
+	Path string `json:"-"`
 	// Fields carry structured detail such as the app and the commit.
 	Fields map[string]string `json:"fields,omitempty"`
 }

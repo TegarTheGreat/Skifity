@@ -221,6 +221,7 @@
       "updating": "更新中",
       "pending": "等待资源",
       "crashing": "反复崩溃",
+      "unhealthy": "没有实例在运行",
       "failed": "失败",
       "stopped": "已停止",
       "not_deployed": "尚未部署",
@@ -291,6 +292,8 @@
     "statusPending": "等待 DNS 生效",
     "statusActive": "已生效",
     "statusFailed": "无法访问",
+    "certificateFailed": "无法签发证书",
+    "certificateFailedHelp": "请确认该域名的 DNS 记录指向此集群，然后删除该域名并重新添加。",
     "certificateIssuing": "正在申请证书…",
     "removeDomain": "移除域名",
     "cannotRemoveAutomatic": "自动域名不能移除。在你配置自己的域名期间，它保证应用可访问。"

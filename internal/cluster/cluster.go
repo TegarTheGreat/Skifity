@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/yaml"
 
 	"skifity/internal/api"
@@ -294,4 +296,51 @@ func isNilPointer(v any) bool {
 	}
 	rv := reflect.ValueOf(v)
 	return rv.Kind() == reflect.Pointer && rv.IsNil()
+}
+
+// CertificateState is what cert-manager says about one app's certificate.
+type CertificateState struct {
+	// Found is false when no Certificate exists, which is the normal state for
+	// an app with no TLS domain and for a cluster with no cert-manager.
+	Found  bool
+	Ready  bool
+	Reason string
+}
+
+// CertificateStatus reads the Certificate cert-manager created for an app.
+//
+// The ingress asks for TLS with an annotation, so the Certificate is named
+// after the secret the ingress references; one object covers every TLS
+// hostname on the app.
+func (c *Cluster) CertificateStatus(ctx context.Context, namespace, name string) (CertificateState, error) {
+	obj, err := c.client.Applier().Get(ctx, "cert-manager.io/v1", "Certificate", namespace, name)
+	if err != nil {
+		// No cert-manager, or no certificate yet. Neither is a failure to
+		// report: an app without a TLS domain never has one.
+		if kube.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return CertificateState{}, nil
+		}
+		if kube.IsUnreachable(err) {
+			return CertificateState{}, errdoc.ClusterUnreachable(err)
+		}
+		return CertificateState{}, err
+	}
+
+	conditions, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	for _, raw := range conditions {
+		condition, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if condition["type"] != "Ready" {
+			continue
+		}
+		reason, _ := condition["message"].(string)
+		if reason == "" {
+			reason, _ = condition["reason"].(string)
+		}
+		return CertificateState{Found: true, Ready: condition["status"] == "True", Reason: reason}, nil
+	}
+	// A Certificate with no Ready condition has only just been created.
+	return CertificateState{Found: true, Ready: false, Reason: "The certificate has been requested."}, nil
 }

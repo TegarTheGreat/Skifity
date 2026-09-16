@@ -18,6 +18,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/kube"
+	"skifity/internal/notify"
 	"skifity/internal/settings"
 	"skifity/internal/sshx"
 	"skifity/internal/store"
@@ -47,21 +48,22 @@ var removeServerSteps = []string{"cordon", "drain", "delete-node", "uninstall"}
 
 // Provisioner implements api.Provisioner.
 type Provisioner struct {
-	db      *store.DB
-	keyring *crypto.Keyring
-	hub     *events.Hub
-	cluster *cluster.Cluster
-	log     *slog.Logger
+	db       *store.DB
+	keyring  *crypto.Keyring
+	hub      *events.Hub
+	cluster  *cluster.Cluster
+	notifier notify.Notifier
+	log      *slog.Logger
 
 	// running tracks in-flight operations so they can be cancelled.
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
 }
 
-// New builds a Provisioner.
-func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, log *slog.Logger) *Provisioner {
+// New builds a Provisioner. notifier may be nil, and then nothing is sent.
+func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, notifier notify.Notifier, log *slog.Logger) *Provisioner {
 	return &Provisioner{
-		db: db, keyring: keyring, hub: hub, cluster: c, log: log,
+		db: db, keyring: keyring, hub: hub, cluster: c, notifier: notifier, log: log,
 		running: map[string]context.CancelFunc{},
 	}
 }
@@ -237,6 +239,16 @@ func (p *Provisioner) runAddServer(ctx context.Context, op store.Operation, serv
 	_ = p.db.SetServerStatus(ctx, serverID, store.ServerReady, "")
 	p.publishOperation(ctx, op.ID)
 	p.log.Info("server added", "server", serverID, "host", req.Host)
+
+	if p.notifier != nil {
+		p.notifier.Notify(ctx, req.TeamID, notify.EventServerAdded, notify.Message{
+			Title:  req.Name + " joined the cluster",
+			Body:   "The server is ready and can run apps.",
+			Level:  "success",
+			Path:   "/servers/" + serverID,
+			Fields: map[string]string{"Server": req.Name, "Host": req.Host},
+		})
+	}
 }
 
 // addState carries what one step learned to the ones after it.

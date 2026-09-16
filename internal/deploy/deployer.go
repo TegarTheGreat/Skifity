@@ -17,26 +17,28 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/kube"
+	"skifity/internal/notify"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
 // Deployer implements api.Deployer.
 type Deployer struct {
-	db      *store.DB
-	keyring *crypto.Keyring
-	hub     *events.Hub
-	cluster *cluster.Cluster
-	log     *slog.Logger
+	db       *store.DB
+	keyring  *crypto.Keyring
+	hub      *events.Hub
+	cluster  *cluster.Cluster
+	notifier notify.Notifier
+	log      *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
 }
 
-// New builds a Deployer.
-func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, log *slog.Logger) *Deployer {
+// New builds a Deployer. notifier may be nil, and then nothing is sent.
+func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, notifier notify.Notifier, log *slog.Logger) *Deployer {
 	return &Deployer{
-		db: db, keyring: keyring, hub: hub, cluster: c, log: log,
+		db: db, keyring: keyring, hub: hub, cluster: c, notifier: notifier, log: log,
 		running: map[string]context.CancelFunc{},
 	}
 }
@@ -164,6 +166,11 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 	_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeploySucceeded, "", "", "")
 	_ = d.db.SetAppStatus(ctx, app.ID, "running")
 	d.publish(ctx, deployment.ID)
+	d.notify(ctx, app, deployment, notify.EventDeploySucceeded, notify.Message{
+		Title: app.Name + " is live",
+		Body:  "The deployment finished and the new version is serving traffic.",
+		Level: "success",
+	})
 
 	// Build logs are by far the largest thing stored; keep the last few.
 	if err := d.db.PruneBuildLogs(ctx, app.ID, 20); err != nil {
@@ -408,6 +415,49 @@ func (d *Deployer) fail(ctx context.Context, deployment store.Deployment, proble
 	}
 	d.hub.Publish(events.DeploymentTopic(deployment.ID), "failed", problem)
 	d.publish(ctx, deployment.ID)
+
+	app, err := d.db.GetApp(ctx, deployment.AppID)
+	if err != nil {
+		return
+	}
+	d.notify(ctx, app, deployment, notify.EventDeployFailed, notify.Message{
+		Title:  "Deploying " + app.Name + " failed",
+		Body:   problem.Error() + "\n\n" + problem.Fix,
+		Level:  "error",
+		Fields: map[string]string{"Reason": problem.Code},
+	})
+}
+
+// notify fills in what every deployment notification carries and sends it.
+//
+// A failure to work out the team is not worth failing a deployment over, so it
+// is logged and the notification is dropped.
+func (d *Deployer) notify(ctx context.Context, app store.App, deployment store.Deployment, event string, msg notify.Message) {
+	if d.notifier == nil {
+		return
+	}
+	teamID, err := d.db.TeamIDForApp(ctx, app.ID)
+	if err != nil {
+		d.log.Warn("could not work out which team to notify", "app", app.ID, "error", err)
+		return
+	}
+	if msg.Fields == nil {
+		msg.Fields = map[string]string{}
+	}
+	msg.Fields["App"] = app.Name
+	if deployment.CommitSHA != "" {
+		msg.Fields["Commit"] = shortSHA(deployment.CommitSHA)
+	}
+	msg.Path = "/apps/" + app.ID + "/deployments"
+	d.notifier.Notify(ctx, teamID, event, msg)
+}
+
+// shortSHA trims a commit to the seven characters people actually read.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 func (d *Deployer) publish(ctx context.Context, deploymentID string) {

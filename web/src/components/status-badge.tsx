@@ -58,6 +58,7 @@ export function toneFor(status: string): Tone {
       return "warning"
     case "failed":
     case "crashing":
+    case "unhealthy":
       return "danger"
     case "stopped":
     case "cancelled":

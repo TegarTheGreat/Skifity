@@ -56,7 +56,7 @@ func testDeployer(t *testing.T) (*Deployer, *store.DB, store.App, store.Environm
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	// No cluster: this exercises the decision logic, which is where the
 	// interesting behaviour lives.
-	d := New(db, keyring, events.NewHub(64), nil, logger)
+	d := New(db, keyring, events.NewHub(64), nil, nil, logger)
 	return d, db, app, env
 }
 

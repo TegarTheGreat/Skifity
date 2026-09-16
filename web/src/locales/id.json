@@ -221,6 +221,7 @@
       "updating": "Memperbarui",
       "pending": "Menunggu kapasitas",
       "crashing": "Sering berhenti",
+      "unhealthy": "Tidak ada instance yang berjalan",
       "failed": "Gagal",
       "stopped": "Berhenti",
       "not_deployed": "Belum di-deploy",
@@ -291,6 +292,8 @@
     "statusPending": "Menunggu DNS",
     "statusActive": "Aktif",
     "statusFailed": "Tidak berfungsi",
+    "certificateFailed": "Sertifikat tidak dapat diterbitkan",
+    "certificateFailedHelp": "Pastikan data DNS domain mengarah ke klaster ini, lalu hapus domain dan tambahkan lagi.",
     "certificateIssuing": "Menerbitkan sertifikat...",
     "removeDomain": "Hapus domain",
     "cannotRemoveAutomatic": "Domain otomatis tidak bisa dihapus. Domain ini menjaga aplikasi tetap bisa diakses selama Anda menyiapkan domain sendiri."

@@ -16,21 +16,23 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/kube"
+	"skifity/internal/notify"
 	"skifity/internal/store"
 )
 
 // Manager implements api.BackupManager.
 type Manager struct {
-	db      *store.DB
-	keyring *crypto.Keyring
-	hub     *events.Hub
-	cluster *cluster.Cluster
-	log     *slog.Logger
+	db       *store.DB
+	keyring  *crypto.Keyring
+	hub      *events.Hub
+	cluster  *cluster.Cluster
+	notifier notify.Notifier
+	log      *slog.Logger
 }
 
-// New builds a Manager.
-func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, log *slog.Logger) *Manager {
-	return &Manager{db: db, keyring: keyring, hub: hub, cluster: c, log: log}
+// New builds a Manager. notifier may be nil, and then nothing is sent.
+func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, notifier notify.Notifier, log *slog.Logger) *Manager {
+	return &Manager{db: db, keyring: keyring, hub: hub, cluster: c, notifier: notifier, log: log}
 }
 
 // Verify checks that the configured storage is usable.
@@ -89,6 +91,7 @@ func (m *Manager) run(ctx context.Context, storage *Storage, backup store.Backup
 		m.log.Error("backup failed", "backup", backup.ID, "database", record.ID, "error", err)
 		_ = m.db.FinishBackup(ctx, backup.ID, "failed", backup.Location, 0, problem.Error())
 		m.publish(ctx, record.ID)
+		m.notifyFailure(ctx, record, problem)
 	}
 
 	env, err := m.db.GetEnvironment(ctx, record.EnvironmentID)
@@ -393,4 +396,26 @@ func (m *Manager) RunScheduled(ctx context.Context) {
 				"target", policy.TargetID, "error", err)
 		}
 	}
+}
+
+// notifyFailure tells the team a backup did not happen.
+//
+// A backup that silently fails is the worst kind: it is only discovered when a
+// restore is attempted, which is the moment it matters most.
+func (m *Manager) notifyFailure(ctx context.Context, record store.Database, problem *errdoc.Problem) {
+	if m.notifier == nil {
+		return
+	}
+	teamID, err := m.db.TeamIDForDatabase(ctx, record.ID)
+	if err != nil {
+		m.log.Warn("could not work out which team to notify", "database", record.ID, "error", err)
+		return
+	}
+	m.notifier.Notify(ctx, teamID, notify.EventBackupFailed, notify.Message{
+		Title:  "Backing up " + record.Name + " failed",
+		Body:   problem.Error() + "\n\n" + problem.Fix,
+		Level:  "error",
+		Path:   "/databases/" + record.ID,
+		Fields: map[string]string{"Database": record.Name, "Reason": problem.Code},
+	})
 }

@@ -43,7 +43,7 @@ func testHarness(t *testing.T) (*Provisioner, *store.DB, *crypto.Keyring, string
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	p := New(db, keyring, events.NewHub(64), nil, logger)
+	p := New(db, keyring, events.NewHub(64), nil, nil, logger)
 	return p, db, keyring, team.ID
 }
 

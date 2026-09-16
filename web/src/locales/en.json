@@ -228,6 +228,7 @@
       "updating": "Updating",
       "pending": "Waiting for capacity",
       "crashing": "Crashing",
+      "unhealthy": "No instances running",
       "failed": "Failed",
       "stopped": "Stopped",
       "not_deployed": "Not deployed yet",
@@ -298,6 +299,8 @@
     "statusPending": "Waiting for DNS",
     "statusActive": "Active",
     "statusFailed": "Not working",
+    "certificateFailed": "The certificate could not be issued",
+    "certificateFailedHelp": "Check that the domain's DNS record points at this cluster, then remove the domain and add it again.",
     "certificateIssuing": "Getting a certificate...",
     "removeDomain": "Remove domain",
     "cannotRemoveAutomatic": "The automatic domain cannot be removed. It keeps the app reachable while you set up your own."

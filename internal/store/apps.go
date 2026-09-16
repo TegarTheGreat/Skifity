@@ -459,3 +459,49 @@ func (db *DB) DeleteVolume(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+// DeployedApp is an app together with where it runs and who owns it, which is
+// what a watcher needs to compare the panel's picture with the cluster's.
+type DeployedApp struct {
+	App
+	TeamID    string
+	Namespace string
+}
+
+// ListDeployedApps returns every app that has been deployed at least once,
+// across every team.
+//
+// An app that was created and never deployed has nothing in the cluster to
+// compare against, so including it would only produce false alarms.
+func (db *DB) ListDeployedApps(ctx context.Context) ([]DeployedApp, error) {
+	rows, err := db.QueryContext(ctx, `SELECT `+prefixColumns("a", appColumns)+`, p.team_id, e.namespace
+		FROM apps a
+		JOIN environments e ON e.id = a.environment_id
+		JOIN projects p ON p.id = e.project_id
+		WHERE a.status <> 'created'
+		ORDER BY a.created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("list deployed apps: %w", err)
+	}
+	defer rows.Close()
+
+	out := []DeployedApp{}
+	for rows.Next() {
+		var a App
+		var created, updated string
+		var item DeployedApp
+		if err := rows.Scan(&a.ID, &a.EnvironmentID, &a.Name, &a.Slug, &a.SourceType, &a.GitSourceID,
+			&a.RepoURL, &a.Branch, &a.RootDir, &a.Builder, &a.DockerfilePath, &a.Image, &a.Port,
+			&a.HealthPath, &a.StartCommand, &a.Replicas, &a.Autoscale, &a.MinReplicas, &a.MaxReplicas,
+			&a.CPUTarget, &a.MemoryTarget, &a.ScaleToZero, &a.CPURequestM, &a.CPULimitM,
+			&a.MemRequestMB, &a.MemLimitMB, &a.AutoDeploy, &a.PreviewDeploys, &a.Status,
+			&created, &updated, &item.TeamID, &item.Namespace); err != nil {
+			return nil, fmt.Errorf("scan deployed app: %w", err)
+		}
+		a.CreatedAt, _ = ParseTime(created)
+		a.UpdatedAt, _ = ParseTime(updated)
+		item.App = a
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}

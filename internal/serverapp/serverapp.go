@@ -23,9 +23,12 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/logging"
+	"skifity/internal/notify"
 	"skifity/internal/provision"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 	"skifity/internal/version"
+	"skifity/internal/watch"
 )
 
 // Run starts the panel and blocks until the context is cancelled.
@@ -75,10 +78,16 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 		}
 	}
 
-	deployer := deploy.New(db, keyring, hub, clusterAdapter, log)
-	provisioner := provision.New(db, keyring, hub, clusterAdapter, log)
+	// Notifications are sent by the things that know an event happened, so the
+	// dispatcher is built before them and handed to each one.
+	dispatcher := notify.NewDispatcher(db, keyring, log, panelAddress(cfg, db, log))
+	defer dispatcher.Wait()
+
+	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	provisioner := provision.New(db, keyring, hub, clusterAdapter, dispatcher, log)
 	databases := dbsvc.New(db, keyring, hub, clusterAdapter, deployer, log)
-	backups := backup.New(db, keyring, hub, clusterAdapter, log)
+	backups := backup.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	watcher := watch.New(db, watchCluster(clusterAdapter), hub, dispatcher, log)
 
 	setupToken, err := readSetupToken(cfg, db, log)
 	if err != nil {
@@ -105,6 +114,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	defer stopBackground()
 	go server.Background(background)
 	go runScheduler(background, backups, log)
+	go watcher.Run(background)
 
 	httpServer := &http.Server{
 		Addr:    cfg.Listen,
@@ -139,6 +149,35 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	}
 	log.Info("stopped")
 	return nil
+}
+
+// watchCluster keeps a nil *cluster.Cluster from becoming a non-nil
+// watch.Cluster, for the same reason as nilIfNil below.
+func watchCluster(c *cluster.Cluster) watch.Cluster {
+	if c == nil {
+		return nil
+	}
+	return c
+}
+
+// panelAddress works out how to link back into the panel from a notification.
+//
+// The configured public URL wins; otherwise the address an operator saved in
+// settings is used, because a panel installed with a hostname knows it there
+// and nowhere else. An empty answer means a notification carries no link,
+// which is better than a link to somewhere that does not exist.
+func panelAddress(cfg config.Config, db *store.DB, log *slog.Logger) func(context.Context) string {
+	return func(ctx context.Context) string {
+		if cfg.PublicURL != "" {
+			return cfg.PublicURL
+		}
+		value, _, err := db.GetSetting(ctx, settings.KeyPanelURL)
+		if err != nil {
+			log.Debug("no panel address for notification links", "error", err)
+			return ""
+		}
+		return value
+	}
 }
 
 // nilIfNil keeps a nil *cluster.Cluster from becoming a non-nil interface, which

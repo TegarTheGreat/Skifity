@@ -34,7 +34,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 * `docs/research/competitors.md` — 13 products compared, weaknesses we design against.
 * `docs/research/stack.md` — component versions verified 2026-09-16.
 * `docs/architecture.md` — layers, deploy path, add-server state machine, data model, isolation.
-* `docs/decisions.md` — ADR-0001 to ADR-0015.
+* `docs/decisions.md` — ADR-0001 to ADR-0017.
 
 ### Phase 1 — done
 
@@ -156,6 +156,50 @@ asking for `zh-CN` looked up `zh`, did not find it, and fell back. The locale
 file was complete the whole time. Fixed by registering the bundle under `zh` as
 well, which also gets `zh-TW` and `zh-HK` a Simplified page rather than an
 English one.
+
+### After an adversarial audit
+
+The whole product was read back against what it claims, one dimension at a time,
+looking for the class of defect a sandbox with no cluster cannot catch: code that
+compiles, tests that pass, and a feature that was never once executed. What came
+out of it:
+
+* **Notifications were configured and never sent.** `notify.Send` was called from
+  exactly one place in the codebase — the "send a test message" button. No
+  deployment failure, backup failure, lost server or certificate failure ever
+  produced one, although the panel let an operator subscribe to all of them.
+  There is a dispatcher now, and the producers call it.
+* **Nothing watched the cluster between user actions.** A node that stopped
+  answering at three in the morning, an app whose last instance crashed, a
+  certificate cert-manager had given up on: all three were visible only to
+  somebody already looking at the right page. `internal/watch` compares the
+  cluster with the database once a minute. It also fills in two columns the
+  panel had written a query for and never called: a server's last seen time, and
+  a domain's certificate status, which said "waiting for DNS" forever.
+* **No app ever got a URL.** `kube.AutoHostname` was written, tested and called
+  by nothing, so the free address the product promises on every page existed
+  only as a function. A deploy now gives an app its automatic domain.
+* **An app created from the panel had no port**, because the form does not ask,
+  and a port of zero renders no Service, no Ingress and no URL.
+* **A build could send a team's Git token to any host**, because the clone
+  rewrote the URL to include the token whatever host was typed into the form.
+* **An API token's team and scopes were stored and never read**, so a token
+  issued for one team worked on every team, and a read-only token could do
+  anything its owner could.
+* **Two-factor recovery codes were generated, returned by the API, and dropped**
+  by both sides; the account page never even rendered them.
+* **Deleting a volume** authorized the app in the URL and then deleted whatever
+  volume id came after it.
+* **A backup job could not have run**: rejected by Pod Security for naming no
+  seccomp profile and no user, then killed by its own package-install line, then
+  refused by S3 for uploading from a pipe with no Content-Length.
+* **The builder could never start**: rootless BuildKit needs a seccomp profile
+  the panel's namespace refuses, and its readiness probe looked for a socket
+  that is not there. Builds moved to their own namespace (ADR-0016).
+* **Built images could never be pulled**, because they are tagged with a Service
+  name the host's containerd cannot resolve (ADR-0017).
+* **Every build was a cold build**: the cache was exported inline and imported
+  from a tag nothing ever wrote.
 
 ## Next tasks
 

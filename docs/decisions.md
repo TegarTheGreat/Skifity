@@ -260,3 +260,62 @@ smaller, which is the same reason every other component installs on first use.
 hiding it. Adding a domain in Settings installs cert-manager and switches the
 Ingress, which is one step and needs no reinstall. An operator who wants HTTPS from
 the first minute passes `SKIFITY_DOMAIN` to the installer.
+
+---
+
+## ADR-0016 - Builds run in their own namespace, at the privileged profile
+
+**Context.** Builds originally ran in the panel's own namespace, alongside the
+builder and the image registry. That namespace also holds the master key, the
+panel's database and a service account that can reach the whole cluster. It
+enforces the baseline Pod Security profile, which refuses an unconfined seccomp
+profile — and rootless BuildKit needs exactly that to use user namespaces, so the
+builder was rejected by admission and never started.
+
+**Decision.** A separate `skifity-builds` namespace holds the builder, the
+registry and every build Job. It is the only namespace in Skifity that enforces
+the privileged Pod Security profile, and it is audited and warned at restricted so
+anything else placed there is noticed. It carries the same default-deny
+NetworkPolicy every environment gets: out to the internet for the repository and
+the packages, and nothing towards the node network or the cloud metadata service.
+
+**Reason.** A build runs code out of somebody's repository. It is not hostile by
+assumption, but it is not the panel either, and the two should not share a
+namespace, a service account or a set of Secrets. Relaxing the panel namespace's
+profile so one builder could start would have been exactly backwards. The
+alternative to rootless BuildKit is a privileged container holding the host's
+container runtime socket, which is worse in every way: this is one namespace, with
+one builder in it, and that builder still runs as an unprivileged user.
+
+**Consequences.** The namespace's name is fixed rather than derived from the
+panel's, because every node's container runtime is configured to reach the
+registry inside it and that configuration is written before the panel exists. A
+cluster runs one Skifity panel, which was already true of the registry.
+
+---
+
+## ADR-0017 - Every node mirrors the registry to a NodePort on loopback
+
+**Context.** Built images are pushed to an in-cluster registry and tagged with its
+Kubernetes Service name. The thing that pulls them is containerd, which runs on
+the host: it cannot resolve a Service name, and it refuses plain HTTP to anything
+that is not loopback. Every image the panel built was unpullable, and the symptom
+was an ImagePullBackOff with nothing pointing at the cause.
+
+**Decision.** The registry is exposed on a fixed NodePort, and every node gets an
+`/etc/rancher/k3s/registries.yaml` mirroring the registry's Service name to
+`http://127.0.0.1:<nodeport>`. The installer writes it on the first server and the
+provisioner writes it on every server added later, before k3s starts, from the
+same Go function.
+
+**Reason.** A NodePort is reachable on `127.0.0.1` from every node, which is both
+resolvable without cluster DNS and, to containerd, trusted without TLS. The
+alternative — a real certificate for an internal name, or a mirror pointing at a
+ClusterIP — needs an address that is only known once the cluster is running, which
+is after the point the file has to exist.
+
+**Consequences.** The registry's address, port and node port are three constants
+that a shell script and a Go package have to agree on without ever talking to each
+other, so a test fails if they drift. Changing them is a change on every node,
+which means an installer re-run; the installer detects that the file changed and
+restarts k3s itself.

@@ -356,3 +356,57 @@ func TestImageName(t *testing.T) {
 		t.Fatalf("ImageName with a trailing slash = %q", got)
 	}
 }
+
+// TestTheBuildCacheIsWrittenWhereItIsRead: the export was "inline", which
+// writes the cache into the image's own manifest, while the import read a
+// :buildcache tag nothing ever wrote. Every build was a cold build, and
+// nothing said so, because a cache miss is not an error.
+func TestTheBuildCacheIsWrittenWhereItIsRead(t *testing.T) {
+	job, err := BuildJob(baseJob())
+	if err != nil {
+		t.Fatalf("BuildJob: %v", err)
+	}
+	script := job.Spec.Template.Spec.Containers[0].Args[0]
+
+	exported := cacheFlagValue(t, script, "--export-cache")
+	imported := cacheFlagValue(t, script, "--import-cache")
+
+	exportRef := refOf(exported)
+	if exportRef == "" || exportRef != refOf(imported) {
+		t.Fatalf("the cache is exported to %q and imported from %q", exportRef, refOf(imported))
+	}
+	if !strings.Contains(exported, "mode=max") {
+		t.Errorf("the cache keeps only the final layers, not the work that made them: %q", exported)
+	}
+	// The cache ref is the same registry as the image, over the same plain
+	// HTTP, so it needs the same permission to speak it.
+	if !strings.Contains(exported, "registry.insecure=true") ||
+		!strings.Contains(imported, "registry.insecure=true") {
+		t.Errorf("the cache ref cannot reach the in-cluster registry:\n  export %q\n  import %q",
+			exported, imported)
+	}
+}
+
+// cacheFlagValue pulls the quoted value of a flag out of the rendered command.
+func cacheFlagValue(t *testing.T, script, name string) string {
+	t.Helper()
+	idx := strings.Index(script, name+" \"")
+	if idx < 0 {
+		t.Fatalf("the build command has no %s:\n%s", name, script)
+	}
+	rest := script[idx+len(name)+2:]
+	end := strings.IndexByte(rest, '"')
+	if end < 0 {
+		t.Fatalf("%s is not quoted:\n%s", name, script)
+	}
+	return rest[:end]
+}
+
+func refOf(value string) string {
+	for _, part := range strings.Split(value, ",") {
+		if after, ok := strings.CutPrefix(part, "ref="); ok {
+			return after
+		}
+	}
+	return ""
+}

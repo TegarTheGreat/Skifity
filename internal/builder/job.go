@@ -409,9 +409,23 @@ func buildScript(s JobSpec) string {
 	}
 
 	// Caching between builds is what makes the second deploy fast.
+	//
+	// The cache is exported to the same tag it is imported from. That sounds
+	// obvious, and it is the bug this replaced: the export was "inline", which
+	// writes the cache into the image's own manifest, while the import read a
+	// :buildcache tag nothing ever wrote. Every build was a cold build, and
+	// nothing said so, because a cache miss is not an error.
+	cache := fmt.Sprintf("type=registry,ref=%s", cacheRef(s.Image))
+	if s.RegistryInsecure {
+		// The cache ref needs this as much as the output does: it is the same
+		// registry, over the same plain HTTP.
+		cache += ",registry.insecure=true"
+	}
 	args = append(args,
-		flag("--export-cache", "type=inline"),
-		flag("--import-cache", fmt.Sprintf("type=registry,ref=%s", cacheRef(s.Image))),
+		// mode=max keeps the intermediate layers, which is the difference
+		// between caching the final image and caching the work that made it.
+		flag("--export-cache", cache+",mode=max"),
+		flag("--import-cache", cache),
 		flag("--output", output),
 		"--progress plain",
 	)
@@ -447,8 +461,8 @@ cat > %s/.skifity/Dockerfile <<'SKIFITY_DOCKERFILE'
 `, workspace, workspace, dockerfile)
 }
 
-// cacheRef is where the inline build cache is read from, which is the image's
-// own repository at a fixed tag.
+// cacheRef is where the build cache lives: the image's own repository, at a
+// fixed tag next to the tags that hold the images themselves.
 func cacheRef(image string) string {
 	if idx := strings.LastIndex(image, ":"); idx > strings.LastIndex(image, "/") {
 		return image[:idx] + ":buildcache"

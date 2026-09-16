@@ -202,6 +202,10 @@ func (s *Server) routes() chi.Router {
 				app.Post("/deployments/{deploymentID}/cancel", s.handleCancelDeployment)
 				app.Post("/rollback/{deploymentID}", s.handleRollback)
 				app.Get("/logs", s.handleAppLogs)
+				// A one-off command runs in the app's own image with the app's
+				// own variables. It is where a migration runs.
+				app.Post("/run", s.handleRunCommand)
+				app.Get("/runs/{runID}/logs", s.handleRunLogs)
 				app.Post("/restart", s.handleRestartApp)
 				app.Get("/variables", s.handleListVariables)
 				app.Put("/variables", s.handleSetVariable)

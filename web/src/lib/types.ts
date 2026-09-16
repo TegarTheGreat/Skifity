@@ -107,6 +107,7 @@ export type App = {
   port: number
   health_path: string
   start_command: string
+  release_command: string
   replicas: number
   autoscale: boolean
   min_replicas: number

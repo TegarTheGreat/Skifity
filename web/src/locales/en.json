@@ -246,7 +246,16 @@
       "not_deployed": "Not deployed yet",
       "unknown": "Unknown",
       "created": "Not deployed yet"
-    }
+    },
+    "runCommand": "Run a command",
+    "runCommandHelp": "Runs once, in this app's image, with this app's variables. A migration, a backfill, a look at the data.",
+    "run": "Run",
+    "running": "Running...",
+    "runningHelp": "The command is running. Its output appears here when it finishes.",
+    "runNoOutput": "The command finished and printed nothing.",
+    "console": "Console",
+    "releaseCommand": "Release command",
+    "releaseCommandHelp": "Runs on every deployment, after the build and before any traffic reaches the new version. This is where a migration belongs: if it fails the deployment stops and the version that was serving keeps serving."
   },
   "deploy": {
     "title": "Deployments",

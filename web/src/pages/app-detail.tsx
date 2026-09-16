@@ -6,6 +6,7 @@ import { BoxIcon, ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-rea
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
 import { DomainsTab } from "@/components/app/domains-tab"
+import { ConsoleTab } from "@/components/app/console-tab"
 import { LogsTab } from "@/components/app/logs-tab"
 import { ScalingTab } from "@/components/app/scaling-tab"
 import { SettingsTab } from "@/components/app/settings-tab"
@@ -137,6 +138,7 @@ export function AppDetailPage() {
           <TabsTrigger value="overview">{t("apps.overview")}</TabsTrigger>
           <TabsTrigger value="deployments">{t("apps.deployments")}</TabsTrigger>
           <TabsTrigger value="logs">{t("apps.logs")}</TabsTrigger>
+          <TabsTrigger value="console">{t("apps.console")}</TabsTrigger>
           <TabsTrigger value="variables">{t("apps.variables")}</TabsTrigger>
           <TabsTrigger value="domains">{t("apps.domains")}</TabsTrigger>
           <TabsTrigger value="scaling">{t("apps.scaling")}</TabsTrigger>
@@ -153,6 +155,9 @@ export function AppDetailPage() {
         </TabsContent>
         <TabsContent value="logs" className="pt-4">
           <LogsTab app={current} />
+        </TabsContent>
+        <TabsContent value="console" className="pt-4">
+          <ConsoleTab app={current} />
         </TabsContent>
         <TabsContent value="variables" className="pt-4">
           <VariablesEditor

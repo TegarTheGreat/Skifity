@@ -41,6 +41,7 @@ type createAppRequest struct {
 	Port           int    `json:"port,omitempty"`
 	HealthPath     string `json:"health_path,omitempty"`
 	StartCommand   string `json:"start_command,omitempty"`
+	ReleaseCommand string `json:"release_command,omitempty"`
 	Deploy         bool   `json:"deploy,omitempty"`
 }
 
@@ -111,6 +112,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		Port:           defaultInt(req.Port, kube.DefaultAppPort),
 		HealthPath:     strings.TrimSpace(req.HealthPath),
 		StartCommand:   strings.TrimSpace(req.StartCommand),
+		ReleaseCommand: strings.TrimSpace(req.ReleaseCommand),
 		// Safe defaults, per the product principles: one instance, modest
 		// limits, health checks on, deploy on push.
 		Replicas:     1,
@@ -167,6 +169,7 @@ type updateAppRequest struct {
 	Port           *int    `json:"port,omitempty"`
 	HealthPath     *string `json:"health_path,omitempty"`
 	StartCommand   *string `json:"start_command,omitempty"`
+	ReleaseCommand *string `json:"release_command,omitempty"`
 	AutoDeploy     *bool   `json:"auto_deploy,omitempty"`
 	PreviewDeploys *bool   `json:"preview_deploys,omitempty"`
 	CPURequestM    *int    `json:"cpu_request_m,omitempty"`
@@ -197,6 +200,7 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	assignString(&app.Image, req.Image)
 	assignString(&app.HealthPath, req.HealthPath)
 	assignString(&app.StartCommand, req.StartCommand)
+	assignString(&app.ReleaseCommand, req.ReleaseCommand)
 	if req.Port != nil {
 		if *req.Port < 0 || *req.Port > 65535 {
 			writeError(w, r, errdoc.BadRequest("The port must be between 1 and 65535."))

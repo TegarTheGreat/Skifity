@@ -49,6 +49,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = cmdScale(ctx, rest, stdout)
 	case "rollback":
 		err = cmdRollback(ctx, rest, stdout)
+	case "run":
+		err = cmdRun(ctx, rest, stdout)
 	case "status":
 		err = cmdStatus(ctx, rest, stdout)
 	case "apps":
@@ -108,6 +110,7 @@ Working with apps:
   env                   List, set or remove environment variables
   scale                 Change the number of instances or turn on autoscaling
   rollback              Go back to a previous deployment
+  run                   Run a one-off command in the app's image
   apps                  List the apps in an environment
   open                  Print an app's URLs
 
@@ -953,4 +956,61 @@ func parseInterspersed(flags *flag.FlagSet, args []string) ([]string, error) {
 		remaining = rest[1:]
 	}
 	return positional, nil
+}
+
+// cmdRun runs a one-off command in the app's own image.
+//
+// Everything after `--` is the command, unsplit, because people type
+// `npm run migrate && npm run seed` and reassembling that from arguments would
+// get the quoting subtly wrong.
+func cmdRun(ctx context.Context, args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("run", flag.ContinueOnError)
+	flags.SetOutput(out)
+	appID := flags.String("app", "", "the app id")
+	asJSON := flags.Bool("json", false, "print the result as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	command := strings.TrimSpace(strings.Join(flags.Args(), " "))
+	if command == "" {
+		return errdoc.BadRequest(fmt.Sprintf(
+			"Give the command to run, for example `%s run --app app_123 -- npm run migrate`.",
+			version.Binary))
+	}
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+	client := NewClient(cfg)
+	app, err := resolveApp(ctx, client, cfg, *appID)
+	if err != nil {
+		return err
+	}
+
+	var started struct {
+		Run string `json:"run"`
+	}
+	if err := client.Do(ctx, "POST", "/api/apps/"+app+"/run",
+		map[string]string{"command": command}, &started); err != nil {
+		return err
+	}
+	if *asJSON {
+		return writeJSON(out, started)
+	}
+	fmt.Fprintf(out, "Running: %s\n\n", command)
+
+	// The output comes back when the command is done. Following it live would
+	// need a second endpoint for something that usually takes seconds.
+	var logs struct {
+		Lines []string `json:"lines"`
+	}
+	if err := client.Do(ctx, "GET",
+		"/api/apps/"+app+"/runs/"+started.Run+"/logs", nil, &logs); err != nil {
+		return err
+	}
+	for _, line := range logs.Lines {
+		fmt.Fprintln(out, line)
+	}
+	return nil
 }

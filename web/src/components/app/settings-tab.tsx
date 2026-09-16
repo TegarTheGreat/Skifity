@@ -8,7 +8,13 @@ import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
@@ -28,6 +34,7 @@ export function SettingsTab({ app }: { app: App }) {
   const [port, setPort] = useState(String(app.port || ""))
   const [healthPath, setHealthPath] = useState(app.health_path)
   const [startCommand, setStartCommand] = useState(app.start_command)
+  const [releaseCommand, setReleaseCommand] = useState(app.release_command)
   const [autoDeploy, setAutoDeploy] = useState(app.auto_deploy)
   const [previewDeploys, setPreviewDeploys] = useState(app.preview_deploys)
 
@@ -41,6 +48,7 @@ export function SettingsTab({ app }: { app: App }) {
         port: Number(port) || 0,
         health_path: healthPath.trim(),
         start_command: startCommand.trim(),
+        release_command: releaseCommand.trim(),
         auto_deploy: autoDeploy,
         preview_deploys: previewDeploys,
       }),
@@ -138,21 +146,33 @@ export function SettingsTab({ app }: { app: App }) {
             />
           </Field>
 
+          <Field>
+            <FieldLabel htmlFor="settings-release">{t("apps.releaseCommand")}</FieldLabel>
+            <Input
+              id="settings-release"
+              value={releaseCommand}
+              onChange={(event) => setReleaseCommand(event.target.value)}
+              placeholder="npm run migrate"
+              className="font-mono"
+            />
+            <FieldDescription>{t("apps.releaseCommandHelp")}</FieldDescription>
+          </Field>
+
           {app.source_type === "git" && (
             <>
-              <label className="flex items-center justify-between gap-4">
-                <span className="text-sm">{t("apps.deployOnPush")}</span>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldTitle>{t("apps.deployOnPush")}</FieldTitle>
+                </FieldContent>
                 <Switch checked={autoDeploy} onCheckedChange={setAutoDeploy} />
-              </label>
-              <label className="flex items-center justify-between gap-4">
-                <span className="text-sm">
-                  {t("apps.previewEnvironments")}
-                  <span className="block text-xs text-muted-foreground">
-                    {t("apps.previewEnvironmentsHelp")}
-                  </span>
-                </span>
+              </Field>
+              <Field orientation="horizontal">
+                <FieldContent>
+                  <FieldTitle>{t("apps.previewEnvironments")}</FieldTitle>
+                  <FieldDescription>{t("apps.previewEnvironmentsHelp")}</FieldDescription>
+                </FieldContent>
                 <Switch checked={previewDeploys} onCheckedChange={setPreviewDeploys} />
-              </label>
+              </Field>
             </>
           )}
 

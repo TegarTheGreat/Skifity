@@ -155,6 +155,16 @@ type deployOutput struct {
 	Note         string `json:"note"`
 }
 
+type runCommandInput struct {
+	AppID   string `json:"app_id" jsonschema:"the app's id"`
+	Command string `json:"command" jsonschema:"the command, as a shell line; it runs in the app's own image with the app's own variables"`
+}
+
+type runCommandOutput struct {
+	Run    string   `json:"run"`
+	Output []string `json:"output"`
+}
+
 type logsInput struct {
 	AppID    string `json:"app_id" jsonschema:"the app's id"`
 	Lines    int    `json:"lines,omitempty" jsonschema:"how many lines to return, up to 500"`
@@ -279,6 +289,14 @@ func (s *Server) register() {
 		Name:        "deploy_app",
 		Description: "Start a deployment. This returns immediately; the build takes minutes. Poll get_app_status or call get_deployment_history to see the outcome.",
 	}, s.deployApp)
+
+	mcp.AddTool(s.mcp, &mcp.Tool{
+		Name: "run_command",
+		Description: "Run a one-off command in the app's own image, with the app's own environment variables. " +
+			"This is where a database migration runs, and where to look at data or run a management command. " +
+			"It waits for the command to finish and returns its output. " +
+			"For something that should run on every deployment, set the app's release command instead.",
+	}, s.runCommand)
 
 	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name:        "get_app_logs",
@@ -491,6 +509,28 @@ func (s *Server) deployApp(ctx context.Context, _ *mcp.CallToolRequest, in deplo
 		Status: string(deployment.Status), Note: note,
 	}
 	return textResult(fmt.Sprintf("Deployment #%d started. %s", deployment.Number, note)), out, nil
+}
+
+func (s *Server) runCommand(ctx context.Context, _ *mcp.CallToolRequest, in runCommandInput) (*mcp.CallToolResult, runCommandOutput, error) {
+	var started struct {
+		Run string `json:"run"`
+	}
+	if err := s.client.Do(ctx, "POST", "/api/apps/"+in.AppID+"/run",
+		map[string]string{"command": in.Command}, &started); err != nil {
+		return errorResult(err), runCommandOutput{}, nil
+	}
+
+	var logs struct {
+		Lines []string `json:"lines"`
+	}
+	if err := s.client.Do(ctx, "GET",
+		"/api/apps/"+in.AppID+"/runs/"+started.Run+"/logs", nil, &logs); err != nil {
+		// The command was started; only reading its output failed.
+		return errorResult(err), runCommandOutput{Run: started.Run}, nil
+	}
+
+	out := runCommandOutput{Run: started.Run, Output: logs.Lines}
+	return textResult(strings.Join(logs.Lines, "\n")), out, nil
 }
 
 func (s *Server) getAppLogs(ctx context.Context, _ *mcp.CallToolRequest, in logsInput) (*mcp.CallToolResult, logsOutput, error) {

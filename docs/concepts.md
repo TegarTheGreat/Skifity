@@ -61,6 +61,32 @@ Rolling back therefore restores a working state, not just an old image. If you
 changed a variable and the app broke, rolling back puts the old variable back
 too.
 
+## Release command
+
+A command that runs after the image is built and before any traffic reaches the
+new version. It is where a database migration belongs.
+
+```
+npm run migrate
+```
+
+Set it on the app's **Settings** tab. Every deployment runs it, in the app's own
+image with the app's own variables, while the previous version keeps serving. If
+it fails, the deployment stops there: the new code never sees the old schema,
+and nothing changed for your users.
+
+For something you want to run once rather than on every deploy — a backfill, a
+console, a look at the data — use a one-off command instead:
+
+```
+skifity run --app app_123 -- npm run backfill
+```
+
+That runs the same way, in the same image, with the same variables, and its
+output comes back as it happens. It is a Job of its own rather than a shell into
+a running instance: a migration usually needs to run when the app is not up,
+which is exactly when there is nothing to attach to.
+
 ## Instances and scaling
 
 An app runs one instance by default. You can set a fixed number, or let Skifity

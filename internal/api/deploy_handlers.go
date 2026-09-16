@@ -1,12 +1,14 @@
 package api
 
 import (
+	"bufio"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"skifity/internal/errdoc"
+	"skifity/internal/logging"
 	"skifity/internal/store"
 )
 
@@ -331,4 +333,74 @@ func (s *Server) handleScalingReadiness(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeList(w, findings)
+}
+
+// --- one-off commands ---
+
+type runRequest struct {
+	Command string `json:"command"`
+}
+
+// handleRunCommand starts a command in the app's own image.
+//
+// It answers as soon as the job exists rather than waiting for it: a migration
+// takes as long as it takes, and the caller follows the log.
+func (s *Server) handleRunCommand(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var req runRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if s.deployer == nil {
+		writeError(w, r, errdoc.ClusterUnreachable(nil))
+		return
+	}
+
+	handle, err := s.deployer.RunOnce(r.Context(), app.ID, req.Command)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	// The command itself is audited: it ran with the app's credentials, and
+	// which one it was is the first question afterwards.
+	s.audit(r, teamID, "app.command_run", "app", app.ID, strings.TrimSpace(req.Command))
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"run":  handle.Name,
+		"note": "The command is running. Read its output at /api/apps/" + app.ID + "/runs/" + handle.Name + "/logs.",
+	})
+}
+
+// handleRunLogs returns a run's output, or streams it while it is still going.
+func (s *Server) handleRunLogs(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if s.deployer == nil {
+		writeError(w, r, errdoc.ClusterUnreachable(nil))
+		return
+	}
+
+	name := chi.URLParam(r, "runID")
+	stream, err := s.deployer.RunLogs(r.Context(), app.ID, name, queryBool(r, "follow"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	defer stream.Close()
+
+	lines := []string{}
+	scanner := bufio.NewScanner(stream)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		lines = append(lines, logging.Scrub(scanner.Text()))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": name, "lines": lines})
 }

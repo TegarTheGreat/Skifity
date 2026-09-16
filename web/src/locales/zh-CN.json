@@ -238,7 +238,16 @@
       "not_deployed": "尚未部署",
       "unknown": "未知",
       "created": "尚未部署"
-    }
+    },
+    "runCommand": "运行命令",
+    "runCommandHelp": "在该应用自己的镜像中、带着该应用的变量运行一次。用于迁移、回填数据，或查看数据。",
+    "run": "运行",
+    "running": "正在运行...",
+    "runningHelp": "命令正在运行，完成后会在这里显示输出。",
+    "runNoOutput": "命令已完成，没有任何输出。",
+    "console": "控制台",
+    "releaseCommand": "发布命令",
+    "releaseCommandHelp": "每次部署都会运行，在构建之后、流量到达新版本之前。迁移就该放在这里：一旦失败，部署即停止，正在服务的版本继续服务。"
   },
   "deploy": {
     "title": "部署记录",

@@ -179,21 +179,24 @@ type OperationStep struct {
 
 // App is what a user deploys. It becomes a Deployment, Service and Ingress.
 type App struct {
-	ID             string    `json:"id"`
-	EnvironmentID  string    `json:"environment_id"`
-	Name           string    `json:"name"`
-	Slug           string    `json:"slug"`
-	SourceType     string    `json:"source_type"`
-	GitSourceID    string    `json:"git_source_id,omitempty"`
-	RepoURL        string    `json:"repo_url"`
-	Branch         string    `json:"branch"`
-	RootDir        string    `json:"root_dir"`
-	Builder        string    `json:"builder"`
-	DockerfilePath string    `json:"dockerfile_path"`
-	Image          string    `json:"image"`
-	Port           int       `json:"port"`
-	HealthPath     string    `json:"health_path"`
-	StartCommand   string    `json:"start_command"`
+	ID             string `json:"id"`
+	EnvironmentID  string `json:"environment_id"`
+	Name           string `json:"name"`
+	Slug           string `json:"slug"`
+	SourceType     string `json:"source_type"`
+	GitSourceID    string `json:"git_source_id,omitempty"`
+	RepoURL        string `json:"repo_url"`
+	Branch         string `json:"branch"`
+	RootDir        string `json:"root_dir"`
+	Builder        string `json:"builder"`
+	DockerfilePath string `json:"dockerfile_path"`
+	Image          string `json:"image"`
+	Port           int    `json:"port"`
+	HealthPath     string `json:"health_path"`
+	StartCommand   string `json:"start_command"`
+	// ReleaseCommand runs after the build and before any traffic reaches the
+	// new version, which is where a migration belongs.
+	ReleaseCommand string    `json:"release_command"`
 	Replicas       int       `json:"replicas"`
 	Autoscale      bool      `json:"autoscale"`
 	MinReplicas    int       `json:"min_replicas"`

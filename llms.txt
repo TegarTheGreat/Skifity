@@ -39,6 +39,7 @@ skifity env set KEY=value         Set a variable
 skifity env list                  List variables
 skifity scale --instances 3       Change how many copies run
 skifity rollback                  Go back to the previous version
+skifity run -- npm run migrate    Run a command once, in the app's image
 skifity apps                      List apps
 skifity servers                   List servers
 skifity open                      Print the app's URLs
@@ -73,11 +74,14 @@ Tools, in the order they are usually needed:
 
 | Tool | What it does |
 |---|---|
+| `list_projects` | Projects and the environments inside them. Where an app goes. |
+| `create_app` | Creates an app from a repository or an image, and optionally deploys it. |
 | `list_apps` | Lists apps with their ids. Call this first: everything else takes an app id. |
 | `get_app_status` | Whether an app is running, how many instances are ready, its URLs. |
 | `deploy_app` | Starts a deployment. Returns immediately; builds take minutes. |
 | `get_deployment_history` | Recent deployments, with the reason and the fix for any that failed. |
-| `get_app_logs` | Recent log lines. This is where a crash is explained. |
+| `get_app_logs` | Recent log lines. Pass `previous: true` for the container before the last restart, which is where a crash-looping app said why. |
+| `run_command` | Runs a command once, in the app's image with the app's variables. This is where a migration runs. |
 | `list_variables` | An app's variables. Secret values are never returned. |
 | `set_variable` | Sets one. Says whether it causes a rebuild. |
 | `scale_app` | Changes the instance count or turns on autoscaling. |
@@ -110,6 +114,9 @@ POST   /api/apps/{app}/deploy                 deploy
 GET    /api/apps/{app}/deployments            deployment history
 POST   /api/apps/{app}/rollback/{deployment}  roll back
 GET    /api/apps/{app}/logs?follow=true       logs, as server-sent events
+GET    /api/apps/{app}/logs?previous=true     the log of the container before the last restart
+POST   /api/apps/{app}/run                    run a command once in the app's image
+GET    /api/apps/{app}/runs/{run}/logs        that command's output
 GET    /api/apps/{app}/variables              variables
 PUT    /api/apps/{app}/variables              set one
 GET    /api/apps/{app}/domains                domains

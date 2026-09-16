@@ -150,6 +150,12 @@ type DeployRequest struct {
 	Force bool
 }
 
+// RunHandle identifies a one-off command that has been started.
+type RunHandle struct {
+	Name      string `json:"name"`
+	Namespace string `json:"-"`
+}
+
 // Deployer builds and rolls out apps.
 type Deployer interface {
 	// Deploy queues a deployment and returns its record.
@@ -162,6 +168,11 @@ type Deployer interface {
 	Sync(ctx context.Context, appID string) error
 	// ScalingReadiness looks for patterns that break with several instances.
 	ScalingReadiness(ctx context.Context, appID string) ([]ScalingFinding, error)
+	// RunOnce starts a command in the app's own image with the app's own
+	// variables, which is where a migration runs.
+	RunOnce(ctx context.Context, appID, command string) (RunHandle, error)
+	// RunLogs reads a run's output.
+	RunLogs(ctx context.Context, appID, name string, follow bool) (io.ReadCloser, error)
 }
 
 // ScalingFinding is one reason an app may not survive being scaled out.

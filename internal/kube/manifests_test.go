@@ -6,6 +6,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"skifity/internal/version"
 )
 
 func baseSpec() AppSpec {
@@ -606,5 +608,101 @@ func TestTheInterceptorCanReachTheApp(t *testing.T) {
 	}
 	if !allowed {
 		t.Fatal("an app that scales to zero wakes up and then drops the request that woke it")
+	}
+}
+
+// TestARunGetsTheAppsOwnWorld is the whole point of a one-off command: a
+// migration has to see the same DATABASE_URL the app sees, in the same image,
+// or it migrates the wrong thing or nothing at all.
+func TestARunGetsTheAppsOwnWorld(t *testing.T) {
+	app := baseSpec()
+	app.EnvFromSecret = "web-env"
+	app.Volumes = []VolumeSpec{{Name: "data", MountPath: "/data", SizeGB: 1}}
+
+	job, err := BuildRunJob(RunSpec{App: app, Name: "web-run-abc", Command: "npm run migrate"})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+	pod := job.Spec.Template.Spec
+	container := pod.Containers[0]
+
+	if container.Image != app.Image {
+		t.Errorf("the command runs %q, not the app's own image", container.Image)
+	}
+	if len(container.EnvFrom) == 0 || container.EnvFrom[0].SecretRef.Name != "web-env" {
+		t.Error("the command does not get the app's variables, so a migration has no database to migrate")
+	}
+	if len(container.VolumeMounts) != 1 || container.VolumeMounts[0].MountPath != "/data" {
+		t.Error("the command cannot see the app's volume")
+	}
+	if container.Args[0] != "npm run migrate" {
+		t.Errorf("the command is %q; it should reach the shell as typed", container.Args[0])
+	}
+	if container.Command[0] != "/bin/sh" {
+		t.Error("the command is not run through a shell, so `a && b` would not work")
+	}
+
+	// A migration that half-ran and then ran again is worse than one that
+	// failed and said so.
+	if *job.Spec.BackoffLimit != 0 {
+		t.Errorf("backoffLimit is %d; a failed migration would be retried", *job.Spec.BackoffLimit)
+	}
+	if pod.RestartPolicy != corev1.RestartPolicyNever {
+		t.Errorf("restart policy is %s, want Never", pod.RestartPolicy)
+	}
+	if job.Spec.ActiveDeadlineSeconds == nil {
+		t.Error("a command with no deadline could run forever")
+	}
+	if pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
+		t.Error("the command's pod mounts an API token it does not need")
+	}
+}
+
+// TestARunIsRefusedWithoutSomethingToRunIn.
+func TestARunIsRefusedWithoutSomethingToRunIn(t *testing.T) {
+	cases := map[string]RunSpec{
+		"no image":   {App: func() AppSpec { s := baseSpec(); s.Image = ""; return s }(), Name: "x", Command: "ls"},
+		"no command": {App: baseSpec(), Name: "x"},
+		"no name":    {App: baseSpec(), Command: "ls"},
+	}
+	for name, spec := range cases {
+		if _, err := BuildRunJob(spec); err == nil {
+			t.Errorf("%s: an impossible run was accepted", name)
+		}
+	}
+}
+
+// TestReleaseAndOneOffRunsAreToldApart: they share a shape and differ in when
+// they run, and an operator reading the namespace should be able to see which
+// is which.
+func TestReleaseAndOneOffRunsAreToldApart(t *testing.T) {
+	app := baseSpec()
+	release, err := BuildRunJob(RunSpec{
+		App: app, Name: RunJobName(app.Name, RunKindRelease, "dep123"),
+		Command: "npm run migrate", Kind: RunKindRelease,
+	})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+	oneOff, err := BuildRunJob(RunSpec{
+		App: app, Name: RunJobName(app.Name, RunKindOneOff, "abc123"), Command: "ls",
+	})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+
+	if release.Name == oneOff.Name {
+		t.Fatal("a release and a one-off command would collide on the same name")
+	}
+	if !strings.Contains(release.Name, "release") {
+		t.Errorf("a release job is called %q", release.Name)
+	}
+	if release.Labels[version.LabelKey("run-kind")] != RunKindRelease {
+		t.Error("a release job is not labelled as one")
+	}
+	for _, name := range []string{release.Name, oneOff.Name} {
+		if len(name) > 63 {
+			t.Errorf("%q is %d characters, which Kubernetes refuses", name, len(name))
+		}
 	}
 }

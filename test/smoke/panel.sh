@@ -203,6 +203,22 @@ pass "an app can be created"
 "$BINARY" apps --json | grep -q "$APP_ID" || fail "the CLI does not list the new app"
 pass "the CLI lists the new app"
 
+# A one-off command is how a migration runs. Without a cluster it cannot
+# actually start one, but the route, the authorization and the validation are
+# real, and an empty command has to be refused rather than queued.
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $API_TOKEN" \
+  -X POST "$BASE/api/apps/$APP_ID/run" -H 'Content-Type: application/json' -d '{"command":"  "}')
+[ "$code" = "400" ] || fail "an empty command answered $code, want 400"
+pass "a one-off command with nothing in it is refused"
+
+# The release command is stored on the app and comes back on it.
+curl -fsS -H "Authorization: Bearer $API_TOKEN" -X PATCH "$BASE/api/apps/$APP_ID" \
+  -H 'Content-Type: application/json' -d '{"release_command":"npm run migrate"}' >/dev/null ||
+  fail "the release command could not be set"
+curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/apps/$APP_ID" |
+  grep -q '"release_command":"npm run migrate"' || fail "the release command was not stored"
+pass "an app can be given a release command"
+
 # An app created without a port used to get zero, which renders no Service, no
 # Ingress and no URL: a deploy that succeeds and cannot be reached.
 PORTLESS=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" -X POST "$BASE/api/environments/$ENV_ID/apps" \

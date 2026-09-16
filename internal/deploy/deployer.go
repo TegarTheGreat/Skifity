@@ -165,6 +165,16 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 	}
 
 	d.setStatus(ctx, &deployment, store.DeployDeploying)
+
+	// The release command runs after the image exists and before anything is
+	// applied, so a migration that fails stops the deployment rather than
+	// leaving the new code talking to the old schema. The version that was
+	// serving before is still serving while it runs.
+	if err := d.runRelease(ctx, deployment, app, env, deployment.Image); err != nil {
+		d.fail(ctx, deployment, errdoc.From(err))
+		return
+	}
+
 	if err := d.apply(ctx, deployment, app, env); err != nil {
 		d.fail(ctx, deployment, errdoc.From(err))
 		return

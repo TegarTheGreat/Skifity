@@ -238,7 +238,16 @@
       "not_deployed": "Belum di-deploy",
       "unknown": "Tidak diketahui",
       "created": "Belum di-deploy"
-    }
+    },
+    "runCommand": "Jalankan perintah",
+    "runCommandHelp": "Dijalankan sekali, di image aplikasi ini, dengan variabel aplikasi ini. Migrasi, pengisian data, atau sekadar melihat data.",
+    "run": "Jalankan",
+    "running": "Menjalankan...",
+    "runningHelp": "Perintah sedang berjalan. Keluarannya muncul di sini setelah selesai.",
+    "runNoOutput": "Perintah selesai tanpa menampilkan apa pun.",
+    "console": "Konsol",
+    "releaseCommand": "Perintah rilis",
+    "releaseCommandHelp": "Dijalankan pada setiap penerapan, setelah build dan sebelum ada lalu lintas mencapai versi baru. Di sinilah migrasi seharusnya: jika gagal, penerapan berhenti dan versi yang sedang melayani tetap melayani."
   },
   "deploy": {
     "title": "Deployment",

@@ -87,6 +87,24 @@ output comes back as it happens. It is a Job of its own rather than a shell into
 a running instance: a migration usually needs to run when the app is not up,
 which is exactly when there is nothing to attach to.
 
+## Scheduled commands
+
+A nightly report, an hourly cleanup, a weekly digest. Add one on the app's
+**Console** tab with a name, a five-field cron schedule and a command:
+
+```
+nightly report    0 3 * * *    npm run digest
+```
+
+Schedules are in UTC, because a cluster's idea of local time is not something
+anybody chose. Each runs in the app's image, with the app's variables, and is
+applied with the app — so a nightly job always runs the version that is
+deployed rather than whatever it was when the schedule was written.
+
+Kubernetes does the scheduling, not the panel. A panel that is restarting at
+three in the morning is not a reason for a job to be skipped. A job that is
+still running when the next one is due does not start a second copy.
+
 ## Instances and scaling
 
 An app runs one instance by default. You can set a fixed number, or let Skifity

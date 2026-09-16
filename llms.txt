@@ -117,6 +117,8 @@ GET    /api/apps/{app}/logs?follow=true       logs, as server-sent events
 GET    /api/apps/{app}/logs?previous=true     the log of the container before the last restart
 POST   /api/apps/{app}/run                    run a command once in the app's image
 GET    /api/apps/{app}/runs/{run}/logs        that command's output
+GET    /api/apps/{app}/jobs                   scheduled commands
+POST   /api/apps/{app}/jobs                   add one (name, schedule, command)
 GET    /api/apps/{app}/variables              variables
 PUT    /api/apps/{app}/variables              set one
 GET    /api/apps/{app}/domains                domains

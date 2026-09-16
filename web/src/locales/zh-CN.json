@@ -247,7 +247,12 @@
     "runNoOutput": "命令已完成，没有任何输出。",
     "console": "控制台",
     "releaseCommand": "发布命令",
-    "releaseCommandHelp": "每次部署都会运行，在构建之后、流量到达新版本之前。迁移就该放在这里：一旦失败，部署即停止，正在服务的版本继续服务。"
+    "releaseCommandHelp": "每次部署都会运行，在构建之后、流量到达新版本之前。迁移就该放在这里：一旦失败，部署即停止，正在服务的版本继续服务。",
+    "scheduledCommands": "定时命令",
+    "scheduledCommandsHelp": "每晚的报表、每小时的清理。每一条都单独运行，使用该应用的镜像，按你设定的时间。",
+    "scheduledNamePlaceholder": "每晚报表",
+    "scheduleHelp": "五个 cron 字段，使用 UTC。\"0 3 * * *\" 表示每天 03:00。",
+    "schedule": "计划"
   },
   "deploy": {
     "title": "部署记录",

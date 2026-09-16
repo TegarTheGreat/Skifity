@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"skifity/internal/cron"
 	"skifity/internal/errdoc"
 	"skifity/internal/logging"
 	"skifity/internal/store"
@@ -403,4 +404,137 @@ func (s *Server) handleRunLogs(w http.ResponseWriter, r *http.Request) {
 		lines = append(lines, logging.Scrub(scanner.Text()))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": name, "lines": lines})
+}
+
+// --- scheduled commands ---
+
+type appJobRequest struct {
+	Name     string `json:"name"`
+	Schedule string `json:"schedule"`
+	Command  string `json:"command"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+}
+
+func (s *Server) handleListAppJobs(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	jobs, err := s.db.ListAppJobs(r.Context(), app.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeList(w, jobs)
+}
+
+func (s *Server) handleCreateAppJob(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var req appJobRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	job, err := buildAppJob(app.ID, "", req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := s.db.CreateAppJob(r.Context(), &job); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	s.syncAfterJobChange(r, app)
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "app.job_created", "app", app.ID, job.Name)
+	writeJSON(w, http.StatusCreated, job)
+}
+
+func (s *Server) handleUpdateAppJob(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var req appJobRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	job, err := buildAppJob(app.ID, chi.URLParam(r, "jobID"), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := s.db.UpdateAppJob(r.Context(), &job); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	s.syncAfterJobChange(r, app)
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "app.job_updated", "app", app.ID, job.Name)
+	writeJSON(w, http.StatusOK, job)
+}
+
+func (s *Server) handleDeleteAppJob(w http.ResponseWriter, r *http.Request) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	jobID := chi.URLParam(r, "jobID")
+	if err := s.db.DeleteAppJob(r.Context(), app.ID, jobID); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	s.syncAfterJobChange(r, app)
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "app.job_deleted", "app", app.ID, jobID)
+	writeOK(w)
+}
+
+// buildAppJob validates what the form sent.
+//
+// The schedule is parsed here rather than by Kubernetes, because Kubernetes
+// answers a bad one with a rejected object and the panel would have to explain
+// that afterwards. The same parser the backup schedules use is a five-field
+// cron expression, which is what people expect to type.
+func buildAppJob(appID, id string, req appJobRequest) (store.AppJob, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return store.AppJob{}, errdoc.BadRequest("Give the scheduled command a name, such as \"nightly report\".")
+	}
+	command := strings.TrimSpace(req.Command)
+	if command == "" {
+		return store.AppJob{}, errdoc.BadRequest("Enter the command to run on the schedule.")
+	}
+	schedule := strings.TrimSpace(req.Schedule)
+	if _, err := cron.ParseSchedule(schedule); err != nil {
+		return store.AppJob{}, errdoc.BadRequest(
+			"That is not a schedule Skifity understands. Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC.")
+	}
+
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	return store.AppJob{
+		ID: id, AppID: appID, Name: name, Schedule: schedule, Command: command, Enabled: enabled,
+	}, nil
+}
+
+// syncAfterJobChange applies the app again so the schedule takes effect now
+// rather than at the next deployment.
+func (s *Server) syncAfterJobChange(r *http.Request, app store.App) {
+	if s.deployer == nil {
+		return
+	}
+	if err := s.deployer.Sync(r.Context(), app.ID); err != nil {
+		s.log.Warn("could not apply a schedule change", "app", app.ID, "error", err)
+	}
 }

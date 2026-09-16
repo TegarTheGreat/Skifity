@@ -211,6 +211,26 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $API_TO
 [ "$code" = "400" ] || fail "an empty command answered $code, want 400"
 pass "a one-off command with nothing in it is refused"
 
+# A scheduled command is a cron expression the panel has to understand before
+# Kubernetes sees it: an object rejected by the API server is a failure the
+# panel would have to explain afterwards.
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $API_TOKEN" \
+  -X POST "$BASE/api/apps/$APP_ID/jobs" -H 'Content-Type: application/json' \
+  -d '{"name":"nightly","schedule":"every night","command":"npm run digest"}')
+[ "$code" = "400" ] || fail "a nonsense schedule answered $code, want 400"
+pass "a schedule the panel cannot read is refused"
+
+JOB=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" -X POST "$BASE/api/apps/$APP_ID/jobs" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"nightly report","schedule":"0 3 * * *","command":"npm run digest"}')
+JOB_ID=$(echo "$JOB" | sed -n 's/.*"id":"\(job_[^"]*\)".*/\1/p')
+[ -n "$JOB_ID" ] || fail "the scheduled command was not created"
+curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/apps/$APP_ID/jobs" |
+  grep -q 'nightly report' || fail "the scheduled command is not listed"
+curl -fsS -H "Authorization: Bearer $API_TOKEN" -X DELETE "$BASE/api/apps/$APP_ID/jobs/$JOB_ID" >/dev/null ||
+  fail "the scheduled command could not be removed"
+pass "a command can be scheduled, listed and removed"
+
 # The release command is stored on the app and comes back on it.
 curl -fsS -H "Authorization: Bearer $API_TOKEN" -X PATCH "$BASE/api/apps/$APP_ID" \
   -H 'Content-Type: application/json' -d '{"release_command":"npm run migrate"}' >/dev/null ||

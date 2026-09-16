@@ -434,3 +434,15 @@ export type NotificationChannel = {
   enabled: boolean
   created_at: string
 }
+
+/** A command that runs on a schedule, in the app's own image. */
+export type AppJob = {
+  id: string
+  app_id: string
+  name: string
+  schedule: string
+  command: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}

@@ -267,6 +267,12 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 		return err
 	}
 
+	// Scheduled commands run the version that is deployed, so they are applied
+	// with it rather than when somebody writes the schedule.
+	if err := d.applyScheduledJobs(ctx, spec, app); err != nil {
+		return err
+	}
+
 	// Objects that are no longer wanted have to be removed explicitly: server-
 	// side apply removes fields, not whole objects.
 	d.removeUnwanted(ctx, spec, app)

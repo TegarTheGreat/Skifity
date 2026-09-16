@@ -247,7 +247,12 @@
     "runNoOutput": "Perintah selesai tanpa menampilkan apa pun.",
     "console": "Konsol",
     "releaseCommand": "Perintah rilis",
-    "releaseCommandHelp": "Dijalankan pada setiap penerapan, setelah build dan sebelum ada lalu lintas mencapai versi baru. Di sinilah migrasi seharusnya: jika gagal, penerapan berhenti dan versi yang sedang melayani tetap melayani."
+    "releaseCommandHelp": "Dijalankan pada setiap penerapan, setelah build dan sebelum ada lalu lintas mencapai versi baru. Di sinilah migrasi seharusnya: jika gagal, penerapan berhenti dan versi yang sedang melayani tetap melayani.",
+    "scheduledCommands": "Perintah terjadwal",
+    "scheduledCommandsHelp": "Laporan harian, pembersihan tiap jam. Masing-masing berjalan sendiri, di image aplikasi ini, sesuai jadwal yang Anda beri.",
+    "scheduledNamePlaceholder": "laporan harian",
+    "scheduleHelp": "Lima kolom cron, dalam UTC. \"0 3 * * *\" berarti setiap hari pukul 03.00.",
+    "schedule": "Jadwal"
   },
   "deploy": {
     "title": "Deployment",

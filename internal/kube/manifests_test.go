@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -704,5 +705,46 @@ func TestReleaseAndOneOffRunsAreToldApart(t *testing.T) {
 		if len(name) > 63 {
 			t.Errorf("%q is %d characters, which Kubernetes refuses", name, len(name))
 		}
+	}
+}
+
+// TestAScheduledCommandDoesNotPileUp: a job that is still running when the next
+// one is due takes longer than its interval, and two copies of a nightly report
+// is worse than one late one.
+func TestAScheduledCommandDoesNotPileUp(t *testing.T) {
+	app := baseSpec()
+	cron, err := BuildCronJob(RunSpec{
+		App: app, Name: CronJobName(app.Name, "nightly report"),
+		Command: "npm run digest", Kind: RunKindScheduled,
+	}, "0 3 * * *")
+	if err != nil {
+		t.Fatalf("BuildCronJob: %v", err)
+	}
+
+	if cron.Spec.ConcurrencyPolicy != batchv1.ForbidConcurrent {
+		t.Errorf("concurrency policy is %s, so a slow job would run twice at once", cron.Spec.ConcurrencyPolicy)
+	}
+	if cron.Spec.Schedule != "0 3 * * *" {
+		t.Errorf("schedule is %q", cron.Spec.Schedule)
+	}
+	// Unset on purpose: a schedule means UTC, because a cluster's idea of local
+	// time is not something anybody chose.
+	if cron.Spec.TimeZone != nil {
+		t.Errorf("the schedule is pinned to %q rather than UTC", *cron.Spec.TimeZone)
+	}
+	if cron.Spec.StartingDeadlineSeconds == nil {
+		t.Error("a job that could not start would fire every missed interval at once when it can")
+	}
+	if cron.Spec.SuccessfulJobsHistoryLimit == nil || cron.Spec.FailedJobsHistoryLimit == nil {
+		t.Error("finished jobs would pile up in the namespace forever")
+	}
+
+	// The name is derived from the app and the job, so two apps can both have a
+	// "nightly report" and one app cannot have two.
+	if got := CronJobName("web", "Nightly Report"); got != CronJobName("web", "nightly report") {
+		t.Errorf("the same name in different cases produced %q and %q", got, CronJobName("web", "nightly report"))
+	}
+	if len(cron.Name) > 63 {
+		t.Errorf("%q is %d characters, which Kubernetes refuses", cron.Name, len(cron.Name))
 	}
 }

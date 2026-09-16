@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 const appColumns = `id, environment_id, name, slug, source_type, COALESCE(git_source_id,''), repo_url, branch,
@@ -522,4 +523,91 @@ func (db *DB) ListDeployedApps(ctx context.Context) ([]DeployedApp, error) {
 		out = append(out, item)
 	}
 	return out, rows.Err()
+}
+
+// --- scheduled commands ---
+
+// AppJob is a command that runs on a schedule, in the app's own image.
+type AppJob struct {
+	ID        string    `json:"id"`
+	AppID     string    `json:"app_id"`
+	Name      string    `json:"name"`
+	Schedule  string    `json:"schedule"`
+	Command   string    `json:"command"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// CreateAppJob adds a scheduled command.
+func (db *DB) CreateAppJob(ctx context.Context, j *AppJob) error {
+	if j.ID == "" {
+		j.ID = NewID("job")
+	}
+	now := Now()
+	_, err := db.Exec(ctx,
+		`INSERT INTO app_jobs (id, app_id, name, schedule, command, enabled, created_at, updated_at)
+		 VALUES (?,?,?,?,?,?,?,?)`,
+		j.ID, j.AppID, j.Name, j.Schedule, j.Command, j.Enabled, now, now)
+	if err != nil {
+		if errors.Is(err, ErrConflict) {
+			return fmt.Errorf("%w: this app already has a scheduled command called %s", ErrConflict, j.Name)
+		}
+		return fmt.Errorf("create scheduled command: %w", err)
+	}
+	j.CreatedAt, _ = ParseTime(now)
+	j.UpdatedAt = j.CreatedAt
+	return nil
+}
+
+// ListAppJobs returns an app's scheduled commands.
+func (db *DB) ListAppJobs(ctx context.Context, appID string) ([]AppJob, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, app_id, name, schedule, command, enabled, created_at, updated_at
+		 FROM app_jobs WHERE app_id = ? ORDER BY name`, appID)
+	if err != nil {
+		return nil, fmt.Errorf("list scheduled commands: %w", err)
+	}
+	defer rows.Close()
+	out := []AppJob{}
+	for rows.Next() {
+		var j AppJob
+		var created, updated string
+		if err := rows.Scan(&j.ID, &j.AppID, &j.Name, &j.Schedule, &j.Command,
+			&j.Enabled, &created, &updated); err != nil {
+			return nil, fmt.Errorf("scan scheduled command: %w", err)
+		}
+		j.CreatedAt, _ = ParseTime(created)
+		j.UpdatedAt, _ = ParseTime(updated)
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// UpdateAppJob changes a scheduled command. The app is part of the condition,
+// so an id from another app changes nothing.
+func (db *DB) UpdateAppJob(ctx context.Context, j *AppJob) error {
+	res, err := db.Exec(ctx,
+		`UPDATE app_jobs SET name = ?, schedule = ?, command = ?, enabled = ?, updated_at = ?
+		 WHERE id = ? AND app_id = ?`,
+		j.Name, j.Schedule, j.Command, j.Enabled, Now(), j.ID, j.AppID)
+	if err != nil {
+		return fmt.Errorf("update scheduled command: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteAppJob removes a scheduled command.
+func (db *DB) DeleteAppJob(ctx context.Context, appID, id string) error {
+	res, err := db.Exec(ctx, `DELETE FROM app_jobs WHERE id = ? AND app_id = ?`, id, appID)
+	if err != nil {
+		return fmt.Errorf("delete scheduled command: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

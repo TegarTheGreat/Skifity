@@ -29,6 +29,9 @@ const RunKindOneOff = "one-off"
 // RunKindRelease is the release command, run as part of a deployment.
 const RunKindRelease = "release"
 
+// RunKindScheduled is a command that runs on a schedule.
+const RunKindScheduled = "scheduled"
+
 // RunSpec is a one-off command in an app's own environment.
 type RunSpec struct {
 	// App is the app the command borrows its image, variables, namespace and
@@ -164,4 +167,53 @@ func RunJobName(appSlug, kind, id string) string {
 		id = id[:10]
 	}
 	return ResourceName(prefix, id)
+}
+
+// BuildCronJob renders a scheduled command.
+//
+// Kubernetes does the scheduling rather than the panel, deliberately: a panel
+// that is restarting at 03:00 should not be the reason a nightly job did not
+// run, and a cluster that outlives this process should keep running the things
+// it was told to.
+func BuildCronJob(s RunSpec, schedule string) (*batchv1.CronJob, error) {
+	job, err := BuildRunJob(s)
+	if err != nil {
+		return nil, err
+	}
+	if schedule == "" {
+		return nil, fmt.Errorf("a scheduled command needs a schedule")
+	}
+
+	// Forbid, not Allow: a job that is still running when the next one is due
+	// is a job that takes longer than its interval, and two copies of a
+	// nightly report is worse than one late one.
+	policy := batchv1.ForbidConcurrent
+	var successful int32 = 3
+	var failed int32 = 3
+	// A job that could not start for a while runs once when it can, rather
+	// than firing every missed interval at once.
+	var startingDeadline int64 = 300
+
+	return &batchv1.CronJob{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "batch/v1", Kind: "CronJob"},
+		ObjectMeta: metav1.ObjectMeta{Name: s.Name, Namespace: s.App.Namespace, Labels: job.Labels},
+		Spec: batchv1.CronJobSpec{
+			Schedule:                   schedule,
+			ConcurrencyPolicy:          policy,
+			StartingDeadlineSeconds:    &startingDeadline,
+			SuccessfulJobsHistoryLimit: &successful,
+			FailedJobsHistoryLimit:     &failed,
+			// TimeZone is deliberately unset, so a schedule means UTC. A
+			// cluster's idea of local time is not something anybody chose.
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: job.Labels},
+				Spec:       job.Spec,
+			},
+		},
+	}, nil
+}
+
+// CronJobName builds a valid name for a scheduled command.
+func CronJobName(appSlug, jobName string) string {
+	return ResourceName(appSlug+"-job", Slugify(jobName))
 }

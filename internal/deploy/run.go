@@ -203,3 +203,56 @@ func (d *Deployer) streamRun(ctx context.Context, deployment store.Deployment, n
 		}
 	}
 }
+
+// applyScheduledJobs applies an app's scheduled commands and removes the ones
+// it no longer has.
+//
+// They are applied with the rest of the app's objects, from the same image, so
+// a nightly job always runs the version that is deployed rather than whatever
+// it was when somebody wrote the schedule.
+func (d *Deployer) applyScheduledJobs(ctx context.Context, spec kube.AppSpec, app store.App) error {
+	jobs, err := d.db.ListAppJobs(ctx, app.ID)
+	if err != nil {
+		return err
+	}
+
+	wanted := map[string]bool{}
+	for _, job := range jobs {
+		name := kube.CronJobName(app.Slug, job.Name)
+		if !job.Enabled {
+			continue
+		}
+		cron, err := kube.BuildCronJob(kube.RunSpec{
+			App: spec, Name: name, Command: job.Command, Kind: kube.RunKindScheduled,
+		}, job.Schedule)
+		if err != nil {
+			return errdoc.BadRequest(err.Error())
+		}
+		if err := d.cluster.Client().Applier().Apply(ctx, cron); err != nil {
+			return err
+		}
+		wanted[name] = true
+	}
+
+	// A schedule that was removed or switched off has to stop running, and
+	// server-side apply removes fields rather than whole objects.
+	existing, err := d.cluster.Client().Clientset().BatchV1().CronJobs(spec.Namespace).
+		List(ctx, metav1.ListOptions{
+			LabelSelector: "app.kubernetes.io/name=" + spec.Name + ",app.kubernetes.io/component=run",
+		})
+	if err != nil {
+		d.log.Warn("could not list scheduled commands", "app", app.ID, "error", err)
+		return nil
+	}
+	for _, cron := range existing.Items {
+		if wanted[cron.Name] {
+			continue
+		}
+		if err := d.cluster.Client().Applier().Delete(ctx,
+			"batch/v1", "CronJob", spec.Namespace, cron.Name); err != nil {
+			d.log.Warn("could not remove a scheduled command",
+				"app", app.ID, "job", cron.Name, "error", err)
+		}
+	}
+	return nil
+}

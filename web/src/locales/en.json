@@ -255,7 +255,12 @@
     "runNoOutput": "The command finished and printed nothing.",
     "console": "Console",
     "releaseCommand": "Release command",
-    "releaseCommandHelp": "Runs on every deployment, after the build and before any traffic reaches the new version. This is where a migration belongs: if it fails the deployment stops and the version that was serving keeps serving."
+    "releaseCommandHelp": "Runs on every deployment, after the build and before any traffic reaches the new version. This is where a migration belongs: if it fails the deployment stops and the version that was serving keeps serving.",
+    "scheduledCommands": "Scheduled commands",
+    "scheduledCommandsHelp": "A nightly report, an hourly cleanup. Each runs on its own, in this app's image, on the schedule you give it.",
+    "scheduledNamePlaceholder": "nightly report",
+    "scheduleHelp": "Five cron fields, in UTC. \"0 3 * * *\" is every day at 03:00.",
+    "schedule": "Schedule"
   },
   "deploy": {
     "title": "Deployments",

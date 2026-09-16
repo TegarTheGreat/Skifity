@@ -206,6 +206,10 @@ func (s *Server) routes() chi.Router {
 				// own variables. It is where a migration runs.
 				app.Post("/run", s.handleRunCommand)
 				app.Get("/runs/{runID}/logs", s.handleRunLogs)
+				app.Get("/jobs", s.handleListAppJobs)
+				app.Post("/jobs", s.handleCreateAppJob)
+				app.Patch("/jobs/{jobID}", s.handleUpdateAppJob)
+				app.Delete("/jobs/{jobID}", s.handleDeleteAppJob)
 				app.Post("/restart", s.handleRestartApp)
 				app.Get("/variables", s.handleListVariables)
 				app.Put("/variables", s.handleSetVariable)

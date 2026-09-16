@@ -10,8 +10,8 @@ import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -23,6 +23,7 @@ import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
 import type { App, Deployment, GitSource } from "@/lib/types"
+import { Spinner } from "@/components/ui/spinner"
 
 type SourceType = "git" | "image"
 
@@ -135,8 +136,8 @@ export function NewAppPage() {
 
             {sourceType === "git" ? (
               <>
-                <div className="space-y-2">
-                  <Label htmlFor="repo-url">{t("apps.repository")}</Label>
+                <Field>
+                  <FieldLabel htmlFor="repo-url">{t("apps.repository")}</FieldLabel>
                   <Input
                     id="repo-url"
                     value={repoURL}
@@ -145,13 +146,13 @@ export function NewAppPage() {
                     autoFocus
                     required
                   />
-                </div>
+                </Field>
                 {sources.length > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="git-source">
+                  <Field>
+                    <FieldLabel htmlFor="git-source">
                       {t("git.title")}{" "}
                       <span className="text-muted-foreground">({t("common.optional")})</span>
-                    </Label>
+                    </FieldLabel>
                     <Select value={gitSourceID} onValueChange={setGitSourceID}>
                       <SelectTrigger id="git-source">
                         <SelectValue placeholder={t("common.none")} />
@@ -164,25 +165,25 @@ export function NewAppPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">{t("git.help")}</p>
-                  </div>
+                    <FieldDescription>{t("git.help")}</FieldDescription>
+                  </Field>
                 )}
-                <div className="space-y-2">
-                  <Label htmlFor="branch">
+                <Field>
+                  <FieldLabel htmlFor="branch">
                     {t("apps.branch")}{" "}
                     <span className="text-muted-foreground">({t("common.optional")})</span>
-                  </Label>
+                  </FieldLabel>
                   <Input
                     id="branch"
                     value={branch}
                     onChange={(event) => setBranch(event.target.value)}
                     placeholder="main"
                   />
-                </div>
+                </Field>
               </>
             ) : (
-              <div className="space-y-2">
-                <Label htmlFor="image">{t("apps.image")}</Label>
+              <Field>
+                <FieldLabel htmlFor="image">{t("apps.image")}</FieldLabel>
                 <Input
                   id="image"
                   value={image}
@@ -192,18 +193,18 @@ export function NewAppPage() {
                   autoFocus
                   required
                 />
-              </div>
+              </Field>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="app-name">{t("apps.appName")}</Label>
+            <Field>
+              <FieldLabel htmlFor="app-name">{t("apps.appName")}</FieldLabel>
               <Input
                 id="app-name"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder={suggestedName}
               />
-            </div>
+            </Field>
           </CardContent>
         </Card>
 
@@ -216,8 +217,8 @@ export function NewAppPage() {
         {advanced && (
           <Card>
             <CardContent className="space-y-4 pt-6">
-              <div className="space-y-2">
-                <Label htmlFor="port">{t("apps.port")}</Label>
+              <Field>
+                <FieldLabel htmlFor="port">{t("apps.port")}</FieldLabel>
                 <Input
                   id="port"
                   type="number"
@@ -227,13 +228,11 @@ export function NewAppPage() {
                   onChange={(event) => setPort(event.target.value)}
                   placeholder="3000"
                 />
-                <p className="text-xs text-muted-foreground">
-                  {t("apps.portHelp", { product: "Skifity" })}
-                </p>
-              </div>
+                <FieldDescription>{t("apps.portHelp", { product: "Skifity" })}</FieldDescription>
+              </Field>
 
-              <div className="space-y-2">
-                <Label htmlFor="health-path">{t("apps.healthPath")}</Label>
+              <Field>
+                <FieldLabel htmlFor="health-path">{t("apps.healthPath")}</FieldLabel>
                 <Input
                   id="health-path"
                   value={healthPath}
@@ -241,13 +240,13 @@ export function NewAppPage() {
                   placeholder="/healthz"
                   className="font-mono"
                 />
-                <p className="text-xs text-muted-foreground">{t("apps.healthPathHelp")}</p>
-              </div>
+                <FieldDescription>{t("apps.healthPathHelp")}</FieldDescription>
+              </Field>
 
               {sourceType === "git" && (
                 <>
-                  <div className="space-y-2">
-                    <Label htmlFor="root-dir">{t("apps.rootDirectory")}</Label>
+                  <Field>
+                    <FieldLabel htmlFor="root-dir">{t("apps.rootDirectory")}</FieldLabel>
                     <Input
                       id="root-dir"
                       value={rootDir}
@@ -255,11 +254,11 @@ export function NewAppPage() {
                       placeholder="apps/web"
                       className="font-mono"
                     />
-                    <p className="text-xs text-muted-foreground">{t("apps.rootDirectoryHelp")}</p>
-                  </div>
+                    <FieldDescription>{t("apps.rootDirectoryHelp")}</FieldDescription>
+                  </Field>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="builder">{t("apps.builder")}</Label>
+                  <Field>
+                    <FieldLabel htmlFor="builder">{t("apps.builder")}</FieldLabel>
                     <Select value={builder} onValueChange={setBuilder}>
                       <SelectTrigger id="builder">
                         <SelectValue />
@@ -269,11 +268,13 @@ export function NewAppPage() {
                         <SelectItem value="dockerfile">{t("apps.builderDockerfile")}</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
+                  </Field>
 
                   {builder === "dockerfile" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="dockerfile-path">{t("apps.builderDockerfile")}</Label>
+                    <Field>
+                      <FieldLabel htmlFor="dockerfile-path">
+                        {t("apps.builderDockerfile")}
+                      </FieldLabel>
                       <Input
                         id="dockerfile-path"
                         value={dockerfilePath}
@@ -281,20 +282,20 @@ export function NewAppPage() {
                         placeholder="Dockerfile"
                         className="font-mono"
                       />
-                    </div>
+                    </Field>
                   )}
                 </>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="start-command">{t("apps.startCommand")}</Label>
+              <Field>
+                <FieldLabel htmlFor="start-command">{t("apps.startCommand")}</FieldLabel>
                 <Input
                   id="start-command"
                   value={startCommand}
                   onChange={(event) => setStartCommand(event.target.value)}
                   className="font-mono"
                 />
-              </div>
+              </Field>
             </CardContent>
           </Card>
         )}
@@ -314,6 +315,7 @@ export function NewAppPage() {
             {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={!ready || create.isPending}>
+            {create.isPending && <Spinner />}
             {create.isPending ? t("apps.deploying") : t("common.create")}
           </Button>
         </div>

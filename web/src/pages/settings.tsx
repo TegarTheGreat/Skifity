@@ -185,10 +185,16 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
             {t("settings.unsaved", { count: Object.keys(draft).length })}
           </span>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setDraft({})} disabled={save.isPending}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDraft({})}
+              disabled={save.isPending}
+            >
               {t("common.cancel")}
             </Button>
             <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+              {save.isPending && <Spinner />}
               {save.isPending && <Spinner />}
               {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
@@ -519,6 +525,7 @@ function MembersPanel() {
             <div className="flex justify-end">
               <Button type="submit" disabled={!email.trim() || add.isPending}>
                 <PlusIcon className="size-4" />
+                {add.isPending && <Spinner />}
                 {add.isPending ? t("common.saving") : t("settings.inviteMember")}
               </Button>
             </div>
@@ -624,6 +631,7 @@ function SecurityPanel() {
               })
             }}
           >
+            {rotate.isPending && <Spinner />}
             {rotate.isPending ? t("common.saving") : t("settings.rotateKeyConfirm")}
           </Button>
         </CardContent>

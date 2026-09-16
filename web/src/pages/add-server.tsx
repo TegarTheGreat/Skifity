@@ -9,6 +9,7 @@ import { Page, PageHeader } from "@/components/page"
 import { OperationProgress } from "@/components/operation-progress"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -18,6 +19,7 @@ import { useEvents } from "@/hooks/use-events"
 import { useSession } from "@/hooks/use-session"
 import { api } from "@/lib/api"
 import type { Operation } from "@/lib/types"
+import { Spinner } from "@/components/ui/spinner"
 
 /**
  * Adding a server.
@@ -106,8 +108,8 @@ export function AddServerPage() {
             {add.error && <ErrorDisplay error={add.error} />}
 
             <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-              <div className="space-y-2">
-                <Label htmlFor="host">{t("servers.host")}</Label>
+              <Field>
+                <FieldLabel htmlFor="host">{t("servers.host")}</FieldLabel>
                 <Input
                   id="host"
                   value={host}
@@ -117,39 +119,39 @@ export function AddServerPage() {
                   autoFocus
                   className="font-mono"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="port">{t("servers.sshPort")}</Label>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="port">{t("servers.sshPort")}</FieldLabel>
                 <Input
                   id="port"
                   value={sshPort}
                   onChange={(event) => setSSHPort(event.target.value)}
                   inputMode="numeric"
                 />
-              </div>
+              </Field>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="user">{t("servers.sshUser")}</Label>
+              <Field>
+                <FieldLabel htmlFor="user">{t("servers.sshUser")}</FieldLabel>
                 <Input
                   id="user"
                   value={sshUser}
                   onChange={(event) => setSSHUser(event.target.value)}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="name">
                   {t("servers.serverName")}{" "}
                   <span className="text-muted-foreground">({t("common.optional")})</span>
-                </Label>
+                </FieldLabel>
                 <Input
                   id="name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={host || "Frankfurt 1"}
                 />
-              </div>
+              </Field>
             </div>
 
             <Tabs
@@ -184,8 +186,8 @@ export function AddServerPage() {
               </TabsContent>
 
               <TabsContent value="key" className="space-y-4 pt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="key">{t("servers.authKey")}</Label>
+                <Field>
+                  <FieldLabel htmlFor="key">{t("servers.authKey")}</FieldLabel>
                   <Textarea
                     id="key"
                     value={privateKey}
@@ -195,12 +197,12 @@ export function AddServerPage() {
                     className="font-mono text-xs"
                     required={authMethod === "key"}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="passphrase">
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="passphrase">
                     {t("servers.passphrase")}{" "}
                     <span className="text-muted-foreground">({t("common.optional")})</span>
-                  </Label>
+                  </FieldLabel>
                   <Input
                     id="passphrase"
                     type="password"
@@ -208,7 +210,7 @@ export function AddServerPage() {
                     onChange={(event) => setPassphrase(event.target.value)}
                     autoComplete="off"
                   />
-                </div>
+                </Field>
               </TabsContent>
             </Tabs>
 
@@ -217,16 +219,16 @@ export function AddServerPage() {
                 {t("common.showAdvanced")}
               </summary>
               <div className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="location">{t("servers.location")}</Label>
+                <Field>
+                  <FieldLabel htmlFor="location">{t("servers.location")}</FieldLabel>
                   <Input
                     id="location"
                     value={location}
                     onChange={(event) => setLocation(event.target.value)}
                     placeholder="Frankfurt"
                   />
-                  <p className="text-xs text-muted-foreground">{t("servers.locationHelp")}</p>
-                </div>
+                  <FieldDescription>{t("servers.locationHelp")}</FieldDescription>
+                </Field>
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <Label htmlFor="control-plane">{t("servers.controlPlane")}</Label>
@@ -249,6 +251,7 @@ export function AddServerPage() {
             </div>
 
             <Button type="submit" className="w-full" disabled={add.isPending}>
+              {add.isPending && <Spinner />}
               {add.isPending ? t("common.loading") : t("servers.addServer")}
             </Button>
           </form>

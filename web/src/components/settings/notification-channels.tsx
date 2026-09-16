@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
@@ -191,8 +193,8 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
             create.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="channel-kind">{t("notifications.channelKind")}</Label>
+          <Field>
+            <FieldLabel htmlFor="channel-kind">{t("notifications.channelKind")}</FieldLabel>
             <Select
               value={kind}
               onValueChange={(next) => {
@@ -213,17 +215,17 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="channel-name">{t("notifications.channelName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="channel-name">{t("notifications.channelName")}</FieldLabel>
             <Input
               id="channel-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={t(`notifications.kind.${kind}`)}
             />
-          </div>
+          </Field>
 
           {fields.map((field) => (
             <div key={field.key} className="space-y-2">
@@ -268,6 +270,7 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!complete || create.isPending}>
+              {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("common.add")}
             </Button>
           </div>

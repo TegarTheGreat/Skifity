@@ -38,6 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -48,6 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
@@ -113,42 +115,42 @@ export function ProjectDetailPage() {
         }
         actions={
           <>
-          {environmentId && (
-            <Button asChild>
-              <Link to={`/environments/${environmentId}/apps/new`}>
-                <PlusIcon className="size-4" />
-                {t("apps.newApp")}
-              </Link>
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label={t("common.actions")}>
-                <MoreHorizontalIcon className="size-4" />
+            {environmentId && (
+              <Button asChild>
+                <Link to={`/environments/${environmentId}/apps/new`}>
+                  <PlusIcon className="size-4" />
+                  {t("apps.newApp")}
+                </Link>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setNewEnvironment(true)}>
-                <PlusIcon className="size-4" />
-                {t("projects.newEnvironment")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onSelect={() => {
-                  void confirmDelete(
-                    project.data?.name ?? "",
-                    t("projects.deleteProjectWarning"),
-                    t("common.cannotBeUndone"),
-                  ).then((yes) => {
-                    if (yes) remove.mutate()
-                  })
-                }}
-              >
-                <Trash2Icon className="size-4" />
-                {t("projects.deleteProject")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label={t("common.actions")}>
+                  <MoreHorizontalIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setNewEnvironment(true)}>
+                  <PlusIcon className="size-4" />
+                  {t("projects.newEnvironment")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => {
+                    void confirmDelete(
+                      project.data?.name ?? "",
+                      t("projects.deleteProjectWarning"),
+                      t("common.cannotBeUndone"),
+                    ).then((yes) => {
+                      if (yes) remove.mutate()
+                    })
+                  }}
+                >
+                  <Trash2Icon className="size-4" />
+                  {t("projects.deleteProject")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
@@ -461,8 +463,8 @@ function NewEnvironmentDialog({
             create.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="environment-name">{t("projects.environmentName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="environment-name">{t("projects.environmentName")}</FieldLabel>
             <Input
               id="environment-name"
               value={name}
@@ -471,13 +473,14 @@ function NewEnvironmentDialog({
               autoFocus
               required
             />
-          </div>
+          </Field>
           {create.error && <ErrorDisplay error={create.error} compact />}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
+              {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("common.create")}
             </Button>
           </DialogFooter>
@@ -530,8 +533,8 @@ export function NewDatabaseDialog({
             create.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="database-name">{t("databases.databaseName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="database-name">{t("databases.databaseName")}</FieldLabel>
             <Input
               id="database-name"
               value={name}
@@ -539,9 +542,9 @@ export function NewDatabaseDialog({
               autoFocus
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="database-engine">{t("databases.engine")}</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="database-engine">{t("databases.engine")}</FieldLabel>
             <Select value={engine} onValueChange={setEngine}>
               <SelectTrigger id="database-engine">
                 <SelectValue />
@@ -552,9 +555,9 @@ export function NewDatabaseDialog({
                 <SelectItem value="mysql">{t("databases.mysql")}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="database-storage">{t("databases.storage")}</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="database-storage">{t("databases.storage")}</FieldLabel>
             <Input
               id="database-storage"
               type="number"
@@ -562,14 +565,15 @@ export function NewDatabaseDialog({
               value={storage}
               onChange={(event) => setStorage(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">{t("databases.storageHelp")}</p>
-          </div>
+            <FieldDescription>{t("databases.storageHelp")}</FieldDescription>
+          </Field>
           {create.error && <ErrorDisplay error={create.error} compact />}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
+              {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("common.create")}
             </Button>
           </DialogFooter>

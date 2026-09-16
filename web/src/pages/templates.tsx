@@ -19,11 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -34,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import type { Environment, Project, Template } from "@/lib/types"
@@ -205,8 +203,8 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
             install.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="install-environment">{t("projects.environments")}</Label>
+          <Field>
+            <FieldLabel htmlFor="install-environment">{t("projects.environments")}</FieldLabel>
             {environments.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("projects.emptyHelp")}</p>
             ) : (
@@ -223,16 +221,16 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
                 </SelectContent>
               </Select>
             )}
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="install-name">{t("apps.appName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="install-name">{t("apps.appName")}</FieldLabel>
             <Input
               id="install-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-          </div>
+          </Field>
 
           {asked.map((input) => (
             <div key={input.key} className="space-y-2">
@@ -266,6 +264,7 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!environmentId || install.isPending}>
+              {install.isPending && <Spinner />}
               {install.isPending ? t("templates.installing") : t("templates.install")}
             </Button>
           </DialogFooter>

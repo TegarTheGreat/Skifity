@@ -9,9 +9,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
 import type { App, Domain } from "@/lib/types"
@@ -68,8 +69,8 @@ export function DomainsTab({ app }: { app: App }) {
                 add.mutate()
               }}
             >
-              <div className="space-y-2">
-                <Label htmlFor="hostname">{t("domains.hostname")}</Label>
+              <Field>
+                <FieldLabel htmlFor="hostname">{t("domains.hostname")}</FieldLabel>
                 <Input
                   id="hostname"
                   value={hostname}
@@ -78,13 +79,14 @@ export function DomainsTab({ app }: { app: App }) {
                   autoFocus
                   required
                 />
-              </div>
+              </Field>
               {add.error != null && <ErrorDisplay error={add.error} compact />}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
                   {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={!hostname.trim() || add.isPending}>
+                  {add.isPending && <Spinner />}
                   {add.isPending ? t("common.saving") : t("common.add")}
                 </Button>
               </div>

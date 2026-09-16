@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useEvents } from "@/hooks/use-events"
 import { api, type List } from "@/lib/api"
 import { formatDuration, formatRelative, shortCommit } from "@/lib/format"
@@ -241,6 +242,7 @@ export function DeployButton({ appId, force }: { appId: string; force?: boolean 
     <div className="space-y-2">
       <Button onClick={() => deploy.mutate()} disabled={deploy.isPending}>
         <RocketIcon className="size-4" />
+        {deploy.isPending && <Spinner />}
         {deploy.isPending ? t("apps.deploying") : t("deploy.deployNow")}
       </Button>
       {deploy.error != null && <ErrorDisplay error={deploy.error} compact />}

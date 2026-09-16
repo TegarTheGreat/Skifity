@@ -10,9 +10,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
@@ -144,6 +146,7 @@ export function VariablesEditor({
                 {t("common.cancel")}
               </Button>
               <Button size="sm" disabled={saveBulk.isPending} onClick={() => saveBulk.mutate(bulk)}>
+                {saveBulk.isPending && <Spinner />}
                 {saveBulk.isPending ? t("common.saving") : t("common.save")}
               </Button>
             </div>
@@ -279,8 +282,8 @@ function NewVariableRow({
           }}
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="variable-key">{t("variables.key")}</Label>
+            <Field>
+              <FieldLabel htmlFor="variable-key">{t("variables.key")}</FieldLabel>
               <Input
                 id="variable-key"
                 value={key}
@@ -290,10 +293,10 @@ function NewVariableRow({
                 required
                 aria-invalid={invalid}
               />
-              {invalid && <p className="text-xs text-destructive">{t("variables.invalidKey")}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="variable-value">{t("variables.value")}</Label>
+              {invalid && <FieldError>{t("variables.invalidKey")}</FieldError>}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="variable-value">{t("variables.value")}</FieldLabel>
               <Input
                 id="variable-value"
                 value={value}
@@ -301,7 +304,7 @@ function NewVariableRow({
                 className="font-mono"
                 type={isSecret ? "password" : "text"}
               />
-            </div>
+            </Field>
           </div>
 
           <div className="space-y-2">

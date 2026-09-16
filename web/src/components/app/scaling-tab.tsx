@@ -7,9 +7,10 @@ import { ErrorDisplay } from "@/components/error-display"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
@@ -180,6 +181,7 @@ export function ScalingTab({ app }: { app: App }) {
 
           <div className="flex justify-end">
             <Button disabled={save.isPending} onClick={() => save.mutate(form)}>
+              {save.isPending && <Spinner />}
               {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
@@ -237,6 +239,7 @@ export function ScalingTab({ app }: { app: App }) {
                 })
               }
             >
+              {resources.isPending && <Spinner />}
               {resources.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
@@ -264,8 +267,8 @@ function NumberField({
   onChange: (value: number) => void
 }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <Input
           id={id}
@@ -277,7 +280,7 @@ function NumberField({
         />
         {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
       </div>
-    </div>
+    </Field>
   )
 }
 
@@ -295,8 +298,8 @@ function TextField({
   onChange: (value: string) => void
 }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <Input
           id={id}
@@ -307,6 +310,6 @@ function TextField({
         />
         {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
       </div>
-    </div>
+    </Field>
   )
 }

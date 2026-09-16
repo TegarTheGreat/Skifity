@@ -88,7 +88,8 @@ export function DashboardPage() {
         void queryClient.invalidateQueries({ queryKey: ["servers", team?.id] })
         void queryClient.invalidateQueries({ queryKey: ["cluster", team?.id] })
       },
-      deployment: () => void queryClient.invalidateQueries({ queryKey: ["audit", team?.id, "recent"] }),
+      deployment: () =>
+        void queryClient.invalidateQueries({ queryKey: ["audit", team?.id, "recent"] }),
     },
     Boolean(team),
   )
@@ -105,9 +106,7 @@ export function DashboardPage() {
       <PageHeader
         title={t("dashboard.title")}
         description={
-          user?.name
-            ? t("dashboard.welcomeBack", { name: user.name })
-            : t("dashboard.welcome")
+          user?.name ? t("dashboard.welcomeBack", { name: user.name }) : t("dashboard.welcome")
         }
         actions={
           <>
@@ -154,7 +153,9 @@ export function DashboardPage() {
         </Alert>
       )}
 
-      {cluster.error && <ErrorDisplay error={cluster.error} onRetry={() => void cluster.refetch()} />}
+      {cluster.error && (
+        <ErrorDisplay error={cluster.error} onRetry={() => void cluster.refetch()} />
+      )}
 
       {firstRun ? (
         <FirstRun />

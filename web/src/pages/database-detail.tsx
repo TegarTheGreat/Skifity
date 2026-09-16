@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -212,20 +214,25 @@ function ConnectionPanel({ databaseId }: { databaseId: string }) {
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Host" value={data.host} onCopy={copy} />
-          <Field label="Port" value={String(data.port)} onCopy={copy} />
-          <Field label={t("databases.databaseName")} value={data.database} onCopy={copy} />
-          <Field label="User" value={data.username} onCopy={copy} />
+          <CredentialRow label="Host" value={data.host} onCopy={copy} />
+          <CredentialRow label="Port" value={String(data.port)} onCopy={copy} />
+          <CredentialRow label={t("databases.databaseName")} value={data.database} onCopy={copy} />
+          <CredentialRow label="User" value={data.username} onCopy={copy} />
         </div>
-        <Field label={t("auth.password")} value={data.password} onCopy={copy} secret />
-        <Field label={t("databases.connectionString")} value={data.url} onCopy={copy} secret />
+        <CredentialRow label={t("auth.password")} value={data.password} onCopy={copy} secret />
+        <CredentialRow
+          label={t("databases.connectionString")}
+          value={data.url}
+          onCopy={copy}
+          secret
+        />
         <p className="text-xs text-muted-foreground">{t("databases.credentialsWarning")}</p>
       </CardContent>
     </Card>
   )
 }
 
-function Field({
+function CredentialRow({
   label,
   value,
   onCopy,
@@ -348,8 +355,8 @@ function LinkedApps({ database, links }: { database: Database; links: DatabaseLi
               }}
             >
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="link-app">{t("databases.linkApp")}</Label>
+                <Field>
+                  <FieldLabel htmlFor="link-app">{t("databases.linkApp")}</FieldLabel>
                   <Select value={appId} onValueChange={setAppId}>
                     <SelectTrigger id="link-app">
                       <SelectValue placeholder={t("databases.linkApp")} />
@@ -362,12 +369,12 @@ function LinkedApps({ database, links }: { database: Database; links: DatabaseLi
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="link-var">
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="link-var">
                     {t("databases.variableName")}{" "}
                     <span className="text-muted-foreground">({t("common.optional")})</span>
-                  </Label>
+                  </FieldLabel>
                   <Input
                     id="link-var"
                     value={varName}
@@ -375,12 +382,13 @@ function LinkedApps({ database, links }: { database: Database; links: DatabaseLi
                     placeholder="DATABASE_URL"
                     className="font-mono"
                   />
-                </div>
+                </Field>
               </div>
               {link.error != null && <ErrorDisplay error={link.error} compact />}
               <div className="flex justify-end">
                 <Button type="submit" disabled={!appId || link.isPending}>
                   <LinkIcon className="size-4" />
+                  {link.isPending && <Spinner />}
                   {link.isPending ? t("common.saving") : t("databases.linkApp")}
                 </Button>
               </div>
@@ -455,8 +463,8 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
             <Switch checked={enabledValue} onCheckedChange={setEnabled} />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="backup-schedule">{t("databases.backupSchedule")}</Label>
+            <Field>
+              <FieldLabel htmlFor="backup-schedule">{t("databases.backupSchedule")}</FieldLabel>
               <Input
                 id="backup-schedule"
                 value={scheduleValue}
@@ -464,9 +472,9 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
                 className="font-mono"
                 placeholder="0 3 * * *"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="backup-retention">{t("databases.retention")}</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="backup-retention">{t("databases.retention")}</FieldLabel>
               <Input
                 id="backup-retention"
                 type="number"
@@ -474,11 +482,12 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
                 value={retentionValue}
                 onChange={(event) => setRetention(event.target.value)}
               />
-            </div>
+            </Field>
           </div>
           {savePolicy.error != null && <ErrorDisplay error={savePolicy.error} compact />}
           <div className="flex justify-end">
             <Button disabled={savePolicy.isPending} onClick={() => savePolicy.mutate()}>
+              {savePolicy.isPending && <Spinner />}
               {savePolicy.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>

@@ -9,8 +9,15 @@ import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldSeparator,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
 import { currentLanguage } from "@/lib/i18n"
 import type { Team, User } from "@/lib/types"
@@ -78,75 +85,80 @@ export function SetupPage({ onComplete }: { onComplete: () => void }) {
           </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="space-y-4">
-            {error != null && <ErrorDisplay error={error} />}
+          <form onSubmit={submit}>
+            <FieldGroup>
+              {error != null && <ErrorDisplay error={error} />}
 
-            <div className="space-y-2">
-              <Label htmlFor="token">{t("auth.setupToken")}</Label>
-              <Input
-                id="token"
-                value={token}
-                onChange={(event) => setToken(event.target.value)}
-                required
-                autoFocus
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">{t("auth.setupTokenHelp")}</p>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">{t("auth.yourName")}</Label>
+              <Field>
+                <FieldLabel htmlFor="token">{t("auth.setupToken")}</FieldLabel>
                 <Input
-                  id="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  autoComplete="name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">{t("auth.email")}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  id="token"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
                   required
-                  autoComplete="email"
+                  autoFocus
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="font-mono"
                 />
+                <FieldDescription>{t("auth.setupTokenHelp")}</FieldDescription>
+              </Field>
+
+              <FieldSeparator />
+
+              <div className="grid gap-6 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="name">{t("auth.yourName")}</FieldLabel>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    autoComplete="name"
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                    autoComplete="email"
+                  />
+                </Field>
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">{t("auth.password")}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                minLength={12}
-                autoComplete="new-password"
-              />
-              <PasswordStrength password={password} />
-            </div>
+              <Field>
+                <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  minLength={12}
+                  autoComplete="new-password"
+                />
+                <PasswordStrength password={password} />
+              </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="team">{t("auth.teamName")}</Label>
-              <Input
-                id="team"
-                value={teamName}
-                onChange={(event) => setTeamName(event.target.value)}
-                placeholder="Acme"
-              />
-              <p className="text-xs text-muted-foreground">{t("auth.teamNameHelp")}</p>
-            </div>
+              <Field>
+                <FieldLabel htmlFor="team">{t("auth.teamName")}</FieldLabel>
+                <Input
+                  id="team"
+                  value={teamName}
+                  onChange={(event) => setTeamName(event.target.value)}
+                  placeholder="Acme"
+                />
+                <FieldDescription>{t("auth.teamNameHelp")}</FieldDescription>
+              </Field>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? t("auth.creatingAccount") : t("auth.createAccount")}
-            </Button>
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting && <Spinner />}
+                {submitting ? t("auth.creatingAccount") : t("auth.createAccount")}
+              </Button>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>

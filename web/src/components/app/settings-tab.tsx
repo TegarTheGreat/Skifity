@@ -8,12 +8,13 @@ import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api"
 import { queryClient } from "@/lib/query"
 import type { App } from "@/lib/types"
+import { Spinner } from "@/components/ui/spinner"
 
 export function SettingsTab({ app }: { app: App }) {
   const { t } = useTranslation()
@@ -61,52 +62,52 @@ export function SettingsTab({ app }: { app: App }) {
           <CardTitle className="text-base">{t("apps.settings")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="settings-name">{t("apps.appName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="settings-name">{t("apps.appName")}</FieldLabel>
             <Input
               id="settings-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-          </div>
+          </Field>
 
           {app.source_type === "image" ? (
-            <div className="space-y-2">
-              <Label htmlFor="settings-image">{t("apps.image")}</Label>
+            <Field>
+              <FieldLabel htmlFor="settings-image">{t("apps.image")}</FieldLabel>
               <Input
                 id="settings-image"
                 value={image}
                 onChange={(event) => setImage(event.target.value)}
                 className="font-mono"
               />
-            </div>
+            </Field>
           ) : (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="settings-branch">{t("apps.branch")}</Label>
+              <Field>
+                <FieldLabel htmlFor="settings-branch">{t("apps.branch")}</FieldLabel>
                 <Input
                   id="settings-branch"
                   value={branch}
                   onChange={(event) => setBranch(event.target.value)}
                   className="font-mono"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="settings-root">{t("apps.rootDirectory")}</Label>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="settings-root">{t("apps.rootDirectory")}</FieldLabel>
                 <Input
                   id="settings-root"
                   value={rootDir}
                   onChange={(event) => setRootDir(event.target.value)}
                   className="font-mono"
                 />
-                <p className="text-xs text-muted-foreground">{t("apps.rootDirectoryHelp")}</p>
-              </div>
+                <FieldDescription>{t("apps.rootDirectoryHelp")}</FieldDescription>
+              </Field>
             </>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="settings-port">{t("apps.port")}</Label>
+            <Field>
+              <FieldLabel htmlFor="settings-port">{t("apps.port")}</FieldLabel>
               <Input
                 id="settings-port"
                 type="number"
@@ -115,27 +116,27 @@ export function SettingsTab({ app }: { app: App }) {
                 value={port}
                 onChange={(event) => setPort(event.target.value)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="settings-health">{t("apps.healthPath")}</Label>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="settings-health">{t("apps.healthPath")}</FieldLabel>
               <Input
                 id="settings-health"
                 value={healthPath}
                 onChange={(event) => setHealthPath(event.target.value)}
                 className="font-mono"
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="settings-command">{t("apps.startCommand")}</Label>
+          <Field>
+            <FieldLabel htmlFor="settings-command">{t("apps.startCommand")}</FieldLabel>
             <Input
               id="settings-command"
               value={startCommand}
               onChange={(event) => setStartCommand(event.target.value)}
               className="font-mono"
             />
-          </div>
+          </Field>
 
           {app.source_type === "git" && (
             <>
@@ -159,6 +160,7 @@ export function SettingsTab({ app }: { app: App }) {
 
           <div className="flex justify-end">
             <Button disabled={save.isPending} onClick={() => save.mutate()}>
+              {save.isPending && <Spinner />}
               {save.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>

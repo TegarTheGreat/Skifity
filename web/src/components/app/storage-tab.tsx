@@ -7,9 +7,10 @@ import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -71,8 +72,8 @@ export function StorageTab({ app }: { app: App }) {
               }}
             >
               <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="volume-name">{t("common.name")}</Label>
+                <Field>
+                  <FieldLabel htmlFor="volume-name">{t("common.name")}</FieldLabel>
                   <Input
                     id="volume-name"
                     value={name}
@@ -80,9 +81,9 @@ export function StorageTab({ app }: { app: App }) {
                     className="font-mono"
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="volume-path">{t("apps.storage")}</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="volume-path">{t("apps.storage")}</FieldLabel>
                   <Input
                     id="volume-path"
                     value={mountPath}
@@ -91,9 +92,9 @@ export function StorageTab({ app }: { app: App }) {
                     placeholder="/data"
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="volume-size">{t("common.size")}</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="volume-size">{t("common.size")}</FieldLabel>
                   <Input
                     id="volume-size"
                     type="number"
@@ -101,7 +102,7 @@ export function StorageTab({ app }: { app: App }) {
                     value={sizeGB}
                     onChange={(event) => setSizeGB(event.target.value)}
                   />
-                </div>
+                </Field>
               </div>
               <p className="text-xs text-muted-foreground">{t("databases.storageHelp")}</p>
               {add.error != null && <ErrorDisplay error={add.error} compact />}
@@ -110,6 +111,7 @@ export function StorageTab({ app }: { app: App }) {
                   {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={add.isPending}>
+                  {add.isPending && <Spinner />}
                   {add.isPending ? t("common.saving") : t("common.add")}
                 </Button>
               </div>

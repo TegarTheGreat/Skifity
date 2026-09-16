@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent } from "@/components/ui/card"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatRelative } from "@/lib/format"
@@ -216,8 +217,8 @@ function ConnectForm({ onDone }: { onDone: (webhookURL?: string) => void }) {
             create.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="git-kind">{t("git.provider")}</Label>
+          <Field>
+            <FieldLabel htmlFor="git-kind">{t("git.provider")}</FieldLabel>
             <Select value={kind} onValueChange={setKind}>
               <SelectTrigger id="git-kind">
                 <SelectValue />
@@ -230,47 +231,47 @@ function ConnectForm({ onDone }: { onDone: (webhookURL?: string) => void }) {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="git-name">{t("git.sourceName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="git-name">{t("git.sourceName")}</FieldLabel>
             <Input
               id="git-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={provider?.label}
             />
-            <p className="text-xs text-muted-foreground">{t("git.sourceNameHelp")}</p>
-          </div>
+            <FieldDescription>{t("git.sourceNameHelp")}</FieldDescription>
+          </Field>
 
           {provider?.selfHosted && (
-            <div className="space-y-2">
-              <Label htmlFor="git-base-url">{t("git.baseURL")}</Label>
+            <Field>
+              <FieldLabel htmlFor="git-base-url">{t("git.baseURL")}</FieldLabel>
               <Input
                 id="git-base-url"
                 value={baseURL}
                 onChange={(event) => setBaseURL(event.target.value)}
                 placeholder="https://git.example.com"
               />
-              <p className="text-xs text-muted-foreground">{t("git.baseURLHelp")}</p>
-            </div>
+              <FieldDescription>{t("git.baseURLHelp")}</FieldDescription>
+            </Field>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="git-account">
+          <Field>
+            <FieldLabel htmlFor="git-account">
               {t("git.account")}{" "}
               <span className="text-muted-foreground">({t("common.optional")})</span>
-            </Label>
+            </FieldLabel>
             <Input
               id="git-account"
               value={account}
               onChange={(event) => setAccount(event.target.value)}
               placeholder="your-org"
             />
-          </div>
+          </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="git-token">{t("git.token")}</Label>
+          <Field>
+            <FieldLabel htmlFor="git-token">{t("git.token")}</FieldLabel>
             <Input
               id="git-token"
               type="password"
@@ -279,8 +280,8 @@ function ConnectForm({ onDone }: { onDone: (webhookURL?: string) => void }) {
               onChange={(event) => setToken(event.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">{t("git.tokenHelp")}</p>
-          </div>
+            <FieldDescription>{t("git.tokenHelp")}</FieldDescription>
+          </Field>
 
           {create.error != null && <ErrorDisplay error={create.error} compact />}
 
@@ -289,6 +290,7 @@ function ConnectForm({ onDone }: { onDone: (webhookURL?: string) => void }) {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!token.trim() || create.isPending}>
+              {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("git.connect")}
             </Button>
           </div>

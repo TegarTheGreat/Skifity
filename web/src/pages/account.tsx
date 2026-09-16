@@ -11,9 +11,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -133,17 +135,18 @@ function ProfileCard() {
         <CardTitle className="text-base">{t("nav.account")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="account-email">{t("auth.email")}</Label>
+        <Field>
+          <FieldLabel htmlFor="account-email">{t("auth.email")}</FieldLabel>
           <Input id="account-email" value={user?.email ?? ""} readOnly disabled />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="account-name">{t("auth.yourName")}</Label>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="account-name">{t("auth.yourName")}</FieldLabel>
           <Input id="account-name" value={name} onChange={(event) => setName(event.target.value)} />
-        </div>
+        </Field>
         {save.error != null && <ErrorDisplay error={save.error} compact />}
         <div className="flex justify-end">
           <Button disabled={save.isPending} onClick={() => save.mutate()}>
+            {save.isPending && <Spinner />}
             {save.isPending ? t("common.saving") : t("common.save")}
           </Button>
         </div>
@@ -180,8 +183,8 @@ function PasswordCard() {
             change.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="current-password">{t("auth.currentPassword")}</Label>
+          <Field>
+            <FieldLabel htmlFor="current-password">{t("auth.currentPassword")}</FieldLabel>
             <Input
               id="current-password"
               type="password"
@@ -190,9 +193,9 @@ function PasswordCard() {
               onChange={(event) => setCurrent(event.target.value)}
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">{t("auth.newPassword")}</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="new-password">{t("auth.newPassword")}</FieldLabel>
             <Input
               id="new-password"
               type="password"
@@ -201,10 +204,11 @@ function PasswordCard() {
               onChange={(event) => setNext(event.target.value)}
               required
             />
-          </div>
+          </Field>
           {change.error != null && <ErrorDisplay error={change.error} compact />}
           <div className="flex justify-end">
             <Button type="submit" disabled={change.isPending || !current || !next}>
+              {change.isPending && <Spinner />}
               {change.isPending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
@@ -273,8 +277,8 @@ function TwoFactorCard() {
                 {setup.secret}
               </pre>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="totp-code">{t("auth.twoFactorCode")}</Label>
+            <Field>
+              <FieldLabel htmlFor="totp-code">{t("auth.twoFactorCode")}</FieldLabel>
               <Input
                 id="totp-code"
                 inputMode="numeric"
@@ -285,7 +289,7 @@ function TwoFactorCard() {
                 className="max-w-32 font-mono tracking-widest"
                 required
               />
-            </div>
+            </Field>
             {confirm.error != null && <ErrorDisplay error={confirm.error} compact />}
             <div className="flex gap-2">
               <Button type="submit" disabled={confirm.isPending || code.length < 6}>

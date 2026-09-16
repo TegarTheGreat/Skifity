@@ -1,12 +1,7 @@
 import { useSearchParams, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import {
-  BoxIcon,
-  ExternalLinkIcon,
-  RefreshCwIcon,
-  RocketIcon,
-} from "lucide-react"
+import { BoxIcon, ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-react"
 
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
@@ -96,23 +91,23 @@ export function AppDetailPage() {
         }
         actions={
           <>
-          <Button
-            variant="outline"
-            disabled={restart.isPending}
-            onClick={() => {
-              void confirm({
-                title: t("apps.restart"),
-                description: t("apps.restartConfirm"),
-                confirmLabel: t("apps.restart"),
-              }).then((yes) => {
-                if (yes) restart.mutate()
-              })
-            }}
-          >
-            <RefreshCwIcon />
-            {t("apps.restart")}
-          </Button>
-          <DeployButton appId={appId} />
+            <Button
+              variant="outline"
+              disabled={restart.isPending}
+              onClick={() => {
+                void confirm({
+                  title: t("apps.restart"),
+                  description: t("apps.restartConfirm"),
+                  confirmLabel: t("apps.restart"),
+                }).then((yes) => {
+                  if (yes) restart.mutate()
+                })
+              }}
+            >
+              <RefreshCwIcon />
+              {t("apps.restart")}
+            </Button>
+            <DeployButton appId={appId} />
           </>
         }
       />

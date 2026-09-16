@@ -12,8 +12,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "cn"
@@ -104,10 +104,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           )}
 
           {options?.typeToConfirm && (
-            <div className="space-y-2">
-              <Label htmlFor="confirm-phrase">
+            <Field>
+              <FieldLabel htmlFor="confirm-phrase">
                 {t("common.typeToConfirm", { phrase: options.typeToConfirm })}
-              </Label>
+              </FieldLabel>
               <Input
                 id="confirm-phrase"
                 value={typed}
@@ -116,17 +116,14 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 autoFocus
                 className="font-mono"
               />
-            </div>
+            </Field>
           )}
 
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               disabled={!ready || busy}
-              className={cn(
-                options?.destructive &&
-                  buttonVariants({ variant: "destructive" }),
-              )}
+              className={cn(options?.destructive && buttonVariants({ variant: "destructive" }))}
               onClick={(event) => {
                 // Radix closes on click; the caller decides when it is done.
                 event.preventDefault()
@@ -160,16 +157,15 @@ export function useDeleteConfirm() {
   const confirm = useConfirm()
   const { t } = useTranslation()
   return useMemo(
-    () =>
-      (name: string, description: string, consequence?: string) =>
-        confirm({
-          title: t("common.deleteNamed", { name }),
-          description,
-          consequence,
-          confirmLabel: t("common.delete"),
-          destructive: true,
-          typeToConfirm: name,
-        }),
+    () => (name: string, description: string, consequence?: string) =>
+      confirm({
+        title: t("common.deleteNamed", { name }),
+        description,
+        consequence,
+        confirmLabel: t("common.delete"),
+        destructive: true,
+        typeToConfirm: name,
+      }),
     [confirm, t],
   )
 }

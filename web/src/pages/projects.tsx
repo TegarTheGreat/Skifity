@@ -17,9 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
@@ -137,8 +138,8 @@ function NewProjectDialog({
             create.mutate()
           }}
         >
-          <div className="space-y-2">
-            <Label htmlFor="project-name">{t("projects.projectName")}</Label>
+          <Field>
+            <FieldLabel htmlFor="project-name">{t("projects.projectName")}</FieldLabel>
             <Input
               id="project-name"
               value={name}
@@ -146,19 +147,19 @@ function NewProjectDialog({
               autoFocus
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="project-description">
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="project-description">
               {t("projects.description")}{" "}
               <span className="text-muted-foreground">({t("common.optional")})</span>
-            </Label>
+            </FieldLabel>
             <Textarea
               id="project-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
             />
-          </div>
+          </Field>
 
           {create.error && <ErrorDisplay error={create.error} compact />}
 
@@ -167,6 +168,7 @@ function NewProjectDialog({
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
+              {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("common.create")}
             </Button>
           </DialogFooter>

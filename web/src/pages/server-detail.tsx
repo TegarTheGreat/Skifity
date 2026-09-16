@@ -150,30 +150,30 @@ export function ServerDetailPage() {
         }
         actions={
           <>
-          {current.status === "failed" && (
-            <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate()}>
-              <RefreshCwIcon className="size-4" />
-              {t("common.retry")}
-            </Button>
-          )}
-          {current.role === "worker" && current.status === "ready" && (
-            <Button
-              variant="outline"
-              disabled={promote.isPending}
-              onClick={() => {
-                void confirm({
-                  title: t("servers.promote"),
-                  description: t("servers.promoteHelp"),
-                  confirmLabel: t("servers.promote"),
-                }).then((yes) => {
-                  if (yes) promote.mutate()
-                })
-              }}
-            >
-              <ArrowUpCircleIcon />
-              {t("servers.promote")}
-            </Button>
-          )}
+            {current.status === "failed" && (
+              <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate()}>
+                <RefreshCwIcon className="size-4" />
+                {t("common.retry")}
+              </Button>
+            )}
+            {current.role === "worker" && current.status === "ready" && (
+              <Button
+                variant="outline"
+                disabled={promote.isPending}
+                onClick={() => {
+                  void confirm({
+                    title: t("servers.promote"),
+                    description: t("servers.promoteHelp"),
+                    confirmLabel: t("servers.promote"),
+                  }).then((yes) => {
+                    if (yes) promote.mutate()
+                  })
+                }}
+              >
+                <ArrowUpCircleIcon />
+                {t("servers.promote")}
+              </Button>
+            )}
           </>
         }
       />

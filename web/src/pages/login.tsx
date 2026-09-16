@@ -1,14 +1,17 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ArrowLeftIcon } from "lucide-react"
 
-import { CenteredLayout } from "@/pages/setup"
 import { ErrorDisplay } from "@/components/error-display"
 import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
+import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
+import { CenteredLayout } from "@/pages/setup"
 
 /**
  * Sign-in.
@@ -25,18 +28,13 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const signIn = async (totpCode: string) => {
     setSubmitting(true)
     setError(null)
     try {
       const result = await api.anonymous<{ totp_required?: boolean }>("/api/auth/login", {
         method: "POST",
-        body: {
-          email: email.trim(),
-          password,
-          totp_code: code.trim() || undefined,
-        },
+        body: { email: email.trim(), password, totp_code: totpCode.trim() || undefined },
       })
       if (result?.totp_required) {
         setNeedsCode(true)
@@ -45,6 +43,9 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
       onSignedIn()
     } catch (caught) {
       setError(caught)
+      // A wrong code is almost always a typo or a clock drift, and leaving the
+      // digits in place means fixing one of them rather than retyping six.
+      setCode("")
     } finally {
       setSubmitting(false)
     }
@@ -55,72 +56,113 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-3">
           <Logo className="size-9 text-primary" />
-          <div>
+          <div className="space-y-1">
             <CardTitle className="text-xl">
-              {t("auth.signInTitle", { product: "Skifity" })}
+              {needsCode ? t("auth.twoFactorCode") : t("auth.signInTitle", { product: "Skifity" })}
             </CardTitle>
-            <CardDescription>{t("auth.signInSubtitle")}</CardDescription>
+            <CardDescription>
+              {needsCode ? t("auth.twoFactorPrompt") : t("auth.signInSubtitle")}
+            </CardDescription>
           </div>
         </CardHeader>
+
         <CardContent>
-          <form onSubmit={submit} className="space-y-4">
-            {error != null && <ErrorDisplay error={error} compact />}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              void signIn(code)
+            }}
+          >
+            <FieldGroup>
+              {error != null && <ErrorDisplay error={error} compact />}
 
-            <div className="space-y-2">
-              <Label htmlFor="email">{t("auth.email")}</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                autoFocus
-                autoComplete="username"
-                disabled={needsCode}
-              />
-            </div>
+              {needsCode ? (
+                <>
+                  <Field className="items-center">
+                    <InputOTP
+                      maxLength={6}
+                      value={code}
+                      autoFocus
+                      onChange={(value) => {
+                        setCode(value)
+                        // Six digits is the whole answer, so pressing a button
+                        // afterwards is a step with no decision in it.
+                        if (value.length === 6 && !submitting) void signIn(value)
+                      }}
+                    >
+                      <InputOTPGroup>
+                        {[0, 1, 2, 3, 4, 5].map((slot) => (
+                          <InputOTPSlot key={slot} index={slot} />
+                        ))}
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </Field>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">{t("auth.password")}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                autoComplete="current-password"
-                disabled={needsCode}
-              />
-            </div>
+                  {submitting && (
+                    <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                      <Spinner />
+                      {t("auth.signingIn")}
+                    </p>
+                  )}
 
-            {needsCode && (
-              <div className="space-y-2">
-                <Label htmlFor="code">{t("auth.twoFactorCode")}</Label>
-                <Input
-                  id="code"
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  required
-                  autoFocus
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={7}
-                  className="text-center font-mono text-lg tracking-[0.4em]"
-                />
-                <p className="text-xs text-muted-foreground">{t("auth.twoFactorPrompt")}</p>
-              </div>
-            )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setNeedsCode(false)
+                      setCode("")
+                      setError(null)
+                    }}
+                  >
+                    <ArrowLeftIcon />
+                    {t("common.back")}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="email">{t("auth.email")}</FieldLabel>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      required
+                      autoFocus
+                      autoComplete="username"
+                    />
+                  </Field>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? t("auth.signingIn") : t("auth.signIn")}
-            </Button>
+                  <Field>
+                    <FieldLabel htmlFor="password">{t("auth.password")}</FieldLabel>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                      autoComplete="current-password"
+                    />
+                  </Field>
 
-            <details className="text-xs text-muted-foreground">
-              <summary className="cursor-pointer hover:text-foreground">
-                {t("auth.forgotPassword")}
-              </summary>
-              <p className="mt-2">{t("auth.forgotPasswordHelp")}</p>
-            </details>
+                  <Field>
+                    <Button type="submit" className="w-full" disabled={submitting}>
+                      {submitting && <Spinner />}
+                      {submitting ? t("auth.signingIn") : t("auth.signIn")}
+                    </Button>
+                    <FieldDescription className="text-center">
+                      <details>
+                        <summary className="cursor-pointer hover:text-foreground">
+                          {t("auth.forgotPassword")}
+                        </summary>
+                        <p className="pt-2 text-left">{t("auth.forgotPasswordHelp")}</p>
+                      </details>
+                    </FieldDescription>
+                  </Field>
+                </>
+              )}
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>

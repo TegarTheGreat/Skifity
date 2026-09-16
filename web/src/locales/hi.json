@@ -58,7 +58,11 @@
     "hoursAgo_one": "{{count}} घंटा पहले",
     "hoursAgo_other": "{{count}} घंटे पहले",
     "daysAgo_one": "{{count}} दिन पहले",
-    "daysAgo_other": "{{count}} दिन पहले"
+    "daysAgo_other": "{{count}} दिन पहले",
+    "typeToConfirm": "पुष्टि के लिए {{phrase}} टाइप करें",
+    "deleteNamed": "{{name}} हटाएँ?",
+    "cannotBeUndone": "इसे वापस नहीं लिया जा सकता।",
+    "keepGoing": "आगे बढ़ें"
   },
   "nav": {
     "overview": "अवलोकन",
@@ -142,7 +146,8 @@
     "cpuUsed": "CPU उपयोग",
     "memoryUsed": "मेमोरी उपयोग",
     "recentActivity": "हाल की गतिविधि",
-    "nothingYet": "अभी तक कुछ नहीं हुआ है।"
+    "nothingYet": "अभी तक कुछ नहीं हुआ है।",
+    "welcomeBack": "वापसी पर स्वागत है, {{name}}।"
   },
   "projects": {
     "title": "प्रोजेक्ट",
@@ -424,7 +429,8 @@
       "missing": "मौजूद नहीं",
       "unknown": "अज्ञात"
     },
-    "restoreStarted": "पुनर्स्थापना शुरू हो गई। पूरा होने तक डेटाबेस उपलब्ध नहीं रहेगा।"
+    "restoreStarted": "पुनर्स्थापना शुरू हो गई। पूरा होने तक डेटाबेस उपलब्ध नहीं रहेगा।",
+    "deleteWarning": "हर तालिका, पंक्ति और बैकअप शेड्यूल इसके साथ चला जाएगा। आपके संग्रहण में मौजूद बैकअप बने रहेंगे, लेकिन पैनल उन्हें नहीं पहचानेगा।"
   },
   "templates": {
     "title": "टेम्पलेट",

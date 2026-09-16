@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { GitSources } from "@/components/settings/git-sources"
 import { NotificationChannels } from "@/components/settings/notification-channels"
@@ -410,6 +411,7 @@ function SecurityPanel() {
   const { t } = useTranslation()
   const { meta } = useSession()
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+  const confirm = useConfirm()
 
   const reveal = useMutation({
     mutationFn: () => api.get<{ recovery_key: string }>("/api/security/recovery-key"),
@@ -489,7 +491,13 @@ function SecurityPanel() {
             variant="outline"
             disabled={rotate.isPending}
             onClick={() => {
-              if (window.confirm(t("settings.rotateKeyHelp"))) rotate.mutate()
+              void confirm({
+                title: t("settings.rotateKey"),
+                description: t("settings.rotateKeyHelp"),
+                confirmLabel: t("settings.rotateKeyConfirm"),
+              }).then((yes) => {
+                if (yes) rotate.mutate()
+              })
             }}
           >
             {rotate.isPending ? t("common.saving") : t("settings.rotateKeyConfirm")}

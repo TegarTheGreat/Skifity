@@ -51,7 +51,11 @@
     "justNow": "baru saja",
     "minutesAgo_other": "{{count}} menit lalu",
     "hoursAgo_other": "{{count}} jam lalu",
-    "daysAgo_other": "{{count}} hari lalu"
+    "daysAgo_other": "{{count}} hari lalu",
+    "typeToConfirm": "Ketik {{phrase}} untuk mengonfirmasi",
+    "deleteNamed": "Hapus {{name}}?",
+    "cannotBeUndone": "Tindakan ini tidak bisa dibatalkan.",
+    "keepGoing": "Lanjutkan"
   },
   "nav": {
     "overview": "Ringkasan",
@@ -135,7 +139,8 @@
     "cpuUsed": "CPU terpakai",
     "memoryUsed": "Memori terpakai",
     "recentActivity": "Aktivitas terbaru",
-    "nothingYet": "Belum ada aktivitas."
+    "nothingYet": "Belum ada aktivitas.",
+    "welcomeBack": "Selamat datang kembali, {{name}}."
   },
   "projects": {
     "title": "Proyek",
@@ -417,7 +422,8 @@
       "missing": "Hilang",
       "unknown": "Tidak diketahui"
     },
-    "restoreStarted": "Pemulihan dimulai. Basis data tidak tersedia sampai proses selesai."
+    "restoreStarted": "Pemulihan dimulai. Basis data tidak tersedia sampai proses selesai.",
+    "deleteWarning": "Semua tabel, baris, dan jadwal pencadangan ikut terhapus. Cadangan yang sudah ada di penyimpanan tetap tersimpan, tetapi panel tidak akan mengenalinya lagi."
   },
   "templates": {
     "title": "Template",

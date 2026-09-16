@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { ArrowUpCircleIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { OperationProgress } from "@/components/operation-progress"
 import { StatusBadge } from "@/components/status-badge"
@@ -25,6 +26,7 @@ export function ServerDetailPage() {
   const { serverId = "" } = useParams()
   const navigate = useNavigate()
   const { team } = useSession()
+  const confirm = useConfirm()
   const [wipe, setWipe] = useState(true)
   const [name, setName] = useState<string | null>(null)
   const [operationId, setOperationId] = useState<string | null>(null)
@@ -130,7 +132,13 @@ export function ServerDetailPage() {
               variant="outline"
               disabled={promote.isPending}
               onClick={() => {
-                if (window.confirm(t("servers.promoteHelp"))) promote.mutate()
+                void confirm({
+                  title: t("servers.promote"),
+                  description: t("servers.promoteHelp"),
+                  confirmLabel: t("servers.promote"),
+                }).then((yes) => {
+                  if (yes) promote.mutate()
+                })
               }}
             >
               <ArrowUpCircleIcon className="size-4" />
@@ -221,7 +229,16 @@ export function ServerDetailPage() {
             variant="destructive"
             disabled={remove.isPending}
             onClick={() => {
-              if (window.confirm(t("servers.removeServerWarning"))) remove.mutate()
+              void confirm({
+                title: t("servers.removeServer"),
+                description: t("servers.removeServerWarning"),
+                consequence: wipe ? t("servers.wipeServer") : undefined,
+                confirmLabel: t("servers.removeServer"),
+                destructive: true,
+                typeToConfirm: current.name,
+              }).then((yes) => {
+                if (yes) remove.mutate()
+              })
             }}
           >
             <Trash2Icon className="size-4" />

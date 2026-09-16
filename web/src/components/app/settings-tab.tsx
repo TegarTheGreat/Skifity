@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useMutation } from "@tanstack/react-query"
 import { Trash2Icon } from "lucide-react"
 
+import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +18,7 @@ import type { App } from "@/lib/types"
 export function SettingsTab({ app }: { app: App }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const confirmDelete = useDeleteConfirm()
 
   const [name, setName] = useState(app.name)
   const [branch, setBranch] = useState(app.branch)
@@ -174,7 +176,9 @@ export function SettingsTab({ app }: { app: App }) {
             variant="destructive"
             disabled={remove.isPending}
             onClick={() => {
-              if (window.confirm(t("apps.deleteAppWarning"))) remove.mutate()
+              void confirmDelete(app.name, t("apps.deleteAppWarning")).then((yes) => {
+                if (yes) remove.mutate()
+              })
             }}
           >
             <Trash2Icon className="size-4" />

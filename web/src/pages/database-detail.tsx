@@ -13,6 +13,8 @@ import {
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
+import { useDeleteConfirm } from "@/components/confirm-dialog"
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -54,6 +56,7 @@ export function DatabaseDetailPage() {
   const { t } = useTranslation()
   const { databaseId = "" } = useParams()
   const navigate = useNavigate()
+  const confirmDelete = useDeleteConfirm()
 
   const database = useQuery({
     queryKey: ["database", databaseId],
@@ -125,7 +128,13 @@ export function DatabaseDetailPage() {
             variant="destructive"
             disabled={remove.isPending}
             onClick={() => {
-              if (window.confirm(t("projects.deleteProjectWarning"))) remove.mutate()
+              void confirmDelete(
+                record.name,
+                t("databases.deleteWarning"),
+                t("common.cannotBeUndone"),
+              ).then((yes) => {
+                if (yes) remove.mutate()
+              })
             }}
           >
             <Trash2Icon className="size-4" />
@@ -375,6 +384,7 @@ function LinkedApps({ database, links }: { database: Database; links: DatabaseLi
 
 function BackupsPanel({ databaseId }: { databaseId: string }) {
   const { t } = useTranslation()
+  const confirmRestore = useConfirm()
 
   const backups = useQuery({
     queryKey: ["backups", databaseId],
@@ -525,9 +535,16 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
                           size="sm"
                           disabled={restore.isPending}
                           onClick={() => {
-                            if (window.confirm(t("databases.restoreWarning"))) {
-                              restore.mutate(backup.id)
-                            }
+                            void confirmRestore({
+                              title: t("databases.restore"),
+                              description: t("databases.restoreWarning"),
+                              consequence: t("common.cannotBeUndone"),
+                              confirmLabel: t("databases.restoreConfirm"),
+                              destructive: true,
+                              typeToConfirm: t("databases.restore"),
+                            }).then((yes) => {
+                              if (yes) restore.mutate(backup.id)
+                            })
                           }}
                         >
                           <ArchiveRestoreIcon className="size-4" />

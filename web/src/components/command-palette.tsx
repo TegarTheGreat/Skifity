@@ -1,4 +1,3 @@
-import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
@@ -43,17 +42,6 @@ export function CommandPalette({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { team } = useSession()
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault()
-        onOpenChange(!open)
-      }
-    }
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, onOpenChange])
 
   const { data: projects } = useQuery({
     queryKey: ["palette", "projects", team?.id],

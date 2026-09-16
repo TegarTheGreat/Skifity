@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
+import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
@@ -54,6 +55,7 @@ export function ProjectDetailPage() {
   const { t } = useTranslation()
   const { projectId = "" } = useParams()
   const navigate = useNavigate()
+  const confirmDelete = useDeleteConfirm()
   const { team } = useSession()
   const [chosen, setChosen] = useState<string | null>(null)
   const [newEnvironment, setNewEnvironment] = useState(false)
@@ -130,7 +132,13 @@ export function ProjectDetailPage() {
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => {
-                  if (window.confirm(t("projects.deleteProjectWarning"))) remove.mutate()
+                  void confirmDelete(
+                    project.data?.name ?? "",
+                    t("projects.deleteProjectWarning"),
+                    t("common.cannotBeUndone"),
+                  ).then((yes) => {
+                    if (yes) remove.mutate()
+                  })
                 }}
               >
                 <Trash2Icon className="size-4" />

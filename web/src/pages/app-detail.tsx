@@ -10,6 +10,7 @@ import { LogsTab } from "@/components/app/logs-tab"
 import { ScalingTab } from "@/components/app/scaling-tab"
 import { SettingsTab } from "@/components/app/settings-tab"
 import { StorageTab } from "@/components/app/storage-tab"
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
@@ -36,6 +37,7 @@ export function AppDetailPage() {
   const { t } = useTranslation()
   const { appId = "" } = useParams()
   const { team } = useSession()
+  const confirm = useConfirm()
   const [params, setParams] = useSearchParams()
   const tab = params.get("tab") ?? "overview"
 
@@ -107,7 +109,13 @@ export function AppDetailPage() {
             variant="outline"
             disabled={restart.isPending}
             onClick={() => {
-              if (window.confirm(t("apps.restartConfirm"))) restart.mutate()
+              void confirm({
+                title: t("apps.restart"),
+                description: t("apps.restartConfirm"),
+                confirmLabel: t("apps.restart"),
+              }).then((yes) => {
+                if (yes) restart.mutate()
+              })
             }}
           >
             <RefreshCwIcon className="size-4" />

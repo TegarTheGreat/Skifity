@@ -51,7 +51,11 @@
     "justNow": "刚刚",
     "minutesAgo_other": "{{count}} 分钟前",
     "hoursAgo_other": "{{count}} 小时前",
-    "daysAgo_other": "{{count}} 天前"
+    "daysAgo_other": "{{count}} 天前",
+    "typeToConfirm": "输入 {{phrase}} 以确认",
+    "deleteNamed": "删除 {{name}}？",
+    "cannotBeUndone": "此操作无法撤销。",
+    "keepGoing": "继续"
   },
   "nav": {
     "overview": "总览",
@@ -135,7 +139,8 @@
     "cpuUsed": "CPU 使用",
     "memoryUsed": "内存使用",
     "recentActivity": "最近活动",
-    "nothingYet": "目前还没有任何动作。"
+    "nothingYet": "目前还没有任何动作。",
+    "welcomeBack": "欢迎回来，{{name}}。"
   },
   "projects": {
     "title": "项目",
@@ -417,7 +422,8 @@
       "missing": "已不存在",
       "unknown": "未知"
     },
-    "restoreStarted": "恢复已开始。完成之前数据库不可用。"
+    "restoreStarted": "恢复已开始。完成之前数据库不可用。",
+    "deleteWarning": "所有表、数据行和备份计划都会一并消失。存储中已有的备份会保留，但面板将不再知道它们。"
   },
   "templates": {
     "title": "模板",

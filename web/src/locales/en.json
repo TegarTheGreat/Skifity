@@ -58,7 +58,11 @@
     "hoursAgo_one": "{{count}} hour ago",
     "hoursAgo_other": "{{count}} hours ago",
     "daysAgo_one": "{{count}} day ago",
-    "daysAgo_other": "{{count}} days ago"
+    "daysAgo_other": "{{count}} days ago",
+    "typeToConfirm": "Type {{phrase}} to confirm",
+    "deleteNamed": "Delete {{name}}?",
+    "cannotBeUndone": "This cannot be undone.",
+    "keepGoing": "Go ahead"
   },
   "nav": {
     "overview": "Overview",
@@ -142,7 +146,8 @@
     "cpuUsed": "CPU in use",
     "memoryUsed": "Memory in use",
     "recentActivity": "Recent activity",
-    "nothingYet": "Nothing has happened yet."
+    "nothingYet": "Nothing has happened yet.",
+    "welcomeBack": "Welcome back, {{name}}."
   },
   "projects": {
     "title": "Projects",
@@ -424,7 +429,8 @@
       "missing": "Missing",
       "unknown": "Unknown"
     },
-    "restoreStarted": "Restore started. The database is unavailable until it finishes."
+    "restoreStarted": "Restore started. The database is unavailable until it finishes.",
+    "deleteWarning": "Every table, row and backup schedule goes with it. Existing backups in your storage are kept, but the panel will no longer know about them."
   },
   "templates": {
     "title": "Templates",

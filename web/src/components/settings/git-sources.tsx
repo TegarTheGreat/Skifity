@@ -5,6 +5,7 @@ import { CheckIcon, ClipboardIcon, GitBranchIcon, PlusIcon, Trash2Icon } from "l
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,6 +38,7 @@ export function GitSources() {
   const { t } = useTranslation()
   const { team } = useSession()
   const [adding, setAdding] = useState(false)
+  const confirm = useConfirm()
   // Shown once, after connecting: a self-hosted Gitea or GitLab whose token
   // cannot register a webhook needs this pasted in by hand.
   const [webhookURL, setWebhookURL] = useState<string | null>(null)
@@ -100,7 +102,14 @@ export function GitSources() {
                   size="sm"
                   disabled={remove.isPending}
                   onClick={() => {
-                    if (window.confirm(t("git.disconnectWarning"))) remove.mutate(source.id)
+                    void confirm({
+                      title: t("git.disconnect"),
+                      description: t("git.disconnectWarning"),
+                      confirmLabel: t("git.disconnect"),
+                      destructive: true,
+                    }).then((yes) => {
+                      if (yes) remove.mutate(source.id)
+                    })
                   }}
                 >
                   <Trash2Icon className="size-4" />

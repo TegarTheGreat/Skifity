@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom"
 import { QueryClientProvider } from "@tanstack/react-query"
 
 import { App } from "@/App"
+import { ConfirmProvider } from "@/components/confirm-dialog"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SessionProvider } from "@/hooks/use-session"
@@ -21,9 +22,11 @@ createRoot(container).render(
       <QueryClientProvider client={queryClient}>
         <SessionProvider>
           <TooltipProvider delayDuration={300}>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            <ConfirmProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </ConfirmProvider>
             <Toaster />
           </TooltipProvider>
         </SessionProvider>

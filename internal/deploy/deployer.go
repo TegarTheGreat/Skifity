@@ -110,8 +110,16 @@ func (d *Deployer) Deploy(ctx context.Context, req api.DeployRequest) (store.Dep
 	if err := d.db.CreateDeployment(ctx, &deployment); err != nil {
 		return store.Deployment{}, err
 	}
-	if err := d.db.SupersedeRunningDeployments(ctx, app.ID, deployment.ID); err != nil {
+	superseded, err := d.db.SupersedeRunningDeployments(ctx, app.ID, deployment.ID)
+	if err != nil {
 		d.log.Warn("could not supersede earlier deployments", "app", app.ID, "error", err)
+	}
+	// Marking the row is not enough: the build it belongs to is still running,
+	// and would go on to roll out an older version after this one.
+	for _, id := range superseded {
+		d.log.Info("stopping a deployment that a newer one replaced",
+			"app", app.ID, "deployment", id, "replaced_by", deployment.ID)
+		d.stop(id)
 	}
 
 	d.start(deployment.ID, func(runCtx context.Context) {
@@ -374,6 +382,17 @@ func (d *Deployer) Cancel(ctx context.Context, deploymentID string) error {
 	}
 	d.publish(ctx, deploymentID)
 	return nil
+}
+
+// stop cancels a running deployment's work without touching its status, which
+// the caller has already decided.
+func (d *Deployer) stop(deploymentID string) {
+	d.mu.Lock()
+	cancel, running := d.running[deploymentID]
+	d.mu.Unlock()
+	if running {
+		cancel()
+	}
 }
 
 func (d *Deployer) start(deploymentID string, work func(context.Context)) {

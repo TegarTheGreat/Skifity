@@ -82,8 +82,14 @@ func markBuilt(t *testing.T, db *store.DB, deploymentID, image string) {
 	if err := db.SetDeploymentImage(t.Context(), deploymentID, image); err != nil {
 		t.Fatalf("SetDeploymentImage: %v", err)
 	}
-	if err := db.UpdateDeploymentStatus(t.Context(), deploymentID, store.DeploySucceeded, "", "", ""); err != nil {
-		t.Fatalf("UpdateDeploymentStatus: %v", err)
+	// Written directly, not through UpdateDeploymentStatus, which refuses to
+	// move a deployment that has already finished. With no cluster the deploy
+	// above failed, and what this helper is fabricating is the history of a
+	// build that succeeded on a machine that had one.
+	if _, err := db.Exec(t.Context(),
+		`UPDATE deployments SET status = 'succeeded', error_code = '', error_message = '' WHERE id = ?`,
+		deploymentID); err != nil {
+		t.Fatalf("mark the deployment succeeded: %v", err)
 	}
 }
 
@@ -439,4 +445,78 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// TestASupersededDeploymentStopsAndStaysStopped: marking the row is not
+// enough. The build it belongs to is still running, and would go on to roll out
+// an older version after the newer one — which is exactly the race the
+// supersede was added to prevent.
+func TestASupersededDeploymentStopsAndStaysStopped(t *testing.T) {
+	d, db, app, _ := testDeployer(t)
+
+	first, err := d.Deploy(t.Context(), api.DeployRequest{AppID: app.ID, CommitSHA: "aaaaaaaaaaaa"})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	if _, err := d.Deploy(t.Context(), api.DeployRequest{AppID: app.ID, CommitSHA: "bbbbbbbbbbbb"}); err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+
+	// The older one is finished the moment the newer one starts, and stays
+	// finished however far behind its own goroutine was. A second is far more
+	// than the cancelled goroutine needs to make its last write.
+	deadline := time.Now().Add(time.Second)
+	for {
+		reloaded, err := db.GetDeployment(t.Context(), first.ID)
+		if err != nil {
+			t.Fatalf("GetDeployment: %v", err)
+		}
+		if !reloaded.Status.Terminal() {
+			t.Fatalf("the earlier deployment is %s, so two deploys would race", reloaded.Status)
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestAFinishedDeploymentNeverMovesAgain is the guard underneath that: the
+// goroutine of a superseded build is several seconds behind the world, and its
+// next write must not put it back to building.
+func TestAFinishedDeploymentNeverMovesAgain(t *testing.T) {
+	d, db, app, _ := testDeployer(t)
+
+	deployment, err := d.Deploy(t.Context(), api.DeployRequest{AppID: app.ID, CommitSHA: "aaaaaaaaaaaa"})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	var settled store.DeploymentStatus
+	for {
+		reloaded, err := db.GetDeployment(t.Context(), deployment.ID)
+		if err != nil {
+			t.Fatalf("GetDeployment: %v", err)
+		}
+		if reloaded.Status.Terminal() {
+			settled = reloaded.Status
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the deployment was still %s after 10 seconds", reloaded.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if err := db.UpdateDeploymentStatus(t.Context(), deployment.ID, store.DeployBuilding, "", "", ""); err != nil {
+		t.Fatalf("UpdateDeploymentStatus: %v", err)
+	}
+	reloaded, err := db.GetDeployment(t.Context(), deployment.ID)
+	if err != nil {
+		t.Fatalf("GetDeployment: %v", err)
+	}
+	if reloaded.Status != settled {
+		t.Fatalf("a finished deployment moved from %s to %s", settled, reloaded.Status)
+	}
 }

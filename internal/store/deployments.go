@@ -121,6 +121,13 @@ func (db *DB) FindDeploymentByFingerprint(ctx context.Context, appID, fingerprin
 }
 
 // UpdateDeploymentStatus moves a deployment forward and records failure details.
+//
+// A deployment that has already finished never moves again. The guard is in the
+// statement rather than in the caller because the caller is a goroutine that
+// may be several seconds behind the world: a build superseded by a newer deploy
+// is still running when it writes its next status, and without this it would
+// put itself back to "building" and carry on as though it had not been
+// replaced.
 func (db *DB) UpdateDeploymentStatus(ctx context.Context, id string, status DeploymentStatus, errCode, errMsg, hint string) error {
 	var started, finished any
 	switch status {
@@ -131,7 +138,8 @@ func (db *DB) UpdateDeploymentStatus(ctx context.Context, id string, status Depl
 		finished = Now()
 	}
 	_, err := db.Exec(ctx, `UPDATE deployments SET status = ?, error_code = ?, error_message = ?, error_hint = ?,
-		started_at = COALESCE(started_at, ?), finished_at = COALESCE(?, finished_at) WHERE id = ?`,
+		started_at = COALESCE(started_at, ?), finished_at = COALESCE(?, finished_at)
+		WHERE id = ? AND status IN ('queued','building','deploying')`,
 		status, errCode, errMsg, hint, started, finished, id)
 	if err != nil {
 		return fmt.Errorf("update deployment status: %w", err)
@@ -149,14 +157,41 @@ func (db *DB) SetDeploymentImage(ctx context.Context, id, image string) error {
 }
 
 // SupersedeRunningDeployments marks older in-flight deploys as superseded when a
-// newer one starts, so the history does not show two builds racing.
-func (db *DB) SupersedeRunningDeployments(ctx context.Context, appID, exceptID string) error {
-	_, err := db.Exec(ctx, `UPDATE deployments SET status = 'superseded', finished_at = ?
-		WHERE app_id = ? AND id != ? AND status IN ('queued','building','deploying')`, Now(), appID, exceptID)
+// newer one starts, and returns which ones it marked.
+//
+// The ids matter: marking a row does not stop the goroutine that was building
+// it, and two builds finishing in an unpredictable order is the thing this is
+// supposed to prevent. The caller cancels them.
+func (db *DB) SupersedeRunningDeployments(ctx context.Context, appID, exceptID string) ([]string, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id FROM deployments WHERE app_id = ? AND id != ? AND status IN ('queued','building','deploying')`,
+		appID, exceptID)
 	if err != nil {
-		return fmt.Errorf("supersede deployments: %w", err)
+		return nil, fmt.Errorf("find deployments to supersede: %w", err)
 	}
-	return nil
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan deployment to supersede: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find deployments to supersede: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	if _, err := db.Exec(ctx, `UPDATE deployments SET status = 'superseded', finished_at = ?
+		WHERE app_id = ? AND id != ? AND status IN ('queued','building','deploying')`,
+		Now(), appID, exceptID); err != nil {
+		return nil, fmt.Errorf("supersede deployments: %w", err)
+	}
+	return ids, nil
 }
 
 // ListUnfinishedDeployments finds deploys interrupted by a panel restart.

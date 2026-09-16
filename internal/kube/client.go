@@ -106,6 +106,23 @@ func (c *Client) Clientset() kubernetes.Interface { return c.clientset }
 // SystemNamespace is where the panel and its components run.
 func (c *Client) SystemNamespace() string { return c.systemNamespace }
 
+// BuildsNamespace is where builds and the things they need live.
+//
+// Not the panel's own namespace, for two reasons that point the same way. A
+// build runs code from a repository, and next to the panel it would share a
+// namespace with the master key, the database and the panel's service account.
+// And rootless BuildKit needs a Pod Security profile the panel's namespace
+// must not have: giving the whole panel namespace that profile to make one
+// builder work would be exactly backwards.
+//
+// It is a fixed name rather than one derived from the panel's namespace,
+// because every node's container runtime is configured to reach the registry
+// inside it, and that configuration is written before the panel exists.
+const BuildsNamespace = "skifity-builds"
+
+// BuildNamespace is where builds run.
+func (c *Client) BuildNamespace() string { return BuildsNamespace }
+
 // RESTConfig exposes the connection settings, which exec and port-forward need.
 func (c *Client) RESTConfig() *rest.Config { return c.config }
 

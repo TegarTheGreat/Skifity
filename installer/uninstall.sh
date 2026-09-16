@@ -13,6 +13,8 @@
 set -eu
 
 NAMESPACE="skifity-system"
+# Builds, the builder and the image registry live in their own namespace.
+BUILDS_NAMESPACE="skifity-builds"
 CONFIG_DIR="/etc/skifity"
 DATA_DIR="/var/lib/skifity"
 KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
@@ -124,6 +126,9 @@ if [ -f "$KUBECONFIG_PATH" ] && command -v kubectl >/dev/null 2>&1; then
 	run kubectl delete service skifity-panel -n "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
 	run kubectl delete clusterrolebinding skifity-panel --ignore-not-found >/dev/null 2>&1 || true
 	run kubectl delete namespace "$NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+	# The builder and the images it produced. Apps keep running: their images
+	# are already pulled onto the nodes that run them.
+	run kubectl delete namespace "$BUILDS_NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
 	did "Panel removed"
 
 	if [ "$REMOVE_K3S" != "1" ]; then
@@ -148,6 +153,7 @@ fi
 if [ "$PURGE" = "1" ]; then
 	step "Deleting the panel's data"
 	run rm -rf "$DATA_DIR" "$CONFIG_DIR"
+	run rm -f /etc/rancher/k3s/registries.yaml
 	did "$DATA_DIR and $CONFIG_DIR deleted"
 else
 	step "Keeping your data"

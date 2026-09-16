@@ -3,6 +3,8 @@ package provision
 import (
 	"fmt"
 	"strings"
+
+	"skifity/internal/kube"
 )
 
 // The shell that runs on the servers being added.
@@ -268,6 +270,16 @@ func installScript(version, token, serverURL, args string, isServer bool) string
 set -eu
 
 # The panel streams this output, so progress is visible rather than a long wait.
+#
+# The mirror configuration is written before k3s starts, because that is when
+# k3s reads it. Re-running this script rewrites it and restarts the service,
+# which is how an existing node picks up a change.
+echo "==> Telling the container runtime where the panel's registry is"
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/registries.yaml <<'SKIFITY_REGISTRIES'
+%s
+SKIFITY_REGISTRIES
+
 echo "==> Downloading the k3s installer"
 if command -v curl >/dev/null 2>&1; then
   curl -sfL https://get.k3s.io -o /tmp/k3s-install.sh
@@ -295,7 +307,7 @@ done
 echo "k3s did not start within two minutes. The last log lines were:" >&2
 journalctl -u k3s -u k3s-agent --no-pager -n 40 2>/dev/null >&2 || true
 exit 21
-`, env.String())
+`, kube.RegistriesYAML(), env.String())
 }
 
 // NodeTokenScript reads the join token from the first control plane node.

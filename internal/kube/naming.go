@@ -187,3 +187,50 @@ func SanitiseEnvKey(key string) (string, error) {
 	}
 	return key, nil
 }
+
+// The in-cluster registry.
+//
+// Built images are pushed here and pulled from here by every node's container
+// runtime. The two halves of that sentence do not see the same network, which
+// is why the addresses below exist in this shape.
+const (
+	// RegistryService is the registry's Service name, in BuildsNamespace.
+	RegistryService = "skifity-registry"
+	// RegistryPort is what the registry listens on inside the cluster.
+	RegistryPort = 5000
+	// RegistryNodePort is how a node's container runtime reaches it.
+	//
+	// containerd runs on the host, not in the cluster: it cannot resolve a
+	// Service name, and it refuses plain HTTP to anything that is not
+	// localhost. A fixed NodePort is reachable on 127.0.0.1 from every node,
+	// which is both resolvable and, to containerd, trusted.
+	RegistryNodePort = 30500
+)
+
+// RegistryHost is the address images are tagged with.
+func RegistryHost() string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", RegistryService, BuildsNamespace, RegistryPort)
+}
+
+// RegistriesYAML is the containerd mirror configuration every node needs.
+//
+// Without it a node cannot pull the images the panel builds: it would try to
+// resolve a Kubernetes Service name against the host's resolver, which does
+// not know it, and then refuse the plain HTTP it would have found. The mirror
+// sends that name to the registry's NodePort on this machine instead.
+//
+// It is written before k3s starts, and never changes: nothing in it depends on
+// an address that is only known once the cluster is running.
+func RegistriesYAML() string {
+	return fmt.Sprintf(`# Written by Skifity. Do not edit.
+#
+# Images the panel builds are tagged with the in-cluster registry's Service
+# name. containerd runs on the host and cannot resolve that name, so it is
+# mirrored to the registry's NodePort on this machine, which containerd
+# reaches over loopback and trusts without TLS.
+mirrors:
+  "%s":
+    endpoint:
+      - "http://127.0.0.1:%d"
+`, RegistryHost(), RegistryNodePort)
+}

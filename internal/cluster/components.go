@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"skifity/internal/kube"
 	"skifity/internal/settings"
 	"skifity/internal/version"
 )
@@ -195,12 +196,24 @@ const (
 
 // RegistryAddress is the in-cluster address images are tagged with.
 func (c *Cluster) RegistryAddress() string {
-	return fmt.Sprintf("%s.%s.svc.cluster.local:%d", RegistryService, c.client.SystemNamespace(), RegistryPort)
+	return kube.RegistryHost()
 }
 
 // installRegistry deploys the in-cluster image registry.
 func (c *Cluster) installRegistry(ctx context.Context) error {
-	namespace := c.client.SystemNamespace()
+	if err := c.EnsureBuildNamespace(ctx); err != nil {
+		return err
+	}
+	namespace := c.client.BuildNamespace()
+	if err := c.client.Applier().ApplyAll(ctx, registryObjects(namespace)...); err != nil {
+		return err
+	}
+	return c.client.WaitForDeployment(ctx, namespace, RegistryService, 3*time.Minute)
+}
+
+// registryObjects renders the registry, separately from applying it, so a test
+// can read what would be created.
+func registryObjects(namespace string) []any {
 	labels := map[string]string{
 		"app.kubernetes.io/name":       RegistryService,
 		"app.kubernetes.io/managed-by": version.Binary,
@@ -268,22 +281,35 @@ func (c *Cluster) installRegistry(ctx context.Context) error {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Service"},
 		ObjectMeta: metav1.ObjectMeta{Name: RegistryService, Namespace: namespace, Labels: labels},
 		Spec: corev1.ServiceSpec{
+			// A NodePort, because the thing that pulls these images is every
+			// node's container runtime, which is on the host and cannot reach
+			// a ClusterIP by name. See kube.RegistriesYAML.
+			Type:     corev1.ServiceTypeNodePort,
 			Selector: labels,
 			Ports: []corev1.ServicePort{{
 				Name: "http", Port: RegistryPort, TargetPort: intstr.FromString("http"),
+				NodePort: kube.RegistryNodePort,
 			}},
 		},
 	}
 
-	if err := c.client.Applier().ApplyAll(ctx, claim, deployment, service); err != nil {
-		return err
-	}
-	return c.client.WaitForDeployment(ctx, namespace, RegistryService, 3*time.Minute)
+	return []any{claim, deployment, service}
 }
 
 // installBuildKit deploys the rootless builder.
 func (c *Cluster) installBuildKit(ctx context.Context) error {
-	namespace := c.client.SystemNamespace()
+	if err := c.EnsureBuildNamespace(ctx); err != nil {
+		return err
+	}
+	namespace := c.client.BuildNamespace()
+	if err := c.client.Applier().ApplyAll(ctx, buildKitObjects(namespace)...); err != nil {
+		return err
+	}
+	return c.client.WaitForDeployment(ctx, namespace, BuildKitService, 5*time.Minute)
+}
+
+// buildKitObjects renders the builder, separately from applying it.
+func buildKitObjects(namespace string) []any {
 	labels := map[string]string{
 		"app.kubernetes.io/name":       BuildKitService,
 		"app.kubernetes.io/managed-by": version.Binary,
@@ -310,8 +336,11 @@ func (c *Cluster) installBuildKit(ctx context.Context) error {
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Name:  "buildkitd",
-						Image: "moby/buildkit:master-rootless",
+						Name: "buildkitd",
+						// Pinned: "master" is whatever was built this morning,
+						// and a builder that changes under an operator is a
+						// build that breaks for no reason they can see.
+						Image: buildKitImage,
 						Args: []string{
 							"--addr", fmt.Sprintf("tcp://0.0.0.0:%d", BuildKitPort),
 							"--oci-worker-no-process-sandbox",
@@ -331,10 +360,17 @@ func (c *Cluster) installBuildKit(ctx context.Context) error {
 						ReadinessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								Exec: &corev1.ExecAction{Command: []string{
-									"buildctl", "debug", "workers",
+									// The address has to be given. buildkitd is
+									// started with --addr, which replaces the
+									// default socket rather than adding to it,
+									// so a bare `buildctl debug workers` looks
+									// for a socket that does not exist and the
+									// builder never becomes ready.
+									"buildctl", "--addr", buildKitLocalAddress,
+									"debug", "workers",
 								}},
 							},
-							InitialDelaySeconds: 5,
+							InitialDelaySeconds: 10,
 							PeriodSeconds:       10,
 						},
 						VolumeMounts: []corev1.VolumeMount{{Name: "cache", MountPath: "/home/user/.local/share/buildkit"}},
@@ -362,11 +398,15 @@ func (c *Cluster) installBuildKit(ctx context.Context) error {
 		},
 	}
 
-	if err := c.client.Applier().ApplyAll(ctx, deployment, service); err != nil {
-		return err
-	}
-	return c.client.WaitForDeployment(ctx, namespace, BuildKitService, 5*time.Minute)
+	return []any{deployment, service}
 }
+
+// buildKitImage is the rootless builder, pinned.
+const buildKitImage = "moby/buildkit:v0.18.2-rootless"
+
+// buildKitLocalAddress is how the readiness probe reaches buildkitd from
+// inside its own container.
+var buildKitLocalAddress = fmt.Sprintf("tcp://127.0.0.1:%d", BuildKitPort)
 
 // installKEDA installs KEDA and its HTTP add-on, which together provide
 // scale-to-zero.

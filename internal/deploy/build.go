@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"skifity/internal/builder"
+	"skifity/internal/cluster"
 	"skifity/internal/errdoc"
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
@@ -61,8 +62,10 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 	}
 
 	spec := builder.JobSpec{
-		Name:             kube.ResourceName("build-"+app.Slug, shortID(deployment.ID)),
-		Namespace:        d.cluster.Client().SystemNamespace(),
+		Name: kube.ResourceName("build-"+app.Slug, shortID(deployment.ID)),
+		// Builds run in their own namespace, away from the panel's master key
+		// and database. See cluster.EnsureBuildNamespace.
+		Namespace:        d.cluster.Client().BuildNamespace(),
 		AppID:            app.ID,
 		DeploymentID:     deployment.ID,
 		RepoURL:          app.RepoURL,
@@ -136,7 +139,7 @@ func (d *Deployer) chooseBuilder(app store.App) (builder.Builder, error) {
 
 func (d *Deployer) buildKitAddress() string {
 	return fmt.Sprintf("tcp://%s.%s.svc.cluster.local:%d",
-		"skifity-buildkit", d.cluster.Client().SystemNamespace(), 1234)
+		cluster.BuildKitService, d.cluster.Client().BuildNamespace(), cluster.BuildKitPort)
 }
 
 // streamBuild follows the build pod's logs and reports the outcome.

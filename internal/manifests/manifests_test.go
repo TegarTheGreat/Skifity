@@ -3,11 +3,14 @@ package manifests
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
+
+	"skifity/internal/kube"
 )
 
 // values are what the installer substitutes, with obviously fake stand-ins.
@@ -222,4 +225,38 @@ func stripComments(doc string) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// TestInstallerAndPanelAgreeOnTheRegistry: the installer writes the container
+// runtime's mirror configuration before the panel exists, so the two have to
+// agree about the registry's address without ever talking to each other. If
+// they drift, every image the panel builds becomes unpullable and the symptom
+// is an ImagePullBackOff nobody can trace back to here.
+func TestInstallerAndPanelAgreeOnTheRegistry(t *testing.T) {
+	script, err := os.ReadFile(filepath.Join("..", "..", "installer", "install.sh"))
+	if err != nil {
+		t.Fatalf("read install.sh: %v", err)
+	}
+	text := string(script)
+
+	for _, want := range []string{
+		`BUILDS_NAMESPACE="` + kube.BuildsNamespace + `"`,
+		`REGISTRY_HOST="` + kube.RegistryService + `.${BUILDS_NAMESPACE}.svc.cluster.local:` +
+			strconv.Itoa(kube.RegistryPort) + `"`,
+		"REGISTRY_NODE_PORT=" + strconv.Itoa(kube.RegistryNodePort),
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("install.sh does not set %s", want)
+		}
+	}
+
+	// And the file it writes has to be the one the panel would write for a
+	// server added later, or the first node and every other node disagree.
+	yaml := kube.RegistriesYAML()
+	if !strings.Contains(yaml, kube.RegistryHost()) {
+		t.Errorf("the mirror configuration does not name the registry:\n%s", yaml)
+	}
+	if !strings.Contains(yaml, "http://127.0.0.1:"+strconv.Itoa(kube.RegistryNodePort)) {
+		t.Errorf("the mirror configuration does not point at the node port:\n%s", yaml)
+	}
 }

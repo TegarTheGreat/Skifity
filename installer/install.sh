@@ -36,6 +36,11 @@ MANIFEST_DIR="/var/lib/skifity/manifests"
 K3S_CHANNEL="${SKIFITY_CHANNEL:-stable}"
 KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
 ISSUER="skifity-letsencrypt"
+# The in-cluster registry built images are pushed to and pulled from. These
+# three values must match internal/kube/naming.go; a Go test checks that they do.
+BUILDS_NAMESPACE="skifity-builds"
+REGISTRY_HOST="skifity-registry.${BUILDS_NAMESPACE}.svc.cluster.local:5000"
+REGISTRY_NODE_PORT=30500
 CERT_MANAGER_URL="https://github.com/cert-manager/cert-manager/releases/download/v1.21.2/cert-manager.yaml"
 # The panel runs as distroless's nonroot user; its directories must be readable
 # and writable by that user and by nobody else.
@@ -203,6 +208,10 @@ install_k3s() {
 		return 0
 	fi
 
+	# Before the early return below: an install that is being re-run still has
+	# to end up with the mirror configured.
+	configure_registry_mirror
+
 	if have k3s && systemctl is-active --quiet k3s 2>/dev/null; then
 		ok "k3s is already installed and running"
 		return 0
@@ -233,6 +242,36 @@ Try the download on its own to see the error:
 
 	rm -f /tmp/skifity-k3s-install.sh
 	ok "k3s installed"
+}
+
+# containerd runs on the host, not in the cluster. It cannot resolve the
+# registry's Kubernetes Service name, and it refuses plain HTTP to anything
+# that is not loopback, so an image the panel builds could never be pulled.
+# The mirror sends that name to the registry's NodePort on this machine.
+#
+# It is written before k3s starts, because that is when k3s reads it.
+configure_registry_mirror() {
+	mkdir -p /etc/rancher/k3s
+	cat >/etc/rancher/k3s/registries.yaml.new <<EOF
+# Written by Skifity. Do not edit.
+mirrors:
+  "${REGISTRY_HOST}":
+    endpoint:
+      - "http://127.0.0.1:${REGISTRY_NODE_PORT}"
+EOF
+	if cmp -s /etc/rancher/k3s/registries.yaml.new /etc/rancher/k3s/registries.yaml 2>/dev/null; then
+		rm -f /etc/rancher/k3s/registries.yaml.new
+		return 0
+	fi
+	mv /etc/rancher/k3s/registries.yaml.new /etc/rancher/k3s/registries.yaml
+	ok "the container runtime knows where the panel's registry is"
+
+	# k3s reads this at start-up only, so a change to a running node needs a
+	# restart. A fresh install has not started yet and skips this.
+	if systemctl is-active --quiet k3s 2>/dev/null; then
+		note "Restarting k3s so it picks up the registry configuration"
+		systemctl restart k3s >>"$LOG_FILE" 2>&1 || warn "k3s could not be restarted; do it by hand"
+	fi
 }
 
 wait_for_cluster() {

@@ -1,0 +1,567 @@
+package store
+
+import (
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func testDB(t *testing.T) *DB {
+	t.Helper()
+	// A file-backed database in a temp dir, because ":memory:" with one
+	// connection hides the locking behaviour we actually ship with.
+	db, err := Open(t.Context(), filepath.Join(t.TempDir(), "panel.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func TestMigrationsAreIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "panel.db")
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	v1, err := db.SchemaVersion(t.Context())
+	if err != nil {
+		t.Fatalf("SchemaVersion: %v", err)
+	}
+	if v1 < 1 {
+		t.Fatalf("schema version is %d, expected at least 1", v1)
+	}
+	db.Close()
+
+	// Reopening must not try to re-apply migrations.
+	db2, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer db2.Close()
+	v2, _ := db2.SchemaVersion(t.Context())
+	if v2 != v1 {
+		t.Fatalf("schema version changed on reopen: %d then %d", v1, v2)
+	}
+}
+
+func TestNewIDIsSortableAndUnique(t *testing.T) {
+	seen := map[string]bool{}
+	var previous string
+	for range 200 {
+		id := NewID("app")
+		if !strings.HasPrefix(id, "app_") {
+			t.Fatalf("id %q lost its prefix", id)
+		}
+		if seen[id] {
+			t.Fatalf("NewID returned %q twice", id)
+		}
+		seen[id] = true
+		if previous != "" && id < previous {
+			// Ids generated in the same millisecond may tie, but must never
+			// go backwards across milliseconds.
+			time.Sleep(2 * time.Millisecond)
+			if next := NewID("app"); next < id {
+				t.Fatalf("ids are not time-ordered: %q then %q", id, next)
+			}
+		}
+		previous = id
+	}
+}
+
+// seedTeam creates the user/team/project/environment chain most tests need.
+func seedTeam(t *testing.T, db *DB) (User, Team, Project, Environment) {
+	t.Helper()
+	ctx := t.Context()
+	u := User{Email: "owner@example.test", Name: "Owner", PasswordHash: "x"}
+	if err := db.CreateUser(ctx, &u); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	team := Team{Name: "Acme", Slug: "acme"}
+	if err := db.CreateTeam(ctx, &team); err != nil {
+		t.Fatalf("CreateTeam: %v", err)
+	}
+	if err := db.AddMember(ctx, team.ID, u.ID, RoleOwner); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	prj := Project{TeamID: team.ID, Name: "Shop", Slug: "shop"}
+	if err := db.CreateProject(ctx, &prj); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	env := Environment{ProjectID: prj.ID, Name: "Production", Slug: "production", Namespace: "acme-shop-production"}
+	if err := db.CreateEnvironment(ctx, &env); err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+	return u, team, prj, env
+}
+
+func TestUniqueConstraintsBecomeConflicts(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, _ := seedTeam(t, db)
+
+	dup := User{Email: "OWNER@example.test", PasswordHash: "y"}
+	err := db.CreateUser(ctx, &dup)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate email gave %v, want ErrConflict", err)
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("conflict error should be readable, got: %v", err)
+	}
+
+	// Emails must match case-insensitively, or two people can register the
+	// same address with different capitalisation.
+	if _, err := db.GetUserByEmail(ctx, "Owner@Example.Test"); err != nil {
+		t.Fatalf("GetUserByEmail is case sensitive: %v", err)
+	}
+
+	s := Server{TeamID: team.ID, Name: "node-1", Host: "203.0.113.10", SSHPort: 22}
+	if err := db.CreateServer(ctx, &s); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	again := Server{TeamID: team.ID, Name: "node-1-again", Host: "203.0.113.10", SSHPort: 22}
+	if err := db.CreateServer(ctx, &again); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate server gave %v, want ErrConflict", err)
+	}
+}
+
+func TestCascadeDeleteRemovesChildren(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, prj, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web", Replicas: 1}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	v := Variable{AppID: app.ID, Key: "PORT"}
+	if err := db.SetVariable(ctx, &v, "SKF1.sealed"); err != nil {
+		t.Fatalf("SetVariable: %v", err)
+	}
+	d := Deployment{AppID: app.ID}
+	if err := db.CreateDeployment(ctx, &d); err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+
+	// Deleting the project must take the environment, app, variables and
+	// deployments with it. Without foreign_keys ON, these rows would be orphaned.
+	if err := db.DeleteProject(ctx, prj.ID); err != nil {
+		t.Fatalf("DeleteProject: %v", err)
+	}
+	if _, err := db.GetApp(ctx, app.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("app survived the project deletion: %v", err)
+	}
+	if _, err := db.GetDeployment(ctx, d.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("deployment survived the project deletion: %v", err)
+	}
+	vars, err := db.ListVariables(ctx, app.ID)
+	if err != nil {
+		t.Fatalf("ListVariables: %v", err)
+	}
+	if len(vars) != 0 {
+		t.Fatalf("%d variables survived the project deletion", len(vars))
+	}
+}
+
+func TestDeploymentNumbersIncrementPerApp(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+
+	appA := App{EnvironmentID: env.ID, Name: "a", Slug: "a"}
+	appB := App{EnvironmentID: env.ID, Name: "b", Slug: "b"}
+	if err := db.CreateApp(ctx, &appA); err != nil {
+		t.Fatalf("CreateApp a: %v", err)
+	}
+	if err := db.CreateApp(ctx, &appB); err != nil {
+		t.Fatalf("CreateApp b: %v", err)
+	}
+
+	for want := 1; want <= 3; want++ {
+		d := Deployment{AppID: appA.ID}
+		if err := db.CreateDeployment(ctx, &d); err != nil {
+			t.Fatalf("CreateDeployment: %v", err)
+		}
+		if d.Number != want {
+			t.Fatalf("deployment number %d, want %d", d.Number, want)
+		}
+	}
+	// A different app starts its own numbering at 1.
+	other := Deployment{AppID: appB.ID}
+	if err := db.CreateDeployment(ctx, &other); err != nil {
+		t.Fatalf("CreateDeployment for second app: %v", err)
+	}
+	if other.Number != 1 {
+		t.Fatalf("second app's first deployment is number %d, want 1", other.Number)
+	}
+}
+
+func TestFindDeploymentByFingerprintOnlyMatchesSuccess(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web"}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	failed := Deployment{AppID: app.ID, BuildFingerprint: "fp-1", Image: "reg/img:1"}
+	if err := db.CreateDeployment(ctx, &failed); err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+	if err := db.UpdateDeploymentStatus(ctx, failed.ID, DeployFailed, "build_failed", "boom", ""); err != nil {
+		t.Fatalf("UpdateDeploymentStatus: %v", err)
+	}
+	// A failed build must never let a later deploy skip building.
+	if _, err := db.FindDeploymentByFingerprint(ctx, app.ID, "fp-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a failed build was reused: %v", err)
+	}
+
+	ok := Deployment{AppID: app.ID, BuildFingerprint: "fp-1", Image: "reg/img:2"}
+	if err := db.CreateDeployment(ctx, &ok); err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+	if err := db.SetDeploymentImage(ctx, ok.ID, "reg/img:2"); err != nil {
+		t.Fatalf("SetDeploymentImage: %v", err)
+	}
+	if err := db.UpdateDeploymentStatus(ctx, ok.ID, DeploySucceeded, "", "", ""); err != nil {
+		t.Fatalf("UpdateDeploymentStatus: %v", err)
+	}
+	found, err := db.FindDeploymentByFingerprint(ctx, app.ID, "fp-1")
+	if err != nil {
+		t.Fatalf("FindDeploymentByFingerprint: %v", err)
+	}
+	if found.Image != "reg/img:2" {
+		t.Fatalf("reused image %q, want reg/img:2", found.Image)
+	}
+	// An unknown fingerprint must force a build rather than reuse anything.
+	if _, err := db.FindDeploymentByFingerprint(ctx, app.ID, "fp-other"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an unrelated fingerprint matched: %v", err)
+	}
+}
+
+func TestOperationStepsDriveProgress(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, _ := seedTeam(t, db)
+
+	op := Operation{TeamID: team.ID, Kind: "server.add", TargetType: "server", TargetID: "srv_1"}
+	steps := []string{"connect", "preflight", "install-key", "firewall", "join"}
+	if err := db.CreateOperation(ctx, &op, steps); err != nil {
+		t.Fatalf("CreateOperation: %v", err)
+	}
+
+	loaded, err := db.GetOperation(ctx, op.ID)
+	if err != nil {
+		t.Fatalf("GetOperation: %v", err)
+	}
+	if len(loaded.Steps) != len(steps) {
+		t.Fatalf("got %d steps, want %d", len(loaded.Steps), len(steps))
+	}
+	for i, s := range loaded.Steps {
+		if s.Key != steps[i] {
+			t.Fatalf("step %d is %q, want %q: steps must stay in order", i, s.Key, steps[i])
+		}
+	}
+
+	if err := db.SetStepStatus(ctx, op.ID, "connect", StepSucceeded, "Connected", ""); err != nil {
+		t.Fatalf("SetStepStatus: %v", err)
+	}
+	if err := db.SetStepStatus(ctx, op.ID, "preflight", StepFailed, "Port 6443 is blocked", "ufw allow 6443"); err != nil {
+		t.Fatalf("SetStepStatus: %v", err)
+	}
+
+	// Retry resets the failed step and everything after it, but not the
+	// steps that already succeeded.
+	if err := db.ResetStepsFrom(ctx, op.ID, "preflight"); err != nil {
+		t.Fatalf("ResetStepsFrom: %v", err)
+	}
+	after, err := db.ListOperationSteps(ctx, op.ID)
+	if err != nil {
+		t.Fatalf("ListOperationSteps: %v", err)
+	}
+	if after[0].Status != StepSucceeded {
+		t.Fatalf("retry undid a completed step: %s", after[0].Status)
+	}
+	for _, s := range after[1:] {
+		if s.Status != StepPending {
+			t.Fatalf("step %q is %s after retry, want pending", s.Key, s.Status)
+		}
+	}
+}
+
+func TestBuildLogsAreSequencedAndResumable(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web"}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	d := Deployment{AppID: app.ID}
+	if err := db.CreateDeployment(ctx, &d); err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+
+	batch := make([]LogLine, 0, 10)
+	for i := range 10 {
+		batch = append(batch, LogLine{Line: "line " + string(rune('0'+i))})
+	}
+	if err := db.AppendBuildLogs(ctx, d.ID, batch); err != nil {
+		t.Fatalf("AppendBuildLogs: %v", err)
+	}
+	seq, err := db.AppendBuildLog(ctx, d.ID, "stderr", "warning")
+	if err != nil {
+		t.Fatalf("AppendBuildLog: %v", err)
+	}
+	if seq != 11 {
+		t.Fatalf("single append continued at %d, want 11", seq)
+	}
+
+	// A reconnecting client asks for everything after the last line it saw.
+	tail, err := db.ListBuildLogs(ctx, d.ID, 8, 0)
+	if err != nil {
+		t.Fatalf("ListBuildLogs: %v", err)
+	}
+	if len(tail) != 3 {
+		t.Fatalf("resume from seq 8 returned %d lines, want 3", len(tail))
+	}
+	if tail[0].Seq != 9 {
+		t.Fatalf("resume started at seq %d, want 9", tail[0].Seq)
+	}
+}
+
+func TestRoleOrdering(t *testing.T) {
+	if !RoleOwner.AtLeast(RoleAdmin) || !RoleAdmin.AtLeast(RoleMember) || !RoleMember.AtLeast(RoleMember) {
+		t.Fatal("role ordering is wrong going down")
+	}
+	if RoleMember.AtLeast(RoleAdmin) || RoleAdmin.AtLeast(RoleOwner) {
+		t.Fatal("a lower role satisfied a higher requirement")
+	}
+	if Role("nonsense").Valid() {
+		t.Fatal("an unknown role reported itself valid")
+	}
+}
+
+func TestTeamResolutionForAuthorization(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, env := seedTeam(t, db)
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web"}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	dbrec := Database{EnvironmentID: env.ID, Name: "main", Slug: "main", Engine: "postgres"}
+	if err := db.CreateDatabase(ctx, &dbrec); err != nil {
+		t.Fatalf("CreateDatabase: %v", err)
+	}
+
+	for name, got := range map[string]func() (string, error){
+		"environment": func() (string, error) { return db.TeamIDForEnvironment(ctx, env.ID) },
+		"app":         func() (string, error) { return db.TeamIDForApp(ctx, app.ID) },
+		"database":    func() (string, error) { return db.TeamIDForDatabase(ctx, dbrec.ID) },
+	} {
+		id, err := got()
+		if err != nil {
+			t.Fatalf("resolve team for %s: %v", name, err)
+		}
+		if id != team.ID {
+			t.Fatalf("team for %s resolved to %q, want %q", name, id, team.ID)
+		}
+	}
+
+	// Authorization must fail closed for something that does not exist.
+	if _, err := db.TeamIDForApp(ctx, "app_missing"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("resolving a missing app gave %v, want ErrNotFound", err)
+	}
+}
+
+func TestSessionsExpire(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	u, _, _, _ := seedTeam(t, db)
+
+	live := Session{UserID: u.ID, TokenHash: "hash-live", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := db.CreateSession(ctx, &live); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	dead := Session{UserID: u.ID, TokenHash: "hash-dead", ExpiresAt: time.Now().Add(-time.Minute)}
+	if err := db.CreateSession(ctx, &dead); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	if _, err := db.GetSessionByHash(ctx, "hash-live"); err != nil {
+		t.Fatalf("live session not found: %v", err)
+	}
+	if _, err := db.GetSessionByHash(ctx, "hash-dead"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired session was returned: %v", err)
+	}
+	n, err := db.PurgeExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("PurgeExpiredSessions: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("purged %d sessions, want 1", n)
+	}
+}
+
+func TestFailedLoginCounting(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	since := time.Now().Add(-time.Minute)
+
+	for range 3 {
+		if err := db.RecordLoginAttempt(ctx, "user@example.test", "198.51.100.5", false); err != nil {
+			t.Fatalf("RecordLoginAttempt: %v", err)
+		}
+	}
+	// A different account from the same address still counts against the address.
+	if err := db.RecordLoginAttempt(ctx, "other@example.test", "198.51.100.5", false); err != nil {
+		t.Fatalf("RecordLoginAttempt: %v", err)
+	}
+
+	byID, byIP, err := db.CountFailedLogins(ctx, "USER@example.test", "198.51.100.5", since)
+	if err != nil {
+		t.Fatalf("CountFailedLogins: %v", err)
+	}
+	if byID != 3 {
+		t.Fatalf("counted %d failures for the identifier, want 3", byID)
+	}
+	if byIP != 4 {
+		t.Fatalf("counted %d failures for the IP, want 4", byIP)
+	}
+
+	if err := db.ClearLoginAttempts(ctx, "user@example.test"); err != nil {
+		t.Fatalf("ClearLoginAttempts: %v", err)
+	}
+	byID, _, _ = db.CountFailedLogins(ctx, "user@example.test", "", since)
+	if byID != 0 {
+		t.Fatalf("a successful sign-in left %d failures behind", byID)
+	}
+}
+
+func TestSettingsRoundTrip(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+
+	// A setting nobody has configured yet must read as empty, not as an error.
+	v, enc, err := db.GetSetting(ctx, "s3.bucket")
+	if err != nil || v != "" || enc {
+		t.Fatalf("unset setting gave %q/%v/%v, want empty", v, enc, err)
+	}
+	if err := db.SetSetting(ctx, "s3.bucket", "backups", false, "usr_1"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	if err := db.SetSetting(ctx, "s3.secret_key", "SKF1.sealed", true, "usr_1"); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	if err := db.SetSetting(ctx, "s3.bucket", "backups-2", false, "usr_1"); err != nil {
+		t.Fatalf("SetSetting (overwrite): %v", err)
+	}
+
+	all, err := db.ListSettings(ctx)
+	if err != nil {
+		t.Fatalf("ListSettings: %v", err)
+	}
+	if all["s3.bucket"].Value != "backups-2" {
+		t.Fatalf("setting did not overwrite: %q", all["s3.bucket"].Value)
+	}
+	if !all["s3.secret_key"].Encrypted {
+		t.Fatal("encrypted flag was lost")
+	}
+}
+
+func TestListSealedSecretsFindsEveryEncryptedColumn(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web"}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	if err := db.SetVariable(ctx, &Variable{AppID: app.ID, Key: "SECRET", IsSecret: true}, "SKF1.a"); err != nil {
+		t.Fatalf("SetVariable: %v", err)
+	}
+	srv := Server{TeamID: team.ID, Name: "n1", Host: "203.0.113.1", SSHKeyEnc: "SKF1.b"}
+	if err := db.CreateServer(ctx, &srv); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	if err := db.CreateDatabase(ctx, &Database{EnvironmentID: env.ID, Name: "main", Slug: "main",
+		Engine: "postgres", CredentialsEnc: "SKF1.c"}); err != nil {
+		t.Fatalf("CreateDatabase: %v", err)
+	}
+	if err := db.SetSetting(ctx, "smtp.password", "SKF1.d", true, ""); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	refs, err := db.ListSealedSecrets(ctx)
+	if err != nil {
+		t.Fatalf("ListSealedSecrets: %v", err)
+	}
+	tables := map[string]bool{}
+	for _, r := range refs {
+		tables[r.Table] = true
+	}
+	// Rotation is only correct if it can find every encrypted column. Missing
+	// one here means secrets silently stay on a retired key.
+	for _, want := range []string{"app_variables", "servers", "databases", "settings"} {
+		if !tables[want] {
+			t.Fatalf("rotation would miss encrypted values in %s", want)
+		}
+	}
+
+	// And rewriting through UpdateSealed must land in the right row.
+	for _, r := range refs {
+		if r.Table == "servers" {
+			if err := db.UpdateSealed(ctx, r, "SKF1.rewrapped"); err != nil {
+				t.Fatalf("UpdateSealed: %v", err)
+			}
+		}
+	}
+	reloaded, err := db.GetServer(ctx, srv.ID)
+	if err != nil {
+		t.Fatalf("GetServer: %v", err)
+	}
+	if reloaded.SSHKeyEnc != "SKF1.rewrapped" {
+		t.Fatalf("rewrapped key is %q, want SKF1.rewrapped", reloaded.SSHKeyEnc)
+	}
+}
+
+func TestLastOwnerProtectionData(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, _ := seedTeam(t, db)
+
+	n, err := db.CountOwners(ctx, team.ID)
+	if err != nil {
+		t.Fatalf("CountOwners: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("team has %d owners, want 1", n)
+	}
+
+	second := User{Email: "second@example.test", PasswordHash: "x"}
+	if err := db.CreateUser(ctx, &second); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := db.AddMember(ctx, team.ID, second.ID, RoleMember); err != nil {
+		t.Fatalf("AddMember: %v", err)
+	}
+	// AddMember doubles as "change role", so adding again must not duplicate.
+	if err := db.AddMember(ctx, team.ID, second.ID, RoleOwner); err != nil {
+		t.Fatalf("AddMember (promote): %v", err)
+	}
+	members, err := db.ListMembers(ctx, team.ID)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("team has %d members, want 2", len(members))
+	}
+	if n, _ := db.CountOwners(ctx, team.ID); n != 2 {
+		t.Fatalf("team has %d owners after promotion, want 2", n)
+	}
+}

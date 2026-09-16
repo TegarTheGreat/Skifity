@@ -55,7 +55,9 @@
     "typeToConfirm": "输入 {{phrase}} 以确认",
     "deleteNamed": "删除 {{name}}？",
     "cannotBeUndone": "此操作无法撤销。",
-    "keepGoing": "继续"
+    "keepGoing": "继续",
+    "noMatches": "没有匹配项",
+    "noMatchesHelp": "试试更短的搜索词，或清除筛选。"
   },
   "nav": {
     "overview": "总览",
@@ -376,7 +378,13 @@
     "memory": "内存",
     "disk": "磁盘",
     "operatingSystem": "操作系统",
-    "lastSeen": "最后响应"
+    "lastSeen": "最后响应",
+    "filter": {
+      "all": "全部",
+      "ready": "就绪",
+      "attention": "需要处理"
+    },
+    "needAttention_other": "{{count}} 台需要处理"
   },
   "databases": {
     "title": "数据库",
@@ -475,7 +483,9 @@
     "noUpdateCheck": "{{product}} 不会联系任何服务器来检查更新。",
     "saved": "设置已保存。",
     "rotateKeyDone": "主密钥已轮换，所有已保存的机密都用新密钥重新加密。",
-    "rotateKeyPartial": "新的主密钥已生效，但部分机密未能重新加密。旧密钥已保留，以便这些机密仍可读取。"
+    "rotateKeyPartial": "新的主密钥已生效，但部分机密未能重新加密。旧密钥已保留，以便这些机密仍可读取。",
+    "edited": "已修改",
+    "unsaved_other": "{{count}} 项未保存的更改"
   },
   "errors": {
     "whatHappened": "发生了什么",

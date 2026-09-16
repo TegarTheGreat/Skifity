@@ -28,9 +28,50 @@ type Definition struct {
 	Placeholder string
 	// Secret means the value is encrypted and never shown again.
 	Secret bool
+	// Kind tells the panel what control to draw. Without it every setting is a
+	// text box, and a yes/no setting becomes a field where someone has to guess
+	// whether "yes", "true" or "1" is the word this one wants.
+	Kind Kind
+	// Options are the allowed values when Kind is KindChoice.
+	Options []string
+	// Multiline asks for a text area rather than a single line. Used for the
+	// values that genuinely are long, such as a private key.
+	Multiline bool
 	// Validate rejects values that would fail later in a confusing way. An
 	// empty value always passes, because clearing a setting is allowed.
 	Validate func(string) error
+}
+
+// Kind is the shape of a setting's value.
+type Kind string
+
+const (
+	// KindText is the default: a single line of free text.
+	KindText Kind = "text"
+	// KindBool is a switch. Stored as "true" or "false".
+	KindBool Kind = "bool"
+	// KindNumber is a whole number.
+	KindNumber Kind = "number"
+	// KindChoice is one of Options.
+	KindChoice Kind = "choice"
+	// KindURL, KindEmail and KindDomain are text with a keyboard hint and a
+	// matching input type, so a phone offers the right keys and the browser
+	// can help.
+	KindURL    Kind = "url"
+	KindEmail  Kind = "email"
+	KindDomain Kind = "domain"
+)
+
+// ResolvedKind returns the setting's kind, working it out from the other fields
+// when it was not set explicitly. A secret is always a password field.
+func (d Definition) ResolvedKind() Kind {
+	if d.Kind != "" {
+		return d.Kind
+	}
+	if len(d.Options) > 0 {
+		return KindChoice
+	}
+	return KindText
 }
 
 // Groups, in the order the UI shows them.
@@ -87,23 +128,25 @@ var Definitions = []Definition{
 		Key: KeyPanelURL, Label: "Panel URL", Group: GroupGeneral,
 		Help:        "The address people use to reach this panel. Used in links inside notifications and in webhook URLs.",
 		Placeholder: "https://panel.example.com",
+		Kind:        KindURL,
 		Validate:    validateURL,
 	},
 	{
 		Key: KeyBuilderDefault, Label: "Default builder", Group: GroupGeneral,
-		Help:        "Which builder to use when a repository has no Dockerfile. Railpack produces smaller images; Nixpacks is older and more widely tested.",
-		Placeholder: "railpack",
-		Validate:    validateOneOf("railpack", "nixpacks"),
+		Help:     "Which builder to use when a repository has no Dockerfile. Railpack produces smaller images; Nixpacks is older and more widely tested.",
+		Options:  []string{"railpack", "nixpacks"},
+		Validate: validateOneOf("railpack", "nixpacks"),
 	},
 	{
 		Key: KeyTelemetryDisabled, Label: "Disable usage reporting", Group: GroupGeneral,
-		Help:     "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed.",
-		Validate: validateBool,
+		Help: "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed.",
+		Kind: KindBool, Validate: validateBool,
 	},
 	{
 		Key: KeyWildcardDomain, Label: "Wildcard domain", Group: GroupDomains,
 		Help:        "A domain with a wildcard DNS record pointing at this cluster. Every app gets a free subdomain under it. Leave empty to use sslip.io addresses instead.",
 		Placeholder: "apps.example.com",
+		Kind:        KindDomain,
 		Validate:    validateDomain,
 	},
 	{
@@ -116,18 +159,20 @@ var Definitions = []Definition{
 		Key: KeyACMEEmail, Label: "Let's Encrypt email", Group: GroupDomains,
 		Help:        "Where Let's Encrypt sends certificate expiry warnings. Required before HTTPS certificates can be issued.",
 		Placeholder: "you@example.com",
+		Kind:        KindEmail,
 		Validate:    validateEmail,
 	},
 	{
 		Key: KeyACMEServer, Label: "ACME directory URL", Group: GroupDomains,
 		Help:        "Leave empty for Let's Encrypt production. Point it at the staging directory while you are testing, so you do not hit the rate limit.",
 		Placeholder: "https://acme-staging-v02.api.letsencrypt.org/directory",
+		Kind:        KindURL,
 		Validate:    validateURL,
 	},
 	{
 		Key: KeyGitHubAppID, Label: "GitHub App ID", Group: GroupGit,
 		Help:        "From the GitHub App you created for this panel. See the setup guide for the exact settings to use.",
-		Placeholder: "123456", Validate: validateInt,
+		Placeholder: "123456", Kind: KindNumber, Validate: validateInt,
 	},
 	{Key: KeyGitHubAppSlug, Label: "GitHub App slug", Group: GroupGit,
 		Help: "The name in the App's URL, used to build the installation link.", Placeholder: "my-skifity"},
@@ -136,15 +181,15 @@ var Definitions = []Definition{
 	{Key: KeyGitHubSecret, Label: "GitHub client secret", Group: GroupGit, Secret: true,
 		Help: "Shown once by GitHub when you generate it."},
 	{Key: KeyGitHubPrivateKey, Label: "GitHub App private key", Group: GroupGit, Secret: true,
-		Help:     "The PEM file GitHub downloads when you generate a key. Paste the whole thing, including the BEGIN and END lines.",
-		Validate: validatePEM},
+		Help:      "The PEM file GitHub downloads when you generate a key. Paste the whole thing, including the BEGIN and END lines.",
+		Multiline: true, Validate: validatePEM},
 	{Key: KeyGitHubWebhookSec, Label: "GitHub webhook secret", Group: GroupGit, Secret: true,
 		Help: "The secret you set on the App's webhook. Skifity rejects any push it cannot verify with this."},
 	{
 		Key: KeyS3Endpoint, Label: "S3 endpoint", Group: GroupStorage,
 		Help:        "Any S3-compatible service works: AWS, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself.",
 		Placeholder: "https://s3.eu-central-1.amazonaws.com",
-		Validate:    validateURL,
+		Kind:        KindURL, Validate: validateURL,
 	},
 	{Key: KeyS3Region, Label: "S3 region", Group: GroupStorage, Placeholder: "eu-central-1",
 		Help: "Some providers ignore this; AWS does not."},
@@ -154,33 +199,41 @@ var Definitions = []Definition{
 		Help: "Use a key that can only write to this bucket."},
 	{Key: KeyS3SecretKey, Label: "S3 secret key", Group: GroupStorage, Secret: true,
 		Help: "Stored encrypted and never shown again."},
-	{Key: KeyS3PathStyle, Label: "Use path-style URLs", Group: GroupStorage, Validate: validateBool,
+	{Key: KeyS3PathStyle, Label: "Use path-style URLs", Group: GroupStorage, Kind: KindBool, Validate: validateBool,
 		Help: "Turn this on for MinIO and most self-hosted S3 services."},
 	{
 		Key: KeyDNSProvider, Label: "DNS provider", Group: GroupDNS,
 		Help:        "Lets Skifity create DNS records for you when you add a domain. Leave empty to create them yourself.",
 		Placeholder: "cloudflare",
+		Options:     []string{"cloudflare", "route53", "digitalocean", "hetzner"},
 		Validate:    validateOneOf("cloudflare", "route53", "digitalocean", "hetzner"),
 	},
 	{Key: KeyDNSAPIToken, Label: "DNS API token", Group: GroupDNS, Secret: true,
 		Help: "A token scoped to edit records in one zone. Do not use a global account key."},
-	{Key: KeyDNSZone, Label: "DNS zone", Group: GroupDNS, Placeholder: "example.com", Validate: validateDomain,
+	{Key: KeyDNSZone, Label: "DNS zone", Group: GroupDNS, Placeholder: "example.com", Kind: KindDomain, Validate: validateDomain,
 		Help: "The zone records are created in."},
 	{Key: KeySMTPHost, Label: "SMTP host", Group: GroupEmail, Placeholder: "smtp.example.com",
 		Help: "Needed for email notifications and for password reset emails."},
-	{Key: KeySMTPPort, Label: "SMTP port", Group: GroupEmail, Placeholder: "587", Validate: validatePort},
-	{Key: KeySMTPUser, Label: "SMTP username", Group: GroupEmail},
-	{Key: KeySMTPPassword, Label: "SMTP password", Group: GroupEmail, Secret: true},
+	{Key: KeySMTPPort, Label: "SMTP port", Group: GroupEmail, Placeholder: "587",
+		Help: "587 for STARTTLS, which is what almost everything uses now. 465 is implicit TLS; 25 is unencrypted and usually blocked by hosting providers.",
+		Kind: KindNumber, Validate: validatePort},
+	{Key: KeySMTPUser, Label: "SMTP username", Group: GroupEmail,
+		Help: "Leave empty if your mail server accepts mail from this cluster without signing in."},
+	{Key: KeySMTPPassword, Label: "SMTP password", Group: GroupEmail, Secret: true,
+		Help: "Stored encrypted. Most providers want an app password here rather than your account password."},
 	{Key: KeySMTPFrom, Label: "Send email from", Group: GroupEmail, Placeholder: "skifity@example.com",
-		Validate: validateEmail},
-	{Key: KeySMTPTLS, Label: "Use STARTTLS", Group: GroupEmail, Validate: validateBool,
+		Help: "The address notifications appear to come from. It usually has to be one your mail server is allowed to send as, or the mail is rejected.",
+		Kind: KindEmail, Validate: validateEmail},
+	{Key: KeySMTPTLS, Label: "Use STARTTLS", Group: GroupEmail, Kind: KindBool, Validate: validateBool,
 		Help: "Leave on unless your mail server only accepts plain connections."},
 	{Key: KeyRegistryURL, Label: "External registry", Group: GroupRegistry,
 		Help:        "Where built images are pushed. Leave empty to use the registry inside the cluster, which is the simplest option.",
 		Placeholder: "registry.example.com/skifity",
 	},
-	{Key: KeyRegistryUser, Label: "Registry username", Group: GroupRegistry},
-	{Key: KeyRegistryPassword, Label: "Registry password", Group: GroupRegistry, Secret: true},
+	{Key: KeyRegistryUser, Label: "Registry username", Group: GroupRegistry,
+		Help: "Needed only for an external registry. The registry inside the cluster needs no credentials."},
+	{Key: KeyRegistryPassword, Label: "Registry password", Group: GroupRegistry, Secret: true,
+		Help: "A token with permission to push. Stored encrypted and never shown again."},
 }
 
 var index = func() map[string]Definition {
@@ -331,8 +384,8 @@ func validatePort(value string) error {
 }
 
 func validateBool(value string) error {
-	switch strings.ToLower(value) {
-	case "", "true", "false", "1", "0", "yes", "no":
+	switch value {
+	case "", "true", "false":
 		return nil
 	}
 	return errors.New("this setting is on or off")

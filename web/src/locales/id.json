@@ -55,7 +55,9 @@
     "typeToConfirm": "Ketik {{phrase}} untuk mengonfirmasi",
     "deleteNamed": "Hapus {{name}}?",
     "cannotBeUndone": "Tindakan ini tidak bisa dibatalkan.",
-    "keepGoing": "Lanjutkan"
+    "keepGoing": "Lanjutkan",
+    "noMatches": "Tidak ada yang cocok",
+    "noMatchesHelp": "Coba kata kunci yang lebih pendek, atau hapus filternya."
   },
   "nav": {
     "overview": "Ringkasan",
@@ -376,7 +378,13 @@
     "memory": "Memori",
     "disk": "Disk",
     "operatingSystem": "Sistem operasi",
-    "lastSeen": "Terakhir terlihat"
+    "lastSeen": "Terakhir terlihat",
+    "filter": {
+      "all": "Semua",
+      "ready": "Siap",
+      "attention": "Perlu perhatian"
+    },
+    "needAttention_other": "{{count}} server perlu perhatian"
   },
   "databases": {
     "title": "Database",
@@ -475,7 +483,9 @@
     "noUpdateCheck": "{{product}} tidak menghubungi server mana pun untuk memeriksa pembaruan.",
     "saved": "Pengaturan disimpan.",
     "rotateKeyDone": "Kunci utama telah dirotasi dan semua rahasia tersimpan dienkripsi ulang dengan kunci baru.",
-    "rotateKeyPartial": "Kunci utama baru sudah aktif, tetapi sebagian rahasia gagal dienkripsi ulang. Kunci lama tetap disimpan agar rahasia itu masih bisa dibaca."
+    "rotateKeyPartial": "Kunci utama baru sudah aktif, tetapi sebagian rahasia gagal dienkripsi ulang. Kunci lama tetap disimpan agar rahasia itu masih bisa dibaca.",
+    "edited": "Diubah",
+    "unsaved_other": "{{count}} perubahan belum disimpan"
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

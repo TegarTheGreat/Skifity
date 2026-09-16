@@ -313,6 +313,8 @@ export type AuditEvent = {
   at: string
 }
 
+export type SettingKind = "text" | "bool" | "number" | "choice" | "url" | "email" | "domain"
+
 export type Setting = {
   key: string
   value?: string
@@ -321,6 +323,10 @@ export type Setting = {
   label: string
   group: string
   help: string
+  /** Which control to draw. Without it a yes/no setting becomes a text box. */
+  kind: SettingKind
+  options?: string[]
+  multiline?: boolean
   placeholder?: string
 }
 

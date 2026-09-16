@@ -15,14 +15,19 @@ import (
 // settingView hides the value of an encrypted setting while still telling the UI
 // that it has been configured.
 type settingView struct {
-	Key         string `json:"key"`
-	Value       string `json:"value,omitempty"`
-	Secret      bool   `json:"secret"`
-	Configured  bool   `json:"configured"`
-	Label       string `json:"label"`
-	Group       string `json:"group"`
-	Help        string `json:"help"`
-	Placeholder string `json:"placeholder,omitempty"`
+	Key        string `json:"key"`
+	Value      string `json:"value,omitempty"`
+	Secret     bool   `json:"secret"`
+	Configured bool   `json:"configured"`
+	Label      string `json:"label"`
+	Group      string `json:"group"`
+	Help       string `json:"help"`
+	// Kind tells the panel which control to draw. Without it a yes/no setting
+	// is a text box where the user has to guess which word this one accepts.
+	Kind        string   `json:"kind"`
+	Options     []string `json:"options,omitempty"`
+	Multiline   bool     `json:"multiline,omitempty"`
+	Placeholder string   `json:"placeholder,omitempty"`
 }
 
 func (s *Server) handleListSettings(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +45,9 @@ func (s *Server) handleListSettings(w http.ResponseWriter, r *http.Request) {
 			Label:       def.Label,
 			Group:       def.Group,
 			Help:        def.Help,
+			Kind:        string(def.ResolvedKind()),
+			Options:     def.Options,
+			Multiline:   def.Multiline,
 			Placeholder: def.Placeholder,
 			Configured:  exists && row.Value != "",
 		}

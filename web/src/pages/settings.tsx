@@ -19,6 +19,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -29,6 +36,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Table,
   TableBody,
@@ -123,15 +133,21 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
   })
 
   if (settings.isLoading) return <Skeleton className="h-96" />
-  if (settings.error)
+  if (settings.error) {
     return <ErrorDisplay error={settings.error} onRetry={() => void settings.refetch()} />
+  }
 
   const items = settings.data?.items ?? []
   const dirty = Object.keys(draft).length > 0
-
   const shown = GROUPS.filter(
     (group) => (!only || only.includes(group.key)) && (!except || !except.includes(group.key)),
   )
+
+  /** The value a control should show: the edit in progress, else what is stored. */
+  const valueOf = (setting: Setting) =>
+    draft[setting.key] ?? (setting.secret ? "" : (setting.value ?? ""))
+
+  const set = (key: string, value: string) => setDraft({ ...draft, [key]: value })
 
   return (
     <div className="space-y-6">
@@ -143,31 +159,18 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
             <CardHeader>
               <CardTitle className="text-base">{t(group.label)}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {groupItems.map((setting) => (
-                <div key={setting.key} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={setting.key}>{setting.label}</Label>
-                    {setting.secret && setting.configured && (
-                      <Badge variant="outline" className="text-[10px]">
-                        {t("settings.configured")}
-                      </Badge>
-                    )}
-                  </div>
-                  <Input
-                    id={setting.key}
-                    type={setting.secret ? "password" : "text"}
-                    value={draft[setting.key] ?? (setting.secret ? "" : (setting.value ?? ""))}
-                    placeholder={
-                      setting.secret && setting.configured
-                        ? t("settings.secretStored")
-                        : setting.placeholder
-                    }
-                    onChange={(event) => setDraft({ ...draft, [setting.key]: event.target.value })}
+            <CardContent>
+              <FieldGroup>
+                {groupItems.map((setting) => (
+                  <SettingField
+                    key={setting.key}
+                    setting={setting}
+                    value={valueOf(setting)}
+                    edited={setting.key in draft}
+                    onChange={(value) => set(setting.key, value)}
                   />
-                  {setting.help && <p className="text-xs text-muted-foreground">{setting.help}</p>}
-                </div>
-              ))}
+                ))}
+              </FieldGroup>
             </CardContent>
           </Card>
         )
@@ -175,13 +178,135 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
 
       {save.error != null && <ErrorDisplay error={save.error} />}
 
-      <div className="sticky bottom-4 flex justify-end">
-        <Button disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? t("common.saving") : t("common.save")}
-        </Button>
-      </div>
+      {/* The bar only appears once something has changed, so it is never a
+          button that does nothing. */}
+      {dirty && (
+        <div className="sticky bottom-4 z-10 flex items-center justify-between gap-3 rounded-lg border bg-card/95 px-4 py-3 shadow-lg backdrop-blur">
+          <span className="text-sm text-muted-foreground">
+            {t("settings.unsaved", { count: Object.keys(draft).length })}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setDraft({})} disabled={save.isPending}>
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+              {save.isPending && <Spinner />}
+              {save.isPending ? t("common.saving") : t("common.save")}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+/**
+ * One setting, drawn as the kind of thing it actually is.
+ *
+ * Every setting used to be a text box, so "Use STARTTLS" was a field where you
+ * had to guess whether it wanted "true", "yes" or "on" — and the server only
+ * accepted some of those.
+ */
+function SettingField({
+  setting,
+  value,
+  edited,
+  onChange,
+}: {
+  setting: Setting
+  value: string
+  edited: boolean
+  onChange: (value: string) => void
+}) {
+  const { t } = useTranslation()
+  const id = `setting-${setting.key}`
+  const placeholder =
+    setting.secret && setting.configured ? t("settings.secretStored") : setting.placeholder
+
+  if (setting.kind === "bool") {
+    return (
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldLabel htmlFor={id}>{setting.label}</FieldLabel>
+          <FieldDescription>{setting.help}</FieldDescription>
+        </FieldContent>
+        <Switch
+          id={id}
+          checked={value === "true"}
+          onCheckedChange={(checked) => onChange(checked ? "true" : "false")}
+        />
+      </Field>
+    )
+  }
+
+  return (
+    <Field data-edited={edited || undefined}>
+      <FieldLabel htmlFor={id}>
+        {setting.label}
+        {setting.secret && setting.configured && !edited && (
+          <Badge variant="outline" className="ml-2 text-[10px]">
+            {t("settings.configured")}
+          </Badge>
+        )}
+        {edited && (
+          <Badge variant="secondary" className="ml-2 text-[10px]">
+            {t("settings.edited")}
+          </Badge>
+        )}
+      </FieldLabel>
+
+      {setting.kind === "choice" ? (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id={id}>
+            <SelectValue placeholder={setting.placeholder ?? t("common.none")} />
+          </SelectTrigger>
+          <SelectContent>
+            {(setting.options ?? []).map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : setting.multiline ? (
+        <Textarea
+          id={id}
+          value={value}
+          rows={6}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className="font-mono text-xs"
+        />
+      ) : (
+        <Input
+          id={id}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          type={inputType(setting)}
+          inputMode={setting.kind === "number" ? "numeric" : undefined}
+          autoComplete={setting.secret ? "new-password" : "off"}
+          spellCheck={false}
+        />
+      )}
+
+      <FieldDescription>{setting.help}</FieldDescription>
+    </Field>
+  )
+}
+
+function inputType(setting: Setting): string {
+  if (setting.secret) return "password"
+  switch (setting.kind) {
+    case "number":
+      return "number"
+    case "email":
+      return "email"
+    case "url":
+      return "url"
+    default:
+      return "text"
+  }
 }
 
 function VersionCard() {

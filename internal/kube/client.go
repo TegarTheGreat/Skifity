@@ -297,6 +297,36 @@ func (c *Client) nodeUsage(ctx context.Context) map[string]nodeUsage {
 	return out
 }
 
+// podUsage reads what each of an app's instances is using right now.
+//
+// A pod's usage is the sum of its containers': the panel shows one number per
+// instance, because "which of the two containers in this pod" is a Kubernetes
+// question and the product does not ask them.
+func (c *Client) podUsage(ctx context.Context, namespace string) map[string]nodeUsage {
+	out := map[string]nodeUsage{}
+	if c.metrics == nil {
+		return out
+	}
+	// The whole namespace, matched by pod name against the app's own pods.
+	// metrics-server's label filtering has never been something to rely on,
+	// and a namespace holds a handful of pods.
+	list, err := c.metrics.MetricsV1beta1().PodMetricses(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		// metrics-server is optional and may not be ready. A missing number is
+		// shown as unknown, which is true, rather than failing the page.
+		return out
+	}
+	for _, item := range list.Items {
+		var used nodeUsage
+		for _, container := range item.Containers {
+			used.cpuMilli += container.Usage.Cpu().MilliValue()
+			used.memoryMB += container.Usage.Memory().Value() / (1024 * 1024)
+		}
+		out[item.Name] = used
+	}
+	return out
+}
+
 func (c *Client) podCountsByNode(ctx context.Context) map[string]int {
 	out := map[string]int{}
 	pods, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{
@@ -334,8 +364,16 @@ func (c *Client) AppStatus(ctx context.Context, namespace, appSlug string) (AppS
 	if err != nil {
 		return status, fmt.Errorf("list the app's instances: %w", err)
 	}
+	// What each instance is actually using. The fields existed from the start
+	// and nothing ever filled them, so the panel showed an em-dash where the
+	// number that decides whether to scale should be.
+	usage := c.podUsage(ctx, namespace)
 	for _, pod := range pods.Items {
-		status.Instances = append(status.Instances, describePod(pod))
+		instance := describePod(pod)
+		if used, ok := usage[pod.Name]; ok {
+			instance.CPUM, instance.MemoryMB = used.cpuMilli, used.memoryMB
+		}
+		status.Instances = append(status.Instances, instance)
 	}
 	sort.Slice(status.Instances, func(i, j int) bool { return status.Instances[i].Name < status.Instances[j].Name })
 

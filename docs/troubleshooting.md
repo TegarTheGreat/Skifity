@@ -130,10 +130,22 @@ elsewhere.
 The panel's database and master key live on the first control plane server, in
 `/var/lib/skifity` and `/etc/skifity`. To move to a new server:
 
-1. Install Skifity on the new server.
-2. Stop the panel: `kubectl -n skifity-system scale deploy/skifity-panel --replicas=0`
-3. Copy `/var/lib/skifity/panel.db` and `/etc/skifity/master.key` across.
-4. Start it again: `kubectl -n skifity-system scale deploy/skifity-panel --replicas=1`
+1. On the old server, take a consistent copy of the database:
+
+   ```
+   skifity admin backup-db /root/panel-backup.db
+   ```
+
+   Do not copy `panel.db` on its own. The database runs in WAL mode, so a
+   committed change can still be sitting in `panel.db-wal`; a copy of the one
+   file comes back missing it and nothing tells you. `backup-db` takes the copy
+   through SQLite itself, and can be run while the panel is up.
+
+2. Install Skifity on the new server.
+3. Stop the panel: `kubectl -n skifity-system scale deploy/skifity-panel --replicas=0`
+4. Put `/root/panel-backup.db` in place as `/var/lib/skifity/panel.db`, and copy
+   `/etc/skifity/master.key` across.
+5. Start it again: `kubectl -n skifity-system scale deploy/skifity-panel --replicas=1`
 
 Without the master key the database is unreadable, which is the point of the
 recovery key you were asked to download. [Configuration](configuration.md) has

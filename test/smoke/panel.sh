@@ -330,6 +330,15 @@ curl -fsS -b "$WORKDIR/cookies" "$BASE/api/me" | grep -q '"recovery_codes_left":
   || fail "the recovery codes were printed and not stored"
 pass "the recovery codes are stored, not just printed"
 
+# The panel's own database has to be copyable, and "cp panel.db" is not it: in
+# WAL mode a committed change can still be sitting in panel.db-wal.
+"$BINARY" admin backup-db --database "$WORKDIR/panel.db" "$WORKDIR/panel-copy.db" >/dev/null ||
+  fail "admin backup-db failed"
+[ -s "$WORKDIR/panel-copy.db" ] || fail "the database copy is empty"
+"$BINARY" admin list-users --database "$WORKDIR/panel-copy.db" | grep -q 'owner@example.test' ||
+  fail "the copy does not hold the account that was there when it was taken"
+pass "the panel's database can be copied consistently while it is running"
+
 # Nobody can sign in is the one situation the API cannot fix, so the recovery
 # path has to work: it reads the database directly, on the server.
 "$BINARY" admin list-users --database "$WORKDIR/panel.db" | grep -q 'owner@example.test' ||

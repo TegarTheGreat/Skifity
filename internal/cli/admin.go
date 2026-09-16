@@ -28,11 +28,12 @@ func cmdAdmin(ctx context.Context, args []string, out io.Writer) error {
 
 Usage:
   %s admin reset-password <email>   set a new password for an account
-  %s admin list-users              show the accounts on this panel
+  %s admin list-users               show the accounts on this panel
+  %s admin backup-db <path>         write a consistent copy of the database
 
 These run on the server the panel is installed on and read its database
 directly, so they work when nobody can sign in. They need to be run as root.
-`, version.Binary, version.Binary, version.Binary)
+`, version.Binary, version.Binary, version.Binary, version.Binary)
 		return nil
 	}
 
@@ -41,6 +42,8 @@ directly, so they work when nobody can sign in. They need to be run as root.
 		return adminResetPassword(ctx, args[1:], out)
 	case "list-users":
 		return adminListUsers(ctx, args[1:], out)
+	case "backup-db":
+		return adminBackupDatabase(ctx, args[1:], out)
 	default:
 		return errdoc.BadRequest(fmt.Sprintf("%q is not an admin command. Try `%s admin help`.",
 			args[0], version.Binary))
@@ -177,4 +180,63 @@ func adminListUsers(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprintf(out, "%s  %s%s\n", user.Email, role, state)
 	}
 	return nil
+}
+
+// adminBackupDatabase writes a copy of the panel's own database.
+//
+// The instruction used to be "copy panel.db", and that is wrong: the database
+// runs in WAL mode, so a committed transaction can be in panel.db-wal and not
+// yet in panel.db. The copy would come back missing whatever had not been
+// checkpointed, and nothing would say so — which is the worst way for a backup
+// to fail, because it is discovered during a restore.
+func adminBackupDatabase(ctx context.Context, args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("backup-db", flag.ContinueOnError)
+	flags.SetOutput(out)
+	databasePath := flags.String("database", "", "the panel database to copy")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 1 {
+		return errdoc.BadRequest(fmt.Sprintf(
+			"Give the file to write, for example `%s admin backup-db /root/panel-backup.db`.",
+			version.Binary))
+	}
+	target := flags.Arg(0)
+
+	db, err := openPanelDatabase(ctx, *databasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	if err := db.Snapshot(ctx, target); err != nil {
+		return errdoc.New("admin.backup_failed", "The database could not be copied").
+			WithCause("%s", err.Error()).
+			WithImpact("No copy was written.").
+			WithFix("Check that the directory exists, that the file does not, and that there is room on the disk.")
+	}
+
+	info, statErr := os.Stat(target)
+	size := ""
+	if statErr == nil {
+		size = fmt.Sprintf(" (%d bytes)", info.Size())
+	}
+	fmt.Fprintf(out, "\nWrote %s%s.\n", target, size)
+	fmt.Fprintf(out, "This is the whole panel except its master key. Copy %s too, and keep\n"+
+		"the two in different places: together they are everything, apart neither is enough.\n\n",
+		masterKeyPathFor(*databasePath))
+	return nil
+}
+
+// masterKeyPathFor names the key file that goes with a database, for the note
+// above. It is the configured one unless the caller pointed somewhere else.
+func masterKeyPathFor(databaseOverride string) string {
+	if databaseOverride != "" {
+		return version.ConfigDir + "/master.key"
+	}
+	cfg, err := config.Load("")
+	if err != nil || cfg.MasterKeyPath == "" {
+		return version.ConfigDir + "/master.key"
+	}
+	return cfg.MasterKeyPath
 }

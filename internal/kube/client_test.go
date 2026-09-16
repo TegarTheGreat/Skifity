@@ -7,10 +7,14 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
+	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
+	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 )
 
 // These tests run against client-go's fake clientset, so the same code path that
@@ -326,5 +330,94 @@ data:
 	}
 	if !strings.Contains(data, `echo "---"`) {
 		t.Fatalf("the block scalar was split at an indented separator: %q", data)
+	}
+}
+
+// TestAnInstanceReportsWhatItUses: the CPU and memory fields existed from the
+// start and nothing ever filled them, so the panel printed an em-dash where
+// the number that decides whether to scale should be.
+func TestAnInstanceReportsWhatItUses(t *testing.T) {
+	labelSet := map[string]string{"app.kubernetes.io/name": "web"}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "acme-shop-production"},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labelSet},
+		},
+		Status: appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-abc", Namespace: "acme-shop-production", Labels: labelSet},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+		},
+	}
+	podMetrics := &metricsv1beta1.PodMetrics{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-abc", Namespace: "acme-shop-production", Labels: labelSet},
+		Containers: []metricsv1beta1.ContainerMetrics{
+			{Name: "web", Usage: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("120m"),
+				corev1.ResourceMemory: resource.MustParse("200Mi"),
+			}},
+			// A sidecar counts towards the instance: the panel shows one
+			// number per instance, not one per container.
+			{Name: "sidecar", Usage: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("30m"),
+				corev1.ResourceMemory: resource.MustParse("56Mi"),
+			}},
+		},
+	}
+
+	// The metrics fake's tracker does not serve PodMetrics, so the list is
+	// answered directly. Everything above and below it is the real path.
+	metricsClient := metricsfake.NewSimpleClientset()
+	metricsClient.PrependReactor("list", "pods",
+		func(ktesting.Action) (bool, runtime.Object, error) {
+			return true, &metricsv1beta1.PodMetricsList{
+				Items: []metricsv1beta1.PodMetrics{*podMetrics},
+			}, nil
+		})
+
+	c := &Client{
+		clientset:       fake.NewSimpleClientset(deployment, pod),
+		metrics:         metricsClient,
+		systemNamespace: "skifity-system",
+	}
+
+	status, err := c.AppStatus(t.Context(), "acme-shop-production", "web")
+	if err != nil {
+		t.Fatalf("AppStatus: %v", err)
+	}
+	if len(status.Instances) != 1 {
+		t.Fatalf("got %d instances, want 1", len(status.Instances))
+	}
+	if got := status.Instances[0].CPUM; got != 150 {
+		t.Errorf("instance CPU is %dm, want 150m (both containers)", got)
+	}
+	if got := status.Instances[0].MemoryMB; got != 256 {
+		t.Errorf("instance memory is %dMB, want 256MB (both containers)", got)
+	}
+}
+
+// TestUsageIsUnknownWithoutMetrics: metrics-server is optional, and a missing
+// number is shown as unknown rather than failing the page.
+func TestUsageIsUnknownWithoutMetrics(t *testing.T) {
+	labelSet := map[string]string{"app.kubernetes.io/name": "web"}
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "acme-shop-production"},
+		Spec:       appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{MatchLabels: labelSet}},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-abc", Namespace: "acme-shop-production", Labels: labelSet},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	c := &Client{clientset: fake.NewSimpleClientset(deployment, pod), systemNamespace: "skifity-system"}
+
+	status, err := c.AppStatus(t.Context(), "acme-shop-production", "web")
+	if err != nil {
+		t.Fatalf("AppStatus: %v", err)
+	}
+	if len(status.Instances) != 1 || status.Instances[0].CPUM != 0 {
+		t.Fatal("a cluster with no metrics-server did not answer at all")
 	}
 }

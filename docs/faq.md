@@ -79,10 +79,11 @@ container images and ordinary Kubernetes objects.
 
 ## Does it support Docker Compose?
 
-A Compose file can be imported to create apps, but Skifity runs them as
-Kubernetes objects rather than with Compose itself. Anything Compose-specific —
-`depends_on` ordering, host networking, bind mounts of arbitrary host paths —
-does not survive the translation and the panel says so when it happens.
+Not yet, and this page used to say it did. A repository with a Compose file in
+it deploys like any other — the builder ignores the Compose file and builds the
+application — but there is no import that turns a Compose file into several
+apps and databases. It is on the list; until it is here, create the app and the
+databases it needs in the panel and link them.
 
 ## Can an AI assistant use it?
 

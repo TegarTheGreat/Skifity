@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -563,5 +564,69 @@ func TestLastOwnerProtectionData(t *testing.T) {
 	}
 	if n, _ := db.CountOwners(ctx, team.ID); n != 2 {
 		t.Fatalf("team has %d owners after promotion, want 2", n)
+	}
+}
+
+// TestSnapshotIsCompleteWhileTheWriterIsRunning: the instruction used to be
+// "copy panel.db", and in WAL mode a committed transaction can be in
+// panel.db-wal and not yet in panel.db. A copy of the one file comes back
+// missing whatever was not checkpointed, and nothing says so — which is the
+// worst way for a backup to fail, because it is found out during a restore.
+func TestSnapshotIsCompleteWhileTheWriterIsRunning(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "panel.db")
+
+	db, err := Open(t.Context(), path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	team := Team{Name: "Acme", Slug: "acme"}
+	if err := db.CreateTeam(t.Context(), &team); err != nil {
+		t.Fatalf("CreateTeam: %v", err)
+	}
+
+	snapshot := filepath.Join(dir, "copy.db")
+	if err := db.Snapshot(t.Context(), snapshot); err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	// Read it back as its own database, without the original's WAL beside it.
+	// This is what a restore on another machine does.
+	copied, err := Open(t.Context(), snapshot)
+	if err != nil {
+		t.Fatalf("open the snapshot: %v", err)
+	}
+	defer copied.Close()
+
+	restored, err := copied.GetTeam(t.Context(), team.ID)
+	if err != nil {
+		t.Fatalf("the team written before the snapshot is not in it: %v", err)
+	}
+	if restored.Slug != "acme" {
+		t.Fatalf("the snapshot holds %q, want acme", restored.Slug)
+	}
+}
+
+// TestSnapshotRefusesToOverwrite: a backup that quietly replaces the previous
+// one is a backup that exists once.
+func TestSnapshotRefusesToOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	db, err := Open(t.Context(), filepath.Join(dir, "panel.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	existing := filepath.Join(dir, "copy.db")
+	if err := os.WriteFile(existing, []byte("not a database"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := db.Snapshot(t.Context(), existing); err == nil {
+		t.Fatal("an existing file was overwritten")
+	}
+	if err := db.Snapshot(t.Context(), filepath.Join(dir, "it's.db")); err == nil {
+		t.Fatal("a path with a quote in it was accepted into a literal SQL statement")
 	}
 }

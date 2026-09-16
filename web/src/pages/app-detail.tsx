@@ -246,9 +246,12 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
                   <TableHead>{t("common.status")}</TableHead>
                   <TableHead className="hidden sm:table-cell">{t("apps.node")}</TableHead>
                   <TableHead className="hidden md:table-cell">{t("apps.restarts")}</TableHead>
-                  <TableHead className="hidden md:table-cell">{t("scaling.cpuReserved")}</TableHead>
+                  {/* What the instance is using, not what it reserved: the
+                      reserved numbers are the same for every instance and are
+                      on the scaling tab, where they can be changed. */}
+                  <TableHead className="hidden md:table-cell">{t("dashboard.cpuUsed")}</TableHead>
                   <TableHead className="hidden md:table-cell">
-                    {t("scaling.memoryReserved")}
+                    {t("dashboard.memoryUsed")}
                   </TableHead>
                   <TableHead className="hidden lg:table-cell">{t("common.created")}</TableHead>
                 </TableRow>

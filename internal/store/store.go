@@ -308,3 +308,31 @@ func scanTime(v sql.NullString) time.Time {
 	}
 	return t
 }
+
+// Snapshot writes a consistent copy of the database to a path.
+//
+// Not a file copy. The database runs in WAL mode, so a committed transaction
+// can live in panel.db-wal and not yet in panel.db: copying the one file, which
+// is what the documentation used to tell people to do, silently loses whatever
+// had not been checkpointed. VACUUM INTO takes the copy through SQLite itself,
+// which means it is consistent, complete, and compacted, and it can be done
+// while the panel is running.
+func (db *DB) Snapshot(ctx context.Context, path string) error {
+	if path == "" {
+		return fmt.Errorf("a snapshot needs somewhere to write to")
+	}
+	if _, err := os.Stat(path); err == nil {
+		// VACUUM INTO refuses an existing file, and saying so is friendlier
+		// than passing SQLite's message through.
+		return fmt.Errorf("%s already exists; choose a path that does not", path)
+	}
+	// The path is a literal because VACUUM INTO does not take a bound
+	// parameter, so a quote in it would end the statement.
+	if strings.ContainsAny(path, `'"`) {
+		return fmt.Errorf("a snapshot path cannot contain quotes")
+	}
+	if _, err := db.ExecContext(ctx, `VACUUM INTO '`+path+`'`); err != nil {
+		return fmt.Errorf("write a snapshot to %s: %w", path, err)
+	}
+	return nil
+}

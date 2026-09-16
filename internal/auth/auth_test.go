@@ -1,10 +1,15 @@
 package auth
 
 import (
+	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"skifity/internal/crypto"
+	"skifity/internal/store"
 )
 
 func TestPasswordRoundTrip(t *testing.T) {
@@ -203,5 +208,102 @@ func TestHashTokenIsStableAndOneWay(t *testing.T) {
 	}
 	if strings.Contains(a, "abc123") {
 		t.Fatal("the hash contains the token")
+	}
+}
+
+// Sign-in rate limiting is a safe default the product promises, and an
+// untested limit is a limit that quietly stops working.
+func TestSignInIsRateLimited(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("create a keyring: %v", err)
+	}
+	service := NewService(db, keyring, time.Hour, false)
+
+	const email = "owner@example.test"
+	const password = "a reasonable passphrase"
+	hash, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("hash the password: %v", err)
+	}
+	user := store.User{Email: email, Name: "Owner", PasswordHash: hash, IsAdmin: true}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+
+	limit := DefaultLockout().MaxPerAccount
+
+	// Wrong password, up to the limit: each is refused as a bad credential and
+	// never leaks whether the account exists.
+	for attempt := 0; attempt < limit; attempt++ {
+		_, err := service.Login(ctx, email, "not the password", "", "198.51.100.10", "test")
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("attempt %d gave %v, want ErrInvalidCredentials", attempt+1, err)
+		}
+	}
+
+	// One more, and the account is locked rather than checked.
+	if _, err := service.Login(ctx, email, "not the password", "", "198.51.100.10", "test"); !errors.Is(err, ErrLockedOut) {
+		t.Fatalf("after %d failures the answer was %v, want ErrLockedOut", limit, err)
+	}
+
+	// The *right* password must be refused too. A limit that lets the correct
+	// password through is not a limit: an attacker who guesses it on the next
+	// attempt walks in.
+	if _, err := service.Login(ctx, email, password, "", "198.51.100.10", "test"); !errors.Is(err, ErrLockedOut) {
+		t.Fatalf("a locked-out account accepted the right password: %v", err)
+	}
+
+	// Another address must not be punished for this one's failures, or one
+	// attacker could lock everybody out of a shared account on purpose.
+	second := store.User{Email: "other@example.test", Name: "Other", PasswordHash: hash}
+	if err := db.CreateUser(ctx, &second); err != nil {
+		t.Fatalf("create the second user: %v", err)
+	}
+	if _, err := service.Login(ctx, second.Email, password, "", "203.0.113.20", "test"); err != nil {
+		t.Fatalf("an unrelated account from another address was refused: %v", err)
+	}
+}
+
+// An unknown account and a wrong password must be indistinguishable, or the
+// sign-in form becomes a way to enumerate who has an account here.
+func TestUnknownAccountLooksLikeAWrongPassword(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("create a keyring: %v", err)
+	}
+	service := NewService(db, keyring, time.Hour, false)
+
+	hash, err := HashPassword("a reasonable passphrase")
+	if err != nil {
+		t.Fatalf("hash the password: %v", err)
+	}
+	user := store.User{Email: "owner@example.test", Name: "Owner", PasswordHash: hash}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+
+	_, wrongPassword := service.Login(ctx, user.Email, "wrong", "", "198.51.100.30", "test")
+	_, noSuchAccount := service.Login(ctx, "nobody@example.test", "wrong", "", "198.51.100.31", "test")
+
+	if !errors.Is(wrongPassword, ErrInvalidCredentials) || !errors.Is(noSuchAccount, ErrInvalidCredentials) {
+		t.Fatalf("expected both to be ErrInvalidCredentials, got %v and %v", wrongPassword, noSuchAccount)
+	}
+	if wrongPassword.Error() != noSuchAccount.Error() {
+		t.Errorf("the two failures read differently: %q and %q", wrongPassword, noSuchAccount)
 	}
 }

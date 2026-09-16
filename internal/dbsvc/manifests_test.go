@@ -229,3 +229,52 @@ func TestInterpretCNPGStatus(t *testing.T) {
 		}
 	}
 }
+
+// TestDatabasePodsSatisfyRestrictedPodSecurity: every environment namespace
+// enforces the restricted profile. A database that does not satisfy it is not
+// scheduled at all, and the failure looks like a cluster problem rather than a
+// manifest that was never going to work.
+func TestDatabasePodsSatisfyRestrictedPodSecurity(t *testing.T) {
+	for _, engine := range []string{EngineRedis, EngineMySQL} {
+		spec := Spec{
+			Name: "main", Namespace: "acme-shop-production", Engine: engine,
+			DatabaseID: "db_1", TeamID: "team_1", Password: "not-a-real-password",
+		}
+		spec.Defaults()
+
+		var objects []any
+		if engine == EngineRedis {
+			objects = BuildRedis(spec)
+		} else {
+			objects = BuildMySQL(spec)
+		}
+
+		set, ok := objects[0].(*appsv1.StatefulSet)
+		if !ok {
+			t.Fatalf("%s: the first object is %T, want a StatefulSet", engine, objects[0])
+		}
+		pod := set.Spec.Template.Spec
+
+		if pod.SecurityContext == nil || pod.SecurityContext.SeccompProfile == nil ||
+			pod.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+			t.Errorf("%s: the pod does not set the default seccomp profile, so it is refused", engine)
+		}
+		if pod.SecurityContext == nil || pod.SecurityContext.RunAsNonRoot == nil ||
+			!*pod.SecurityContext.RunAsNonRoot {
+			t.Errorf("%s: the pod does not declare runAsNonRoot", engine)
+		}
+		if pod.SecurityContext.RunAsUser == nil || *pod.SecurityContext.RunAsUser == 0 {
+			t.Errorf("%s: the pod does not name a non-root user", engine)
+		}
+		for _, container := range pod.Containers {
+			sc := container.SecurityContext
+			if sc == nil || sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+				t.Errorf("%s: %s may escalate privileges", engine, container.Name)
+			}
+			if sc == nil || sc.Capabilities == nil || len(sc.Capabilities.Drop) == 0 ||
+				sc.Capabilities.Drop[0] != "ALL" {
+				t.Errorf("%s: %s does not drop every capability", engine, container.Name)
+			}
+		}
+	}
+}

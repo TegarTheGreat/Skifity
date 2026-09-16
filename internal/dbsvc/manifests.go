@@ -251,6 +251,11 @@ func BuildRedis(s Spec) []any {
 						RunAsNonRoot: ptr(true),
 						RunAsUser:    ptr(int64(999)),
 						FSGroup:      ptr(int64(999)),
+						// Every environment namespace enforces the restricted
+						// Pod Security profile, which refuses a pod that does
+						// not name a seccomp profile. Without this the database
+						// is never scheduled at all.
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					},
 					AutomountServiceAccountToken: ptr(false),
 					Containers: []corev1.Container{{
@@ -318,6 +323,11 @@ func BuildMySQL(s Spec) []any {
 						RunAsNonRoot: ptr(true),
 						RunAsUser:    ptr(int64(999)),
 						FSGroup:      ptr(int64(999)),
+						// Every environment namespace enforces the restricted
+						// Pod Security profile, which refuses a pod that does
+						// not name a seccomp profile. Without this the database
+						// is never scheduled at all.
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 					},
 					AutomountServiceAccountToken: ptr(false),
 					Containers: []corev1.Container{{

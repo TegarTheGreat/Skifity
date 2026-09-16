@@ -2,6 +2,7 @@ package backup
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -31,12 +32,19 @@ type JobSpec struct {
 	Restore bool
 	// BackupID ties the job back to the panel's record.
 	BackupID string
-	Image    string
+	// Image runs the database's own client tools.
+	Image string
+	// TransferImage talks to the storage service. It is a second image because
+	// no database image ships curl, and installing one inside the job would
+	// need root.
+	TransferImage string
 	// TimeoutSeconds bounds the job.
 	TimeoutSeconds int
+	// WorkspaceGB is how much room the staged dump may take.
+	WorkspaceGB int
 }
 
-// Defaults fills in the image and timeout.
+// Defaults fills in the images and the timeout.
 func (s *JobSpec) Defaults() {
 	if s.Image == "" {
 		switch s.Engine {
@@ -52,8 +60,41 @@ func (s *JobSpec) Defaults() {
 			s.Image = "alpine:3"
 		}
 	}
+	if s.TransferImage == "" {
+		s.TransferImage = DefaultTransferImage
+	}
 	if s.TimeoutSeconds == 0 {
 		s.TimeoutSeconds = 2 * 60 * 60
+	}
+	if s.WorkspaceGB == 0 {
+		s.WorkspaceGB = 20
+	}
+}
+
+// DefaultTransferImage is the image that talks to the storage service.
+//
+// It is a separate image on purpose: no database image ships curl, and
+// installing it inside the job needs root, which the namespace does not allow.
+const DefaultTransferImage = "curlimages/curl:8.11.1"
+
+// runAsUser is the account each image expects to run as.
+//
+// The namespace enforces the restricted Pod Security profile, which refuses a
+// pod that could run as root. These images all default to root and drop
+// privileges in their entrypoint, which a backup job never reaches, so the uid
+// is named here instead.
+func runAsUserFor(image, engine string) int64 {
+	switch {
+	case strings.HasPrefix(image, "curlimages/curl"):
+		return 100 // curl_user
+	case engine == dbsvc.EnginePostgres:
+		return 70 // postgres, in the Alpine image
+	case engine == dbsvc.EngineMySQL:
+		return 999 // mysql
+	case engine == dbsvc.EngineRedis:
+		return 999 // redis
+	default:
+		return 65532
 	}
 }
 
@@ -76,7 +117,25 @@ func (s JobSpec) Validate() error {
 	}
 }
 
+// workspace is where the dump is staged between the two containers.
+const workspace = "/work"
+
+// dumpFile is the staged dump, compressed.
+const dumpFile = workspace + "/dump.gz"
+
 // BuildJob renders the Kubernetes Job that does the work.
+//
+// Two containers, not one, and that is the whole shape of this file.
+//
+// The dump needs the database's own client tools; the transfer needs curl. No
+// image has both, and installing curl inside the job needs root — which the
+// namespace's restricted Pod Security profile refuses, so the pod was rejected
+// before it ran a single line.
+//
+// The dump is staged on a shared volume rather than streamed into curl,
+// because curl reading from a pipe has no length to declare and sends
+// Transfer-Encoding: chunked, which S3 answers with 501 on a presigned PUT.
+// A file on disk has a size, and the upload is accepted.
 func BuildJob(s JobSpec) (*batchv1.Job, error) {
 	s.Defaults()
 	if err := s.Validate(); err != nil {
@@ -90,14 +149,22 @@ func BuildJob(s JobSpec) (*batchv1.Job, error) {
 		version.LabelKey("backup-id"):  s.BackupID,
 	}
 
-	script := backupScript(s)
+	// A backup dumps then uploads; a restore downloads then loads. Either way
+	// the first step is an init container, so the second never starts on a
+	// half-finished file.
+	var first, second corev1.Container
 	if s.Restore {
-		script = restoreScript(s)
+		first = s.transferContainer("download", downloadScript())
+		second = s.databaseContainer("load", restoreScript(s))
+	} else {
+		first = s.databaseContainer("dump", backupScript(s))
+		second = s.transferContainer("upload", uploadScript())
 	}
 
 	backoff := int32(0)
 	deadline := int64(s.TimeoutSeconds)
 	ttl := int32(3600)
+	workspaceSize := resource.MustParse(strconv.Itoa(s.WorkspaceGB) + "Gi")
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{APIVersion: "batch/v1", Kind: "Job"},
@@ -113,32 +180,20 @@ func BuildJob(s JobSpec) (*batchv1.Job, error) {
 				Spec: corev1.PodSpec{
 					RestartPolicy:                corev1.RestartPolicyNever,
 					AutomountServiceAccountToken: ptr(false),
-					Containers: []corev1.Container{{
-						Name:    "backup",
-						Image:   s.Image,
-						Command: []string{"/bin/sh", "-c"},
-						Args:    []string{script},
-						Env: []corev1.EnvVar{
-							secretEnv("DB_HOST", s.CredentialsSecret, "host"),
-							secretEnv("DB_PORT", s.CredentialsSecret, "port"),
-							secretEnv("DB_USER", s.CredentialsSecret, "username"),
-							secretEnv("DB_PASSWORD", s.CredentialsSecret, "password"),
-							secretEnv("DB_NAME", s.CredentialsSecret, "database"),
-							// The presigned URL is a credential in its own
-							// right: it grants access to the bucket until it
-							// expires, so it is never an argument.
-							secretEnv("BACKUP_URL", s.URLSecret, "url"),
-						},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("100m"),
-								corev1.ResourceMemory: resource.MustParse("128Mi"),
-							},
-							Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
-						},
-						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: ptr(false),
-							Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: ptr(true),
+						// The two containers run as different accounts and
+						// share one volume, so the group is what lets both
+						// write to it.
+						FSGroup:        ptr(int64(65532)),
+						SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
+					},
+					InitContainers: []corev1.Container{first},
+					Containers:     []corev1.Container{second},
+					Volumes: []corev1.Volume{{
+						Name: "workspace",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{SizeLimit: &workspaceSize},
 						},
 					}},
 				},
@@ -147,10 +202,60 @@ func BuildJob(s JobSpec) (*batchv1.Job, error) {
 	}, nil
 }
 
-// backupScript dumps a database and uploads it.
-//
-// The pipeline never touches disk: a dump large enough to matter is also large
-// enough to fill the container's writable layer.
+// databaseContainer runs a dump or a load with the database's own client.
+func (s JobSpec) databaseContainer(name, script string) corev1.Container {
+	container := s.container(name, s.Image, script)
+	container.Env = []corev1.EnvVar{
+		secretEnv("DB_HOST", s.CredentialsSecret, "host"),
+		secretEnv("DB_PORT", s.CredentialsSecret, "port"),
+		secretEnv("DB_USER", s.CredentialsSecret, "username"),
+		secretEnv("DB_PASSWORD", s.CredentialsSecret, "password"),
+		secretEnv("DB_NAME", s.CredentialsSecret, "database"),
+	}
+	container.SecurityContext.RunAsUser = ptr(runAsUserFor(s.Image, s.Engine))
+	return container
+}
+
+// transferContainer moves the staged file to or from the storage service.
+func (s JobSpec) transferContainer(name, script string) corev1.Container {
+	container := s.container(name, s.TransferImage, script)
+	container.Env = []corev1.EnvVar{
+		// The presigned URL is a credential in its own right: it grants access
+		// to the bucket until it expires, so it is never an argument.
+		secretEnv("BACKUP_URL", s.URLSecret, "url"),
+	}
+	container.SecurityContext.RunAsUser = ptr(runAsUserFor(s.TransferImage, s.Engine))
+	// Nothing but the workspace is written, and the storage service's
+	// certificates are read from the image.
+	container.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("50m")
+	container.Resources.Requests[corev1.ResourceMemory] = resource.MustParse("64Mi")
+	return container
+}
+
+func (s JobSpec) container(name, image, script string) corev1.Container {
+	return corev1.Container{
+		Name:    name,
+		Image:   image,
+		Command: []string{"/bin/sh", "-c"},
+		Args:    []string{script},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: "workspace", MountPath: workspace},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: ptr(false),
+			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+		},
+	}
+}
+
+// backupScript dumps a database to the shared workspace.
 func backupScript(s JobSpec) string {
 	var dump string
 	switch s.Engine {
@@ -168,24 +273,58 @@ func backupScript(s JobSpec) string {
 	}
 
 	return fmt.Sprintf(`set -eu
-set -o pipefail 2>/dev/null || true
 
 echo "==> Backing up $DB_NAME"
 
-# apk is only needed for curl and gzip on the slim database images.
-if ! command -v curl >/dev/null 2>&1; then
-  apk add --no-cache curl gzip >/dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq curl gzip
-fi
+# A pipeline hides a failing dump behind a successful gzip, and a dump that
+# failed halfway still compresses cleanly. The status is checked explicitly.
+%s > %s.raw
+gzip -c %s.raw > %s
+rm -f %s.raw
 
-# The dump is streamed straight to the storage service: writing it to disk
-# first would need as much free space as the database.
-%s | gzip -c | curl --fail --silent --show-error --upload-file - "$BACKUP_URL"
-
-echo "==> Backup uploaded"
-`, dump)
+echo "==> Dumped $(wc -c < %s) compressed bytes"
+`, dump, dumpFile, dumpFile, dumpFile, dumpFile, dumpFile)
 }
 
-// restoreScript downloads a backup and loads it.
+// uploadScript sends the staged dump to the storage service.
+func uploadScript() string {
+	return fmt.Sprintf(`set -eu
+
+if [ ! -s %s ]; then
+  echo "The dump is empty, so there is nothing worth uploading." >&2
+  exit 1
+fi
+
+echo "==> Uploading $(wc -c < %s) bytes"
+
+# --upload-file on a real file sends a Content-Length. Reading from a pipe
+# would send Transfer-Encoding: chunked, which S3 refuses on a presigned PUT.
+curl --fail --silent --show-error --retry 3 --retry-connrefused \
+  --upload-file %s "$BACKUP_URL"
+
+echo "==> Backup uploaded"
+`, dumpFile, dumpFile, dumpFile)
+}
+
+// downloadScript fetches a backup into the shared workspace.
+func downloadScript() string {
+	return fmt.Sprintf(`set -eu
+
+echo "==> Downloading the backup"
+
+curl --fail --silent --show-error --location --retry 3 --retry-connrefused \
+  --output %s "$BACKUP_URL"
+
+if [ ! -s %s ]; then
+  echo "The downloaded backup is empty; it will not be restored." >&2
+  exit 1
+fi
+
+echo "==> Downloaded $(wc -c < %s) bytes"
+`, dumpFile, dumpFile, dumpFile)
+}
+
+// restoreScript loads a downloaded backup.
 func restoreScript(s JobSpec) string {
 	var load string
 	switch s.Engine {
@@ -203,18 +342,13 @@ func restoreScript(s JobSpec) string {
 	}
 
 	return fmt.Sprintf(`set -eu
-set -o pipefail 2>/dev/null || true
 
 echo "==> Restoring $DB_NAME"
 
-if ! command -v curl >/dev/null 2>&1; then
-  apk add --no-cache curl gzip >/dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq curl gzip
-fi
-
-curl --fail --silent --show-error --location "$BACKUP_URL" | gzip -dc | %s
+gzip -dc %s | %s
 
 echo "==> Restore finished"
-`, load)
+`, dumpFile, load)
 }
 
 // URLSecret renders the Secret carrying a presigned URL.

@@ -347,6 +347,11 @@ func (m *Manager) waitForJob(ctx context.Context, namespace, name string) error 
 
 // jobFailureReason reads the last lines of a failed job's log, which is where
 // the actual reason is.
+//
+// The container that failed has to be named. A backup dumps in an init
+// container and uploads in the main one, and asking for a pod's log without
+// saying which container asks the main one — which, when the dump failed,
+// never started and has nothing to say.
 func (m *Manager) jobFailureReason(ctx context.Context, namespace, jobName string) string {
 	pods, err := m.cluster.Client().Clientset().CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: "job-name=" + jobName,
@@ -354,18 +359,49 @@ func (m *Manager) jobFailureReason(ctx context.Context, namespace, jobName strin
 	if err != nil || len(pods.Items) == 0 {
 		return "the job failed and its output could not be read"
 	}
+	pod := pods.Items[0]
 
+	for _, container := range failedContainers(pod) {
+		if output := m.containerLog(ctx, namespace, pod.Name, container); output != "" {
+			return output
+		}
+	}
+	return "the job failed without printing anything"
+}
+
+// failedContainers names the containers worth reading a log from, the one that
+// actually exited badly first.
+func failedContainers(pod corev1.Pod) []string {
+	var failed, rest []string
+	for _, status := range append(append([]corev1.ContainerStatus{},
+		pod.Status.InitContainerStatuses...), pod.Status.ContainerStatuses...) {
+		terminated := status.State.Terminated
+		switch {
+		case terminated != nil && terminated.ExitCode != 0:
+			failed = append(failed, status.Name)
+		case status.State.Waiting != nil && status.State.Waiting.Message != "":
+			// A container that never started says why in its status rather
+			// than in a log: a missing Secret key, an image that will not pull.
+			failed = append(failed, status.Name)
+		default:
+			rest = append(rest, status.Name)
+		}
+	}
+	return append(failed, rest...)
+}
+
+func (m *Manager) containerLog(ctx context.Context, namespace, pod, container string) string {
 	tail := int64(30)
 	stream, err := m.cluster.Client().Clientset().CoreV1().Pods(namespace).
-		GetLogs(pods.Items[0].Name, &corev1.PodLogOptions{TailLines: &tail}).Stream(ctx)
+		GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &tail}).Stream(ctx)
 	if err != nil {
-		return "the job failed and its output could not be read"
+		return ""
 	}
 	defer stream.Close()
 
 	output, err := io.ReadAll(io.LimitReader(stream, 8<<10))
-	if err != nil || len(output) == 0 {
-		return "the job failed without printing anything"
+	if err != nil {
+		return ""
 	}
 	return strings.TrimSpace(string(output))
 }

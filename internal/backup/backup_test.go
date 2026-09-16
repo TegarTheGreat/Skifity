@@ -7,6 +7,7 @@ import (
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	"skifity/internal/dbsvc"
 )
@@ -161,68 +162,156 @@ func backupSpec(engine string, restore bool) JobSpec {
 	}
 }
 
+// scriptsOf returns a job's two scripts: the init container's, then the main
+// container's. A backup dumps then uploads; a restore downloads then loads.
+func scriptsOf(t *testing.T, job *batchv1.Job) (string, string) {
+	t.Helper()
+	pod := job.Spec.Template.Spec
+	if len(pod.InitContainers) != 1 || len(pod.Containers) != 1 {
+		t.Fatalf("the job has %d init containers and %d containers, want one of each",
+			len(pod.InitContainers), len(pod.Containers))
+	}
+	return pod.InitContainers[0].Args[0], pod.Containers[0].Args[0]
+}
+
 func TestBackupJobKeepsCredentialsOutOfTheSpec(t *testing.T) {
 	for _, engine := range []string{dbsvc.EnginePostgres, dbsvc.EngineMySQL, dbsvc.EngineRedis} {
 		job, err := BuildJob(backupSpec(engine, false))
 		if err != nil {
 			t.Fatalf("%s: BuildJob: %v", engine, err)
 		}
-		container := job.Spec.Template.Spec.Containers[0]
+		pod := job.Spec.Template.Spec
 
 		// Every value must come from a Secret. A presigned URL is a credential
 		// too: it grants bucket access until it expires.
-		for _, env := range container.Env {
-			if env.Value != "" {
-				t.Errorf("%s: %s is a literal value in the Job spec", engine, env.Name)
+		for _, container := range append(append([]corev1.Container{}, pod.InitContainers...), pod.Containers...) {
+			for _, env := range container.Env {
+				if env.Value != "" {
+					t.Errorf("%s: %s is a literal value in the Job spec", engine, env.Name)
+				}
+				if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+					t.Errorf("%s: %s does not come from a Secret", engine, env.Name)
+				}
 			}
-			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
-				t.Errorf("%s: %s does not come from a Secret", engine, env.Name)
+			if strings.Contains(container.Args[0], "https://") {
+				t.Errorf("%s: a URL appears literally in the %s script", engine, container.Name)
 			}
-		}
-		script := container.Args[0]
-		if strings.Contains(script, "https://") && !strings.Contains(script, "$BACKUP_URL") {
-			t.Errorf("%s: a URL appears literally in the script", engine)
 		}
 	}
 }
 
-func TestBackupJobStreamsWithoutTouchingDisk(t *testing.T) {
-	// A dump written to disk first needs as much free space as the database,
-	// inside a container that usually has none.
+// TestTheDumpNeverGoesThroughAPipeToCurl is the bug this shape exists for:
+// curl reading from a pipe has no length to declare, so it sends
+// Transfer-Encoding: chunked, and S3 answers 501 to a chunked presigned PUT.
+func TestTheDumpNeverGoesThroughAPipeToCurl(t *testing.T) {
 	job, _ := BuildJob(backupSpec(dbsvc.EnginePostgres, false))
-	script := job.Spec.Template.Spec.Containers[0].Args[0]
+	dump, upload := scriptsOf(t, job)
 
-	if !strings.Contains(script, "| gzip -c | curl") {
-		t.Fatalf("the dump is not streamed straight to storage:\n%s", script)
+	if strings.Contains(dump, "curl") {
+		t.Fatalf("the dump pipes into curl:\n%s", dump)
 	}
-	if !strings.Contains(script, "--upload-file -") {
-		t.Fatal("curl is not reading the upload from stdin")
+	if strings.Contains(upload, "--upload-file -") {
+		t.Fatalf("curl is reading the upload from stdin:\n%s", upload)
 	}
-	if !strings.Contains(script, "--fail") {
+	if !strings.Contains(upload, "--upload-file /work/dump.gz") {
+		t.Fatalf("curl is not uploading the staged file:\n%s", upload)
+	}
+	if !strings.Contains(upload, "--fail") {
 		t.Fatal("curl would report success on an HTTP error, so a failed upload would look like a good backup")
+	}
+	// An empty dump uploaded happily is the worst outcome: a backup that
+	// exists, restores nothing, and is only discovered when it is needed.
+	if !strings.Contains(upload, "! -s /work/dump.gz") {
+		t.Fatalf("an empty dump would be uploaded as a backup:\n%s", upload)
+	}
+}
+
+// TestNothingIsInstalledAtRunTime: the job used to apk-add curl, which needs
+// root, which the namespace's restricted Pod Security profile refuses. The pod
+// was rejected before it ran a line.
+func TestNothingIsInstalledAtRunTime(t *testing.T) {
+	for _, engine := range []string{dbsvc.EnginePostgres, dbsvc.EngineMySQL, dbsvc.EngineRedis} {
+		for _, restore := range []bool{false, true} {
+			job, err := BuildJob(backupSpec(engine, restore))
+			if err != nil {
+				t.Fatalf("%s: BuildJob: %v", engine, err)
+			}
+			first, second := scriptsOf(t, job)
+			for _, script := range []string{first, second} {
+				for _, installer := range []string{"apk add", "apt-get", "yum", "microdnf"} {
+					if strings.Contains(script, installer) {
+						t.Errorf("%s (restore=%v): the job installs packages with %s", engine, restore, installer)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestBackupPodSatisfiesRestrictedPodSecurity: every environment namespace
+// enforces the restricted profile, so a pod that does not satisfy it is not
+// scheduled, not merely warned about.
+func TestBackupPodSatisfiesRestrictedPodSecurity(t *testing.T) {
+	for _, engine := range []string{dbsvc.EnginePostgres, dbsvc.EngineMySQL, dbsvc.EngineRedis} {
+		for _, restore := range []bool{false, true} {
+			job, err := BuildJob(backupSpec(engine, restore))
+			if err != nil {
+				t.Fatalf("%s: BuildJob: %v", engine, err)
+			}
+			pod := job.Spec.Template.Spec
+
+			if pod.SecurityContext == nil ||
+				pod.SecurityContext.RunAsNonRoot == nil || !*pod.SecurityContext.RunAsNonRoot {
+				t.Errorf("%s (restore=%v): the pod does not declare runAsNonRoot", engine, restore)
+			}
+			if pod.SecurityContext == nil || pod.SecurityContext.SeccompProfile == nil ||
+				pod.SecurityContext.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+				t.Errorf("%s (restore=%v): the pod does not set the default seccomp profile", engine, restore)
+			}
+
+			for _, container := range append(append([]corev1.Container{}, pod.InitContainers...), pod.Containers...) {
+				sc := container.SecurityContext
+				if sc == nil {
+					t.Errorf("%s: %s has no security context", engine, container.Name)
+					continue
+				}
+				if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+					t.Errorf("%s: %s may escalate privileges", engine, container.Name)
+				}
+				if sc.Capabilities == nil || len(sc.Capabilities.Drop) == 0 ||
+					sc.Capabilities.Drop[0] != "ALL" {
+					t.Errorf("%s: %s does not drop every capability", engine, container.Name)
+				}
+				// These images default to root and drop privileges in an
+				// entrypoint a job never reaches, so the uid has to be named.
+				if sc.RunAsUser == nil || *sc.RunAsUser == 0 {
+					t.Errorf("%s: %s does not name a non-root user", engine, container.Name)
+				}
+			}
+		}
 	}
 }
 
 func TestPostgresDumpIsRestorable(t *testing.T) {
 	job, _ := BuildJob(backupSpec(dbsvc.EnginePostgres, false))
-	script := job.Spec.Template.Spec.Containers[0].Args[0]
+	dump, _ := scriptsOf(t, job)
 	// Without --clean --if-exists, restoring over an existing database fails
 	// on every object that already exists.
-	if !strings.Contains(script, "--clean") || !strings.Contains(script, "--if-exists") {
-		t.Fatalf("the dump could not be restored over an existing database:\n%s", script)
+	if !strings.Contains(dump, "--clean") || !strings.Contains(dump, "--if-exists") {
+		t.Fatalf("the dump could not be restored over an existing database:\n%s", dump)
 	}
-	if !strings.Contains(script, "--no-owner") {
+	if !strings.Contains(dump, "--no-owner") {
 		t.Fatal("the dump records ownership, which breaks a restore into a different role")
 	}
 }
 
 func TestMySQLDumpIsConsistent(t *testing.T) {
 	job, _ := BuildJob(backupSpec(dbsvc.EngineMySQL, false))
-	script := job.Spec.Template.Spec.Containers[0].Args[0]
+	dump, _ := scriptsOf(t, job)
 	// Without a single transaction, a dump of a live database is inconsistent
 	// between tables.
-	if !strings.Contains(script, "--single-transaction") {
-		t.Fatalf("the dump is not consistent:\n%s", script)
+	if !strings.Contains(dump, "--single-transaction") {
+		t.Fatalf("the dump is not consistent:\n%s", dump)
 	}
 }
 
@@ -232,18 +321,23 @@ func TestRestoreScriptsInvert(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: BuildJob: %v", engine, err)
 		}
-		script := job.Spec.Template.Spec.Containers[0].Args[0]
-		if !strings.Contains(script, "gzip -dc") {
-			t.Errorf("%s: the restore does not decompress", engine)
-		}
-		if !strings.Contains(script, "curl") || !strings.Contains(script, "$BACKUP_URL") {
+		download, load := scriptsOf(t, job)
+		if !strings.Contains(download, "curl") || !strings.Contains(download, "$BACKUP_URL") {
 			t.Errorf("%s: the restore does not download the backup", engine)
+		}
+		// A truncated download loaded into a live database is worse than a
+		// restore that refused to start.
+		if !strings.Contains(download, "! -s /work/dump.gz") {
+			t.Errorf("%s: an empty download would be restored", engine)
+		}
+		if !strings.Contains(load, "gzip -dc") {
+			t.Errorf("%s: the restore does not decompress", engine)
 		}
 	}
 	// PostgreSQL must stop at the first error, or a half-restored database
 	// looks like a success.
 	job, _ := BuildJob(backupSpec(dbsvc.EnginePostgres, true))
-	if !strings.Contains(job.Spec.Template.Spec.Containers[0].Args[0], "ON_ERROR_STOP=on") {
+	if _, load := scriptsOf(t, job); !strings.Contains(load, "ON_ERROR_STOP=on") {
 		t.Fatal("a failed statement during a restore would be ignored")
 	}
 }
@@ -295,11 +389,13 @@ func TestGeneratedBackupScriptsAreValidShell(t *testing.T) {
 
 func checkShell(t *testing.T, name string, job *batchv1.Job) {
 	t.Helper()
-	script := job.Spec.Template.Spec.Containers[0].Args[0]
-	cmd := exec.Command("sh", "-n")
-	cmd.Stdin = strings.NewReader(script)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Errorf("%s is not valid shell: %v\n%s\n---\n%s", name, err, output, script)
+	first, second := scriptsOf(t, job)
+	for _, script := range []string{first, second} {
+		cmd := exec.Command("sh", "-n")
+		cmd.Stdin = strings.NewReader(script)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s is not valid shell: %v\n%s\n---\n%s", name, err, output, script)
+		}
 	}
 }
 

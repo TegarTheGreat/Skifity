@@ -165,9 +165,11 @@ English one.
   image built locally with `make image`.
 * The interface test needs a Chromium. It uses one already on the machine when
   `CHROMIUM_PATH` is set, and CI installs its own.
-* Idle RAM has not been measured yet; it needs a running cluster.
+* k3s's memory footprint is not measured; the panel's is, in
+  `docs/performance.md`.
 
 ## Idle resource usage
 
-Measured once the installer lands and a cluster can be started somewhere that
-allows it.
+`docs/performance.md`. The panel is measured: 34 MiB resident idle, 36 MiB after
+400 requests, 37 MiB of binary. k3s's own footprint is not measured here, for
+the same reason as everything else that needs a cluster.

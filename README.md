@@ -108,7 +108,8 @@ A server with Ubuntu 24.04 or Debian 12, 1 GB of memory, 8 GB of free disk, and
 root over SSH. Any VPS will do. 2 GB is comfortable.
 
 A fresh install is deliberately small: Kubernetes and the panel, and nothing
-else. Certificates, the builder, the PostgreSQL operator and the rest install
+else. The panel is **34 MiB of resident memory idle**, measured, and does not
+drift. Certificates, the builder, the PostgreSQL operator and the rest install
 themselves the first time you use them, and each one says what it costs first.
 
 ## Documentation
@@ -121,6 +122,7 @@ themselves the first time you use them, and each one says what it costs first.
 | [The CLI and AI assistants](docs/cli.md) | Terminal, API, MCP |
 | [Troubleshooting](docs/troubleshooting.md) | When something is wrong |
 | [Questions](docs/faq.md) | Including the ones with awkward answers |
+| [What it costs](docs/performance.md) | Memory and size, measured |
 | [Architecture](docs/architecture.md) | How it fits together |
 | [Decisions](docs/decisions.md) | Why it is like this |
 

@@ -87,7 +87,9 @@ jobs:
         run: npx tsc -b
 
       - name: Build
-        run: npx vite build
+        # build:only, not vite build: it also clears stale assets and copies
+        # llms.txt in, which the panel serves.
+        run: npm run build:only
 
   interface:
     name: Interface

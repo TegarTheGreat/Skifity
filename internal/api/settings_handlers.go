@@ -128,6 +128,8 @@ func (s *Server) handleListComponents(w http.ResponseWriter, r *http.Request) {
 		Optional    bool   `json:"optional"`
 		Beta        bool   `json:"beta"`
 		MemoryMB    int    `json:"approximate_memory_mb"`
+		External    bool   `json:"external"`
+		Docs        string `json:"docs,omitempty"`
 	}
 	views := make([]componentView, 0, len(settings.Components))
 	for _, def := range settings.Components {
@@ -142,6 +144,8 @@ func (s *Server) handleListComponents(w http.ResponseWriter, r *http.Request) {
 			Optional:         def.Optional,
 			Beta:             def.Beta,
 			MemoryMB:         def.MemoryMB,
+			External:         def.External,
+			Docs:             def.Docs,
 		})
 	}
 	writeList(w, views)
@@ -149,8 +153,18 @@ func (s *Server) handleListComponents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleInstallComponent(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	if _, ok := settings.LookupComponent(name); !ok {
+	def, ok := settings.LookupComponent(name)
+	if !ok {
 		writeError(w, r, errdoc.NotFound("component", name))
+		return
+	}
+	if def.External {
+		writeError(w, r, errdoc.New("component.external", def.Title+" is not installed by the panel").
+			WithCause("It is installed with Helm, because it is several dozen objects with their own release cadence and the panel would be a worse installer than the one its authors wrote.").
+			WithImpact("Nothing was changed.").
+			WithFix("The documentation has the command.").
+			WithDocs(def.Docs).
+			WithStatus(http.StatusBadRequest))
 		return
 	}
 	if s.cluster == nil {

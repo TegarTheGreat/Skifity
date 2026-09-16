@@ -1,7 +1,9 @@
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
+  BookOpenIcon,
   CheckCircle2Icon,
   DownloadIcon,
   KeyRoundIcon,
@@ -382,7 +384,16 @@ function ComponentsPanel() {
                 )}
               </div>
 
-              {component.status === "installed" ? (
+              {component.external ? (
+                // An Install button that always answers "use Helm instead" is
+                // worse than no button: it looks like a failure.
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={component.docs ?? "/docs"}>
+                    <BookOpenIcon className="size-4" />
+                    {t("settings.componentExternal")}
+                  </Link>
+                </Button>
+              ) : component.status === "installed" ? (
                 <span className="flex items-center gap-1.5 text-sm text-success">
                   <CheckCircle2Icon className="size-4" />
                   {t("settings.componentInstalled")}

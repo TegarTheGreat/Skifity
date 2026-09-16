@@ -151,6 +151,26 @@ Without the master key the database is unreadable, which is the point of the
 recovery key you were asked to download. [Configuration](configuration.md) has
 the full list of what to back up.
 
+## Full monitoring
+
+Skifity shows CPU and memory for every server and every instance without
+installing anything: it reads them from metrics-server, which k3s ships.
+
+Prometheus and Grafana are a different thing — dashboards, alerting rules,
+history — and they are installed with Helm rather than by the panel. Several
+dozen objects with their own release cadence make for a worse installer than
+the one their authors wrote:
+
+```
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
+```
+
+It costs roughly 900 MB of memory. The panel lists it under **Settings →
+Components** so the cost is visible when you are deciding, and says there that
+it does not install it.
+
 ## Everything is fine but I want to look underneath
 
 Every app's **Advanced** tab shows the exact Kubernetes objects the panel

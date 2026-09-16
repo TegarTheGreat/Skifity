@@ -292,6 +292,14 @@ type Component struct {
 	Beta bool
 	// MemoryMB is roughly what it costs to run, so the UI can warn honestly.
 	MemoryMB int
+	// External marks a component the panel cannot install.
+	//
+	// It is still listed, because an operator deciding what to run wants to
+	// know it exists and what it costs. An Install button that always answers
+	// "use Helm instead" is worse than no button: it looks like a failure.
+	External bool
+	// Docs is where the panel points instead of that button.
+	Docs string
 }
 
 // Components is what the panel can install into the cluster.
@@ -308,8 +316,9 @@ var Components = []Component{
 		Description: "Stops idle apps and starts them again on the first request. The HTTP add-on is beta upstream.", MemoryMB: 180},
 	{Name: "longhorn", Title: "Cross-node storage", Optional: true,
 		Description: "Replicates volumes between servers so an app with storage survives a node failure. Uses a noticeable amount of memory on every node.", MemoryMB: 700},
-	{Name: "monitoring", Title: "Full monitoring", Optional: true,
-		Description: "Prometheus and Grafana. Skifity shows basic CPU and memory without this.", MemoryMB: 900},
+	{Name: "monitoring", Title: "Full monitoring", Optional: true, External: true,
+		Description: "Prometheus and Grafana, installed with Helm rather than by the panel. Skifity shows CPU and memory for every server and every instance without it.",
+		Docs:        "/docs/troubleshooting#full-monitoring", MemoryMB: 900},
 }
 
 var componentIndex = func() map[string]Component {

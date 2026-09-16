@@ -519,7 +519,8 @@
     "rotateKeyPartial": "Kunci utama baru sudah aktif, tetapi sebagian rahasia gagal dienkripsi ulang. Kunci lama tetap disimpan agar rahasia itu masih bisa dibaca.",
     "edited": "Diubah",
     "unsaved_other": "{{count}} perubahan belum disimpan",
-    "subtitle": "Semua yang diatur operator, dalam satu tempat. Tidak ada di sini yang memerlukan berkas di server."
+    "subtitle": "Semua yang diatur operator, dalam satu tempat. Tidak ada di sini yang memerlukan berkas di server.",
+    "componentExternal": "Cara memasangnya"
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

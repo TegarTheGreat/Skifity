@@ -62,8 +62,9 @@ func (c *Cluster) installComponent(ctx context.Context, name string) error {
 	case "longhorn":
 		return c.installFromURL(ctx, name, "longhorn-system", "longhorn-driver-deployer")
 	case "monitoring":
-		return fmt.Errorf("the full monitoring stack is installed with Helm; see the documentation. " +
-			"Skifity's built-in CPU and memory view needs nothing installed")
+		// Refused earlier, in the API, with a message that says where to look.
+		// This is the second lock on the same door.
+		return fmt.Errorf("the full monitoring stack is installed with Helm, not by the panel")
 	default:
 		return fmt.Errorf("%q is not a component Skifity knows how to install", name)
 	}

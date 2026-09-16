@@ -342,6 +342,9 @@ export type Component = {
   optional: boolean
   beta: boolean
   approximate_memory_mb: number
+  /** Installed with Helm rather than by the panel. */
+  external: boolean
+  docs?: string
 }
 
 export type Template = {

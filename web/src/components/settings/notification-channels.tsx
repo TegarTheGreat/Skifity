@@ -10,9 +10,15 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Field, FieldLabel } from "@/components/ui/field"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -228,8 +234,8 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
           </Field>
 
           {fields.map((field) => (
-            <div key={field.key} className="space-y-2">
-              <Label htmlFor={`channel-${field.key}`}>{field.label}</Label>
+            <Field key={field.key}>
+              <FieldLabel htmlFor={`channel-${field.key}`}>{field.label}</FieldLabel>
               <Input
                 id={`channel-${field.key}`}
                 type={field.secret ? "password" : "text"}
@@ -238,16 +244,17 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
                 onChange={(event) => setConfig({ ...config, [field.key]: event.target.value })}
                 required
               />
-            </div>
+            </Field>
           ))}
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">{t("notifications.events")}</legend>
-            <p className="text-xs text-muted-foreground">{t("notifications.eventsHelp")}</p>
-            <div className="grid gap-2 pt-1 sm:grid-cols-2">
+          <FieldSet>
+            <FieldLegend variant="label">{t("notifications.events")}</FieldLegend>
+            <FieldDescription>{t("notifications.eventsHelp")}</FieldDescription>
+            <FieldGroup className="grid gap-2 pt-1 sm:grid-cols-2">
               {EVENTS.map((event) => (
-                <label key={event} className="flex items-center gap-2.5 text-sm">
+                <FieldLabel key={event} htmlFor={`event-${event}`} className="font-normal">
                   <Checkbox
+                    id={`event-${event}`}
                     checked={events.includes(event)}
                     onCheckedChange={(checked) =>
                       setEvents(
@@ -258,10 +265,10 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
                     }
                   />
                   {t(`notifications.event.${event}`)}
-                </label>
+                </FieldLabel>
               ))}
-            </div>
-          </fieldset>
+            </FieldGroup>
+          </FieldSet>
 
           {create.error != null && <ErrorDisplay error={create.error} compact />}
 

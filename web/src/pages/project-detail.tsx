@@ -49,7 +49,6 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -176,10 +175,10 @@ export function ProjectDetailPage() {
       {remove.error && <ErrorDisplay error={remove.error} />}
 
       {items.length > 1 && (
-        <div className="flex items-center gap-2">
-          <Label htmlFor="environment" className="text-sm text-muted-foreground">
+        <Field orientation="horizontal" className="w-fit">
+          <FieldLabel htmlFor="environment" className="text-sm text-muted-foreground">
             {t("projects.environments")}
-          </Label>
+          </FieldLabel>
           <Select value={environmentId} onValueChange={setEnvironmentId}>
             <SelectTrigger id="environment" className="w-56">
               <SelectValue />
@@ -192,7 +191,7 @@ export function ProjectDetailPage() {
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </Field>
       )}
 
       <Tabs defaultValue="services">
@@ -402,10 +401,7 @@ function AppRow({ app }: { app: App }) {
               {status.data.ready_replicas}/{status.data.desired_replicas}
             </span>
           )}
-          <StatusBadge
-            status={phase}
-            label={t(`apps.phase.${phase}`, { defaultValue: phase })}
-          />
+          <StatusBadge status={phase} label={t(`apps.phase.${phase}`, { defaultValue: phase })} />
         </ItemActions>
       </Link>
     </Item>

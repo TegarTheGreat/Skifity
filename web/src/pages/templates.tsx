@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { BoxesIcon, ExternalLinkIcon, SearchIcon } from "lucide-react"
+import { BoxesIcon, ExternalLinkIcon, InfoIcon, SearchIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
@@ -19,10 +19,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -82,11 +82,22 @@ export function TemplatesPage() {
         <Skeleton className="h-64" />
       ) : templates.error ? (
         <ErrorDisplay error={templates.error} onRetry={() => void templates.refetch()} />
-      ) : shown.length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState
           icon={BoxesIcon}
           title={t("templates.title")}
           description={t("templates.subtitle")}
+        />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          icon={SearchIcon}
+          title={t("common.noMatches")}
+          description={t("common.noMatchesHelp")}
+          action={
+            <Button variant="outline" onClick={() => setSearch("")}>
+              {t("common.clear")}
+            </Button>
+          }
         />
       ) : (
         categories.map((category) => (
@@ -96,7 +107,10 @@ export function TemplatesPage() {
               {shown
                 .filter((template) => template.category === category)
                 .map((template) => (
-                  <Card key={template.id} className="flex h-full flex-col">
+                  <Card
+                    key={template.id}
+                    className="flex h-full flex-col transition-colors hover:border-primary/40"
+                  >
                     <CardHeader>
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="truncate text-base">{template.name}</CardTitle>
@@ -197,69 +211,71 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
         </DialogHeader>
 
         <form
-          className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault()
             install.mutate()
           }}
         >
-          <Field>
-            <FieldLabel htmlFor="install-environment">{t("projects.environments")}</FieldLabel>
-            {environments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("projects.emptyHelp")}</p>
-            ) : (
-              <Select value={environmentId} onValueChange={setEnvironmentId}>
-                <SelectTrigger id="install-environment">
-                  <SelectValue placeholder={t("projects.environments")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {environments.map(({ environment, project }) => (
-                    <SelectItem key={environment.id} value={environment.id}>
-                      {project.name} · {environment.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </Field>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="install-environment">{t("projects.environments")}</FieldLabel>
+              {environments.length === 0 ? (
+                <FieldDescription>{t("projects.emptyHelp")}</FieldDescription>
+              ) : (
+                <Select value={environmentId} onValueChange={setEnvironmentId}>
+                  <SelectTrigger id="install-environment">
+                    <SelectValue placeholder={t("projects.environments")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {environments.map(({ environment, project }) => (
+                      <SelectItem key={environment.id} value={environment.id}>
+                        {project.name} · {environment.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </Field>
 
-          <Field>
-            <FieldLabel htmlFor="install-name">{t("apps.appName")}</FieldLabel>
-            <Input
-              id="install-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-
-          {asked.map((input) => (
-            <div key={input.key} className="space-y-2">
-              <Label htmlFor={`input-${input.key}`}>
-                {input.label}
-                {!input.required && (
-                  <span className="text-muted-foreground"> ({t("common.optional")})</span>
-                )}
-              </Label>
+            <Field>
+              <FieldLabel htmlFor="install-name">{t("apps.appName")}</FieldLabel>
               <Input
-                id={`input-${input.key}`}
-                type={input.secret ? "password" : "text"}
-                value={values[input.key] ?? ""}
-                onChange={(event) => setValues({ ...values, [input.key]: event.target.value })}
-                required={input.required}
+                id="install-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
               />
-              {input.help && <p className="text-xs text-muted-foreground">{input.help}</p>}
-            </div>
-          ))}
+            </Field>
 
-          {template.notes && (
-            <p className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
-              {template.notes}
-            </p>
-          )}
+            {asked.map((input) => (
+              <Field key={input.key}>
+                <FieldLabel htmlFor={`input-${input.key}`}>
+                  {input.label}
+                  {!input.required && (
+                    <span className="text-muted-foreground"> ({t("common.optional")})</span>
+                  )}
+                </FieldLabel>
+                <Input
+                  id={`input-${input.key}`}
+                  type={input.secret ? "password" : "text"}
+                  value={values[input.key] ?? ""}
+                  onChange={(event) => setValues({ ...values, [input.key]: event.target.value })}
+                  required={input.required}
+                />
+                {input.help && <FieldDescription>{input.help}</FieldDescription>}
+              </Field>
+            ))}
 
-          {install.error != null && <ErrorDisplay error={install.error} compact />}
+            {template.notes && (
+              <Alert>
+                <InfoIcon />
+                <AlertDescription>{template.notes}</AlertDescription>
+              </Alert>
+            )}
 
-          <DialogFooter>
+            {install.error != null && <ErrorDisplay error={install.error} compact />}
+          </FieldGroup>
+
+          <DialogFooter className="pt-4">
             <Button type="button" variant="ghost" onClick={onClose}>
               {t("common.cancel")}
             </Button>

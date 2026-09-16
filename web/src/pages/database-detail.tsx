@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -245,8 +244,8 @@ function CredentialRow({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
+    <Field>
+      <FieldLabel className="text-xs text-muted-foreground">{label}</FieldLabel>
       <div className="flex items-center gap-2">
         <Input
           readOnly
@@ -258,7 +257,7 @@ function CredentialRow({
           {t("common.copy")}
         </Button>
       </div>
-    </div>
+    </Field>
   )
 }
 

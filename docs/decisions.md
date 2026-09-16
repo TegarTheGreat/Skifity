@@ -187,3 +187,76 @@ retention and the UI have no per-engine branches. Streaming through the panel
 PostgreSQL database and gives point-in-time recovery only to the last dump.
 CloudNativePG's `barmanObjectStore` remains available for operators who need
 continuous archiving, and is documented as the advanced option.
+
+---
+
+## ADR-0013 - The panel runs in the cluster, pinned to the first control plane node
+
+**Context.** The panel has to survive a reboot, be upgradeable, and hold a SQLite
+database and a master key that only one process may write at a time. It also has to
+be usable *while* the cluster is unhealthy, because that is when someone opens it.
+
+**Options.** (a) A systemd service on the host, (b) a Deployment with a
+PersistentVolumeClaim, (c) a Deployment pinned to one node with host paths.
+
+**Decision.** (c). One replica, `Recreate` strategy, `nodeSelector` on the first
+control plane node's hostname, `/etc/skifity` and `/var/lib/skifity` mounted as host
+paths, and tolerations for the control plane taints.
+
+**Reason.** A systemd service (a) cannot be upgraded by the panel itself and needs a
+second delivery mechanism for the binary. A PVC (b) makes the panel depend on the
+storage provisioner starting first, and a broken provisioner is precisely the thing
+an operator opens the panel to fix. Host paths have no such dependency. `Recreate`
+and one replica are not a scaling compromise: two panels writing one SQLite file is
+corruption, so the rollout must stop the old one before starting the new one.
+
+**Consequences.** The panel is tied to one node. If that node is lost, the panel is
+restored by pointing a new install at a restored `/etc/skifity` and `/var/lib/skifity`.
+The panel's own availability is therefore lower than the apps it manages, which is
+the right way round: apps survive a node failure, the control panel is rebuilt.
+`internal/manifests` tests assert the pinning, the strategy and the hardening, so a
+refactor cannot quietly undo any of it.
+
+---
+
+## ADR-0014 - The panel is granted cluster-admin, and says so
+
+**Context.** The panel creates a namespace per environment and installs cluster
+components on demand: cert-manager, CloudNativePG, KEDA and Longhorn each bring
+CustomResourceDefinitions and their own ClusterRoles.
+
+**Decision.** The panel's ServiceAccount is bound to `cluster-admin`, and the
+manifest carries a comment explaining why rather than leaving it to be discovered.
+
+**Reason.** A subject that may create ClusterRoles can grant itself anything, so a
+role listing every verb the panel needs today would be cluster-admin with extra
+steps, and would break the first time a component's installer changed. Pretending
+otherwise would be security theatre.
+
+**Consequences.** The isolation that matters is between tenants, not between the
+panel and the cluster, and it is enforced on the namespaces the panel creates:
+restricted Pod Security, a ResourceQuota that refuses LoadBalancer and NodePort
+Services, and default-deny NetworkPolicies. Anyone who reaches the panel has the
+cluster, which is why the panel has login rate limiting, TOTP, and an audit log.
+
+---
+
+## ADR-0015 - No certificate for the sslip.io address
+
+**Context.** A server with no domain still needs a URL. sslip.io resolves any IP
+embedded in the hostname, so `203-0-113-10.sslip.io` works with no DNS setup.
+
+**Decision.** The installer serves the panel over plain HTTP on the sslip.io
+address, and installs cert-manager and requests a certificate only once a domain of
+the operator's own is configured.
+
+**Reason.** Let's Encrypt rate limits are per registered domain, and every Skifity
+install in the world would share sslip.io's. Certificates would start failing for
+everyone as soon as the product had any users, and the failure would look like a
+Skifity bug. Skipping cert-manager until it is useful also keeps a fresh install
+smaller, which is the same reason every other component installs on first use.
+
+**Consequences.** The first sign-in is over HTTP, and the panel says so rather than
+hiding it. Adding a domain in Settings installs cert-manager and switches the
+Ingress, which is one step and needs no reinstall. An operator who wants HTTPS from
+the first minute passes `SKIFITY_DOMAIN` to the installer.

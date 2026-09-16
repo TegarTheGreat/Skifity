@@ -1,0 +1,11 @@
+.git
+.github
+bin
+web/node_modules
+web/dist
+docs
+test
+*.md
+.env
+.env.local
+*.key

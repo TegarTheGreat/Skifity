@@ -24,7 +24,7 @@ export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
 .PHONY: help build frontend backend dev dev-api test test-go test-race lint lint-go \
-	lint-web fmt check i18n smoke e2e clean deps tidy release install-hooks
+	lint-web fmt check i18n smoke e2e image clean deps tidy release install-hooks
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*##" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -84,11 +84,19 @@ fmt: ## Format Go and frontend code
 
 check: lint test ## What CI runs
 
-smoke: backend ## Run the panel smoke test against a freshly built binary
+smoke: backend ## Run the smoke tests against a freshly built binary
 	./test/smoke/panel.sh
+	./test/smoke/installer.sh
 
 e2e: ## Run the Playwright user interface test
 	npm --prefix web run test:e2e
+
+image: ## Build the panel's container image
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg DATE=$(DATE) \
+		-t ghcr.io/skifity/skifity:$(VERSION) .
 
 deps: ## Download dependencies
 	go mod download

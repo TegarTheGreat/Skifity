@@ -17,7 +17,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 |---|---|---|
 | 0 | Research and key decisions | done |
 | 1 | Repository foundation | done |
-| 2 | One-command installer | not started |
+| 2 | One-command installer | done, not run on a real server |
 | 3 | Panel core: accounts, security, encryption | code complete, tested |
 | 4 | Server and cluster management | code complete, cluster not exercised |
 | 5 | App deployment | code complete, builds not exercised |
@@ -34,7 +34,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 * `docs/research/competitors.md` — 13 products compared, weaknesses we design against.
 * `docs/research/stack.md` — component versions verified 2026-09-16.
 * `docs/architecture.md` — layers, deploy path, add-server state machine, data model, isolation.
-* `docs/decisions.md` — ADR-0001 to ADR-0012.
+* `docs/decisions.md` — ADR-0001 to ADR-0015.
 
 ### Phase 1 — done
 
@@ -55,6 +55,32 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 **Verified by running it:** `make build` produces one 55 MB binary that serves
 the localized UI and the health API; `/apps/app_x` falls back to `index.html`;
 `test/smoke/panel.sh` passes all 26 checks against that binary.
+
+### Phase 2 — done, not run on a real server
+
+* `installer/install.sh` — POSIX shell, no bashisms, checks the server before it
+  changes anything, installs k3s with embedded etcd and WireGuard between nodes,
+  prepares the panel's directories, generates the setup token, works out a
+  hostname, applies the panel and prints a URL and a token. Safe to run again:
+  every step checks what is already there.
+* `installer/uninstall.sh` — removes the panel by default, k3s with `--all`, and
+  the data only with `--purge` and a typed confirmation. `--dry-run` prints what
+  it would do and changes nothing.
+* `deploy/` — the panel's own objects, also usable with `kubectl apply -f`.
+* `Dockerfile` — three stages down to a distroless image holding one static
+  binary, running as a non-root user.
+
+**Verified:** `test/smoke/installer.sh` runs 26 checks — both scripts parse under
+`sh` and `dash`, failures carry a cause and a fix, every manifest renders with
+nothing left to substitute, the plain-HTTP route does not claim a certificate it
+does not have, and nothing is installed on the machine running the test. A Go
+test parses the rendered Deployment and asserts it runs as non-root with a
+read-only root filesystem, no capabilities, no CPU limit, the Recreate strategy
+and the node pinning. Both were confirmed to fail when the manifests were
+deliberately broken.
+
+**Not verified:** the installer has never been run on a real server. It needs
+root, systemd and a kernel k3s can use, none of which this sandbox allows.
 
 ### Phase 3 — code complete, tested
 
@@ -86,19 +112,21 @@ configuration change from rebuilding an image.
 
 ## Next tasks
 
-1. **Phase 2**: `installer/install.sh` — POSIX shell, preflight, k3s, master key,
-   panel and cert-manager, setup token, idempotent, logged. Plus `uninstall.sh`,
-   a non-interactive mode, and the panel's own manifests in `deploy/`.
-2. **Phase 8**: `llms.txt`, and the CLI/API/MCP reference.
-3. **Phase 10**: `govulncheck` and `npm audit`, resilience checks, GoReleaser and
-   a container image, the documentation set, the README, idle RAM measurements,
-   and the Playwright UI smoke test covering setup, sign-in and all five
-   languages.
+1. **Phase 8**: `llms.txt`, and the CLI/API/MCP reference.
+2. **Phase 10**: `govulncheck` and `npm audit`, resilience checks, GoReleaser,
+   publishing the container image, the documentation set, the README, idle RAM
+   measurements, and the Playwright UI smoke test covering setup, sign-in and all
+   five languages.
+3. Run the installer end to end on a real Ubuntu server, which is the one thing
+   that cannot be done here.
 
 ## Open issues
 
 * Cluster smoke tests cannot run in this sandbox. The scripts exist and are
   reviewed, not executed.
+* The installer references `ghcr.io/skifity/skifity`, which is not published
+  yet. Until Phase 10 pushes it, an install needs `SKIFITY_IMAGE` pointed at an
+  image built locally with `make image`.
 * Idle RAM has not been measured yet; it needs a running cluster.
 
 ## Idle resource usage

@@ -101,12 +101,17 @@ jobs:
       - name: Build the panel
         run: make build
 
-      - name: Smoke test
+      - name: Smoke test the panel
         run: ./test/smoke/panel.sh
 
-      - name: The installer is valid POSIX shell
+      - name: Smoke test the installer
+        # Checks the scripts and the manifests. It never installs anything:
+        # the uninstaller is only ever run with --dry-run.
+        run: ./test/smoke/installer.sh
+
+      - name: Build the container image
         run: |
-          for script in installer/*.sh; do
-            [ -e "$script" ] || continue
-            sh -n "$script"
-          done
+          docker build \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT="${GITHUB_SHA::7}" \
+            -t skifity:ci .

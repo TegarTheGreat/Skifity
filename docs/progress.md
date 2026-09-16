@@ -200,6 +200,49 @@ out of it:
   name the host's containerd cannot resolve (ADR-0017).
 * **Every build was a cold build**: the cache was exported inline and imported
   from a tag nothing ever wrote.
+* **Adding a server built a second cluster.** The panel decided a server was
+  the first one by looking for a control-plane row in its own database, and a
+  panel installed by `install.sh` has none. The first server anyone added was
+  given `--cluster-init`, and its token could never have matched the real one
+  anyway.
+* **A second control-plane node joined with a different network backend** than
+  the first, so the two never exchanged a packet.
+* **A fork's pull request was handed the project's secrets**, because a preview
+  environment copied every variable into a container built from the pull
+  request's own code.
+* **Scale to zero installed KEDA and changed nothing**: the flag was carried
+  into the app spec and read by no manifest.
+* **The MCP server's every tool answered "this token is not tied to a team"**
+  for a token set up the documented way, and it had no way to create anything.
+* **The logs tab could not show why a crash-looping app crashed**, because the
+  container that printed it had already been replaced.
+* **A superseded deployment kept building** and could roll out an older version
+  after the newer one.
+* **The event hub never forgot a topic**, so a panel up for a month held the
+  build output of every deploy since it started.
+* **Half the audit log was invisible**: every panel-wide event — password
+  changes, settings, key rotation — was recorded with no team and the list
+  filtered on the team alone.
+* **Preview environments were never reclaimed** except by a webhook that had to
+  arrive.
+* **An instance's CPU and memory were always an em-dash**, and the panel's own
+  database had no way to be copied that did not silently lose data.
+
+### What was missing rather than broken
+
+Three things the audit named repeatedly as gaps rather than defects, now built:
+
+* **A release command and a one-off command.** There was no way to run anything
+  in an app's environment, so a migration had nowhere to go. An app's release
+  command runs on every deployment between the build and the rollout; a one-off
+  command runs once on request. Both run in the app's own image with its own
+  variables, as a Job rather than an exec, because the moment you need this
+  most is when the app will not start.
+* **Scheduled commands.** Cron existed and ran the panel's own backups; an app
+  could not have one. Kubernetes does the scheduling now, so a panel restarting
+  at three in the morning is not a reason for a job to be skipped.
+* **Honest components.** "Full monitoring" had an Install button that always
+  failed. It says how to install it instead.
 
 ## Next tasks
 
@@ -221,6 +264,17 @@ out of it:
   `CHROMIUM_PATH` is set, and CI installs its own.
 * k3s's memory footprint is not measured; the panel's is, in
   `docs/performance.md`.
+* The in-cluster registry has no garbage collection, so the disk it uses grows
+  with every build. The images themselves are small and layers are shared, but
+  a busy cluster will eventually need `registry garbage-collect` run by hand.
+* `builder.Detect` works and is tested, and nothing calls it: the panel cannot
+  fetch a repository's file list, so it cannot say "this looks like Next.js"
+  before the first build. Railpack does its own detection inside the build, so
+  builds work; only the panel's guess before one is missing.
+* Volumes are not backed up. The panel refuses rather than pretending, and
+  `docs/backups.md` says so.
+* There is no shell into a running instance. A one-off command covers what
+  people need it for and is safer; an interactive session is not built.
 
 ## Idle resource usage
 

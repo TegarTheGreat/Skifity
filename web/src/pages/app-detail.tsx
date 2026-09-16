@@ -1,7 +1,12 @@
 import { useSearchParams, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-react"
+import {
+  BoxIcon,
+  ExternalLinkIcon,
+  RefreshCwIcon,
+  RocketIcon,
+} from "lucide-react"
 
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
@@ -12,6 +17,7 @@ import { SettingsTab } from "@/components/app/settings-tab"
 import { StorageTab } from "@/components/app/storage-tab"
 import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
 import { Button } from "@/components/ui/button"
@@ -76,35 +82,20 @@ export function AppDetailPage() {
   const current = app.data
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{current.name}</h1>
-            <StatusBadge
-              status={status.data?.phase ?? current.status}
-              label={t(`apps.phase.${status.data?.phase ?? current.status}`, {
-                defaultValue: status.data?.phase ?? current.status,
-              })}
-            />
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm">
-            {status.data?.urls?.map((url) => (
-              <a
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-1.5 text-primary hover:underline"
-              >
-                {url.replace(/^https?:\/\//, "")}
-                <ExternalLinkIcon className="size-3.5" />
-              </a>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
+    <Page>
+      <PageHeader
+        icon={BoxIcon}
+        title={current.name}
+        badge={
+          <StatusBadge
+            status={status.data?.phase ?? current.status}
+            label={t(`apps.phase.${status.data?.phase ?? current.status}`, {
+              defaultValue: status.data?.phase ?? current.status,
+            })}
+          />
+        }
+        actions={
+          <>
           <Button
             variant="outline"
             disabled={restart.isPending}
@@ -118,12 +109,28 @@ export function AppDetailPage() {
               })
             }}
           >
-            <RefreshCwIcon className="size-4" />
+            <RefreshCwIcon />
             {t("apps.restart")}
           </Button>
           <DeployButton appId={appId} />
+          </>
+        }
+      />
+
+      {/* The app's addresses belong directly under its name: on this page they
+          are the thing people came for. */}
+      {(status.data?.urls?.length ?? 0) > 0 && (
+        <div className="-mt-3 flex flex-wrap items-center gap-2">
+          {status.data?.urls?.map((url) => (
+            <Button key={url} variant="outline" size="sm" asChild>
+              <a href={url} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon />
+                {url.replace(/^https?:\/\//, "")}
+              </a>
+            </Button>
+          ))}
         </div>
-      </div>
+      )}
 
       {restart.error != null && <ErrorDisplay error={restart.error} />}
 
@@ -175,7 +182,7 @@ export function AppDetailPage() {
           <AdvancedTab app={current} />
         </TabsContent>
       </Tabs>
-    </div>
+    </Page>
   )
 }
 

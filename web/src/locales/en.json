@@ -494,7 +494,8 @@
     "rotateKeyPartial": "The new master key is in place, but some secrets could not be re-encrypted. The old key was kept so they stay readable.",
     "edited": "Edited",
     "unsaved_one": "{{count}} unsaved change",
-    "unsaved_other": "{{count}} unsaved changes"
+    "unsaved_other": "{{count}} unsaved changes",
+    "subtitle": "Everything an operator configures, in one place. Nothing here needs a file on the server."
   },
   "errors": {
     "whatHappened": "What happened",

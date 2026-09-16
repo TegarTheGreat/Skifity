@@ -6,6 +6,7 @@ import { DownloadIcon, KeyRoundIcon, PlusIcon, ShieldCheckIcon, Trash2Icon } fro
 import { toast } from "sonner"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -33,8 +34,8 @@ export function AccountPage() {
   const [params] = useSearchParams()
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t("nav.account")}</h1>
+    <Page width="narrow">
+      <PageHeader title={t("nav.account")} description={t("auth.apiTokensHelp")} />
 
       {params.get("recovery") === "1" && !user?.recovery_saved && (
         <RecoveryReminder onAcknowledged={() => void refresh()} />
@@ -45,7 +46,7 @@ export function AccountPage() {
       <TwoFactorCard />
       <SessionsCard />
       <TokensCard />
-    </div>
+    </Page>
   )
 }
 

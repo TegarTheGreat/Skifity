@@ -7,6 +7,7 @@ import { BoxesIcon, ExternalLinkIcon, SearchIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,6 +19,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -60,21 +66,19 @@ export function TemplatesPage() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("templates.title")}</h1>
-        <p className="text-sm text-muted-foreground">{t("templates.subtitle")}</p>
-      </div>
+    <Page>
+      <PageHeader title={t("templates.title")} description={t("templates.subtitle")} />
 
-      <div className="relative max-w-sm">
-        <SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
+      <InputGroup className="max-w-sm">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder={t("templates.search")}
-          className="pl-9"
         />
-      </div>
+      </InputGroup>
 
       {templates.isLoading ? (
         <Skeleton className="h-64" />
@@ -129,7 +133,7 @@ export function TemplatesPage() {
       )}
 
       {installing && <InstallDialog template={installing} onClose={() => setInstalling(null)} />}
-    </div>
+    </Page>
   )
 }
 

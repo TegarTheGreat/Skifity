@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
   ArchiveRestoreIcon,
+  ArrowLeftIcon,
   DatabaseBackupIcon,
+  DatabaseIcon,
   EyeIcon,
   LinkIcon,
   Trash2Icon,
@@ -16,8 +18,10 @@ import { EmptyState } from "@/components/empty-state"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -79,23 +83,31 @@ export function DatabaseDetailPage() {
   const links = database.data.links ?? []
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{record.name}</h1>
-          <p className="mt-1 font-mono text-sm text-muted-foreground">
-            {record.engine} {record.engine_version} · {record.storage_gb} GB
-          </p>
-        </div>
-        <StatusBadge
-          status={record.status}
-          label={t(`databases.status.${record.status}`, { defaultValue: record.status })}
-        />
-      </div>
-
-      {record.status_detail && (
-        <p className="text-sm text-muted-foreground">{record.status_detail}</p>
-      )}
+    <Page>
+      <PageHeader
+        icon={DatabaseIcon}
+        title={record.name}
+        description={record.status_detail}
+        back={
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link to="/databases">
+              <ArrowLeftIcon />
+              {t("databases.title")}
+            </Link>
+          </Button>
+        }
+        badge={
+          <>
+            <StatusBadge
+              status={record.status}
+              label={t(`databases.status.${record.status}`, { defaultValue: record.status })}
+            />
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {record.engine} {record.engine_version} · {record.storage_gb} GB
+            </Badge>
+          </>
+        }
+      />
 
       <Tabs defaultValue="connection">
         <TabsList>
@@ -142,7 +154,7 @@ export function DatabaseDetailPage() {
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }
 

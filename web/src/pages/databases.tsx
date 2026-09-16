@@ -6,6 +6,7 @@ import { DatabaseIcon, PlusIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { NewDatabaseDialog } from "@/pages/project-detail"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -95,14 +96,12 @@ export function DatabasesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("databases.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("databases.emptyHelp")}</p>
-        </div>
-        {environments.length > 0 && (
-          <div className="flex items-center gap-2">
+    <Page>
+      <PageHeader
+        title={t("databases.title")}
+        description={t("databases.emptyHelp")}
+        actions={
+          environments.length > 0 && (
             <Select value={creating ?? ""} onValueChange={setCreating}>
               <SelectTrigger className="w-56">
                 <SelectValue placeholder={t("databases.newDatabase")} />
@@ -115,9 +114,9 @@ export function DatabasesPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        )}
-      </div>
+          )
+        }
+      />
 
       {loading ? (
         <Skeleton className="h-48" />
@@ -203,6 +202,6 @@ export function DatabasesPage() {
           }}
         />
       )}
-    </div>
+    </Page>
   )
 }

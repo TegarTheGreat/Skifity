@@ -4,6 +4,7 @@ import { ActivityIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEvents } from "@/hooks/use-events"
@@ -42,11 +43,8 @@ export function ActivityPage() {
   const items = events.data?.items ?? []
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("nav.activity")}</h1>
-        <p className="text-sm text-muted-foreground">{t("settings.auditLogHelp")}</p>
-      </div>
+    <Page width="narrow">
+      <PageHeader title={t("nav.activity")} description={t("settings.auditLogHelp")} />
 
       {events.isLoading ? (
         <Skeleton className="h-64" />
@@ -83,6 +81,6 @@ export function ActivityPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </Page>
   )
 }

@@ -6,6 +6,7 @@ import { FolderIcon, PlusIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -38,17 +39,17 @@ export function ProjectsPage() {
   })
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("projects.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("projects.emptyHelp")}</p>
-        </div>
-        <Button onClick={() => setCreating(true)}>
-          <PlusIcon className="size-4" />
-          {t("projects.newProject")}
-        </Button>
-      </div>
+    <Page>
+      <PageHeader
+        title={t("projects.title")}
+        description={t("projects.emptyHelp")}
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <PlusIcon />
+            {t("projects.newProject")}
+          </Button>
+        }
+      />
 
       {projects.isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -91,7 +92,7 @@ export function ProjectsPage() {
       )}
 
       <NewProjectDialog open={creating} onOpenChange={setCreating} />
-    </div>
+    </Page>
   )
 }
 

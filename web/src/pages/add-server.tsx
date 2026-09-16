@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { ArrowLeftIcon, InfoIcon, KeyRoundIcon, LockIcon } from "lucide-react"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { OperationProgress } from "@/components/operation-progress"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -79,19 +80,19 @@ export function AddServerPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild className="-ml-2 mb-2">
-          <Link to="/servers">
-            <ArrowLeftIcon className="size-4" />
-            {t("servers.title")}
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("servers.addServer")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("servers.addServerIntro", { product: "Skifity" })}
-        </p>
-      </div>
+    <Page width="narrow">
+      <PageHeader
+        back={
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link to="/servers">
+              <ArrowLeftIcon />
+              {t("servers.title")}
+            </Link>
+          </Button>
+        }
+        title={t("servers.addServer")}
+        description={t("servers.addServerIntro", { product: "Skifity" })}
+      />
 
       <Card>
         <CardContent className="pt-6">
@@ -253,7 +254,7 @@ export function AddServerPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }
 
@@ -313,7 +314,7 @@ function ProvisioningView({
   const failed = status === "failed" || status === "cancelled"
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <Page width="narrow">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("servers.progress", { name: serverName })}
@@ -354,6 +355,6 @@ function ProvisioningView({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }

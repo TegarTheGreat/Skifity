@@ -1,11 +1,19 @@
 import { useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ArrowUpCircleIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  ArrowUpCircleIcon,
+  PencilIcon,
+  RefreshCwIcon,
+  ServerIcon,
+  Trash2Icon,
+} from "lucide-react"
 
 import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { OperationProgress } from "@/components/operation-progress"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -14,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
 import { useEvents } from "@/hooks/use-events"
 import { useSession } from "@/hooks/use-session"
 import { api } from "@/lib/api"
@@ -83,44 +92,64 @@ export function ServerDetailPage() {
   const current = server.data
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          {name === null ? (
-            <button
-              type="button"
-              className="truncate text-left text-2xl font-semibold tracking-tight hover:text-primary"
-              onClick={() => setName(current.name)}
-            >
-              {current.name}
-            </button>
-          ) : (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                rename.mutate(name.trim())
-              }}
-            >
-              <Input value={name} onChange={(event) => setName(event.target.value)} autoFocus />
-              <Button type="submit" size="sm" disabled={rename.isPending}>
-                {t("common.save")}
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setName(null)}>
-                {t("common.cancel")}
-              </Button>
-            </form>
-          )}
-          <p className="mt-1 font-mono text-sm text-muted-foreground">
-            {current.ssh_user}@{current.host}:{current.ssh_port}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge
-            status={current.status}
-            label={t(`servers.status.${current.status}`, { defaultValue: current.status })}
+    <Page>
+      {name !== null ? (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            rename.mutate(name.trim())
+          }}
+        >
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            autoFocus
+            className="max-w-xs text-lg font-semibold"
           />
+          <Button type="submit" size="sm" disabled={rename.isPending}>
+            {rename.isPending && <Spinner />}
+            {t("common.save")}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setName(null)}>
+            {t("common.cancel")}
+          </Button>
+        </form>
+      ) : null}
+
+      <PageHeader
+        icon={ServerIcon}
+        title={name === null ? current.name : undefined}
+        description={`${current.ssh_user}@${current.host}:${current.ssh_port}`}
+        back={
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link to="/servers">
+              <ArrowLeftIcon />
+              {t("servers.title")}
+            </Link>
+          </Button>
+        }
+        badge={
+          <>
+            <StatusBadge
+              status={current.status}
+              label={t(`servers.status.${current.status}`, { defaultValue: current.status })}
+            />
+            {name === null && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => setName(current.name)}
+              >
+                <PencilIcon />
+                {t("common.edit")}
+              </Button>
+            )}
+          </>
+        }
+        actions={
+          <>
           {current.status === "failed" && (
             <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate()}>
               <RefreshCwIcon className="size-4" />
@@ -141,15 +170,16 @@ export function ServerDetailPage() {
                 })
               }}
             >
-              <ArrowUpCircleIcon className="size-4" />
+              <ArrowUpCircleIcon />
               {t("servers.promote")}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {current.status_detail && (
-        <p className="text-sm text-muted-foreground">{current.status_detail}</p>
+        <p className="-mt-3 text-sm text-muted-foreground">{current.status_detail}</p>
       )}
 
       {retry.error != null && <ErrorDisplay error={retry.error} />}
@@ -246,7 +276,7 @@ export function ServerDetailPage() {
           </Button>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   )
 }
 

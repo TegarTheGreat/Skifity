@@ -6,6 +6,7 @@ import { ContainerIcon, GitBranchIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -102,11 +103,8 @@ export function NewAppPage() {
   const ready = sourceType === "git" ? repoURL.trim() !== "" : image.trim() !== ""
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("apps.newApp")}</h1>
-        <p className="text-sm text-muted-foreground">{t("apps.emptyHelp")}</p>
-      </div>
+    <Page width="narrow">
+      <PageHeader title={t("apps.newApp")} description={t("apps.emptyHelp")} />
 
       <form
         className="space-y-6"
@@ -320,7 +318,7 @@ export function NewAppPage() {
           </Button>
         </div>
       </form>
-    </div>
+    </Page>
   )
 }
 

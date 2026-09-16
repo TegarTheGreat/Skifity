@@ -485,7 +485,8 @@
     "rotateKeyDone": "Kunci utama telah dirotasi dan semua rahasia tersimpan dienkripsi ulang dengan kunci baru.",
     "rotateKeyPartial": "Kunci utama baru sudah aktif, tetapi sebagian rahasia gagal dienkripsi ulang. Kunci lama tetap disimpan agar rahasia itu masih bisa dibaca.",
     "edited": "Diubah",
-    "unsaved_other": "{{count}} perubahan belum disimpan"
+    "unsaved_other": "{{count}} perubahan belum disimpan",
+    "subtitle": "Semua yang diatur operator, dalam satu tempat. Tidak ada di sini yang memerlukan berkas di server."
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

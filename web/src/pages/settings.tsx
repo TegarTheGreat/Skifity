@@ -13,6 +13,7 @@ import { toast } from "sonner"
 
 import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { GitSources } from "@/components/settings/git-sources"
 import { NotificationChannels } from "@/components/settings/notification-channels"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -69,10 +70,8 @@ export function SettingsPage() {
   const { t } = useTranslation()
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("settings.title")}</h1>
-      </div>
+    <Page>
+      <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
 
       <Tabs defaultValue="panel">
         <TabsList className="flex-wrap">
@@ -110,7 +109,7 @@ export function SettingsPage() {
           <AuditPanel />
         </TabsContent>
       </Tabs>
-    </div>
+    </Page>
   )
 }
 

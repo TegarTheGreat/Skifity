@@ -3,10 +3,12 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
+  ArrowLeftIcon,
   ArrowRightIcon,
   BoxIcon,
   DatabaseIcon,
   ExternalLinkIcon,
+  FolderIcon,
   MoreHorizontalIcon,
   PlusIcon,
   RocketIcon,
@@ -16,6 +18,7 @@ import {
 import { EmptyState } from "@/components/empty-state"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
 import { Badge } from "@/components/ui/badge"
@@ -94,22 +97,22 @@ export function ProjectDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          {project.isLoading ? (
-            <Skeleton className="h-8 w-48" />
-          ) : (
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{project.data?.name}</h1>
-          )}
-          {project.data?.description && (
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              {project.data.description}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
+    <Page>
+      <PageHeader
+        icon={FolderIcon}
+        loading={project.isLoading}
+        title={project.data?.name}
+        description={project.data?.description}
+        back={
+          <Button variant="ghost" size="sm" asChild className="-ml-2">
+            <Link to="/projects">
+              <ArrowLeftIcon />
+              {t("projects.title")}
+            </Link>
+          </Button>
+        }
+        actions={
+          <>
           {environmentId && (
             <Button asChild>
               <Link to={`/environments/${environmentId}/apps/new`}>
@@ -146,8 +149,9 @@ export function ProjectDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {remove.error && <ErrorDisplay error={remove.error} />}
 
@@ -205,7 +209,7 @@ export function ProjectDetailPage() {
         onOpenChange={setNewEnvironment}
         onCreated={(environment) => setEnvironmentId(environment.id)}
       />
-    </div>
+    </Page>
   )
 }
 

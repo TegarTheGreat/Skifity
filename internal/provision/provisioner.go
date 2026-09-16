@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"skifity/internal/api"
@@ -46,24 +48,41 @@ var addServerSteps = []string{
 // removeServerSteps is the plan for taking a server out.
 var removeServerSteps = []string{"cordon", "drain", "delete-node", "uninstall"}
 
+// Options is what a Provisioner needs. A struct rather than eight positional
+// arguments, because the last three are easy to swap by accident.
+type Options struct {
+	DB      *store.DB
+	Keyring *crypto.Keyring
+	Hub     *events.Hub
+	Cluster *cluster.Cluster
+	// Notifier may be nil, and then nothing is sent.
+	Notifier notify.Notifier
+	// ClusterTokenPath is where the installer left this cluster's k3s join
+	// token. See clusterToken.
+	ClusterTokenPath string
+	Logger           *slog.Logger
+}
+
 // Provisioner implements api.Provisioner.
 type Provisioner struct {
-	db       *store.DB
-	keyring  *crypto.Keyring
-	hub      *events.Hub
-	cluster  *cluster.Cluster
-	notifier notify.Notifier
-	log      *slog.Logger
+	db               *store.DB
+	keyring          *crypto.Keyring
+	hub              *events.Hub
+	cluster          *cluster.Cluster
+	notifier         notify.Notifier
+	clusterTokenPath string
+	log              *slog.Logger
 
 	// running tracks in-flight operations so they can be cancelled.
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
 }
 
-// New builds a Provisioner. notifier may be nil, and then nothing is sent.
-func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, notifier notify.Notifier, log *slog.Logger) *Provisioner {
+// New builds a Provisioner.
+func New(opts Options) *Provisioner {
 	return &Provisioner{
-		db: db, keyring: keyring, hub: hub, cluster: c, notifier: notifier, log: log,
+		db: opts.DB, keyring: opts.Keyring, hub: opts.Hub, cluster: opts.Cluster,
+		notifier: opts.Notifier, clusterTokenPath: opts.ClusterTokenPath, log: opts.Logger,
 		running: map[string]context.CancelFunc{},
 	}
 }
@@ -513,17 +532,24 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 		publicIP = server.Host
 	}
 
-	primary, err := p.primaryServer(ctx, state.serverID)
-	isFirst := errors.Is(err, store.ErrNotFound)
-	if err != nil && !isFirst {
+	// Where the new server should join, if anywhere.
+	//
+	// The panel's own records are not the answer on their own. A panel
+	// installed by install.sh runs in a cluster it has no server row for, so
+	// "no control-plane server in the database" used to mean "this is the
+	// first server" — and the new machine was given --cluster-init and built a
+	// second, separate cluster next to the real one.
+	primaryIP, err := p.controlPlaneAddress(ctx, state.serverID)
+	if err != nil {
 		return err
 	}
 
 	var script string
 	switch {
-	case isFirst:
-		// The first server. The token is generated here and kept encrypted, so
-		// later servers can join without anyone reading it off a machine.
+	case primaryIP == "":
+		// Genuinely the first server: no cluster exists yet. The token is
+		// generated here and kept encrypted, so later servers can join without
+		// anyone reading it off a machine.
 		token, err := p.clusterToken(ctx, server.TeamID)
 		if err != nil {
 			return err
@@ -534,10 +560,6 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 		token, err := p.clusterToken(ctx, server.TeamID)
 		if err != nil {
 			return err
-		}
-		primaryIP := primary.ExternalIP
-		if primaryIP == "" {
-			primaryIP = primary.Host
 		}
 		state.serverURL = fmt.Sprintf("https://%s:6443", primaryIP)
 		state.joinToken = token
@@ -656,13 +678,43 @@ func (p *Provisioner) applyNodeLabels(ctx context.Context, server store.Server) 
 	return nil
 }
 
-// clusterToken returns the shared k3s join token, creating it on first use.
+// clusterTokenKey is where the join token is kept, encrypted.
+const clusterTokenKey = "cluster.join_token"
+
+// clusterToken returns the k3s join token for the cluster the panel manages.
 //
-// Generating it here rather than reading it off the first server means the
-// token exists before the first server does, so the install is one pass.
+// Three sources, in this order, because each is the only one that can be right
+// in its own case:
+//
+//  1. The file the installer left. A cluster the installer created has a token
+//     the panel cannot invent, and a server joining with any other token is
+//     refused. This wins even over a stored one, because the cluster's own
+//     token is the truth.
+//  2. The setting, for a cluster the panel built itself.
+//  3. A new random token, but only when there is no cluster yet. Generating one
+//     for an existing cluster is how a second cluster gets built by accident,
+//     so that case is an error with a way out instead.
 func (p *Provisioner) clusterToken(ctx context.Context, teamID string) (string, error) {
-	const key = "cluster.join_token"
-	sealed, encrypted, err := p.db.GetSetting(ctx, key)
+	return p.joinToken(ctx, func() (bool, error) {
+		// Only Kubernetes can answer this. A cluster in the panel's own records
+		// is one the panel built, and its token would be in the setting below.
+		address, err := p.kubernetesControlPlane(ctx)
+		return address != "", err
+	})
+}
+
+// joinToken is clusterToken's decision, with "does a cluster already exist"
+// passed in. It is asked lazily, because the usual answer comes from the first
+// two sources and costs no round trip.
+func (p *Provisioner) joinToken(ctx context.Context, clusterExists func() (bool, error)) (string, error) {
+	if token := p.tokenFromDisk(); token != "" {
+		if err := p.rememberToken(ctx, token); err != nil {
+			p.log.Warn("could not store the cluster join token", "error", err)
+		}
+		return token, nil
+	}
+
+	sealed, encrypted, err := p.db.GetSetting(ctx, clusterTokenKey)
 	if err != nil {
 		return "", err
 	}
@@ -670,25 +722,53 @@ func (p *Provisioner) clusterToken(ctx context.Context, teamID string) (string, 
 		if !encrypted {
 			return sealed, nil
 		}
-		plaintext, err := p.keyring.Open(sealed, settings.Context(key))
+		plaintext, err := p.keyring.Open(sealed, settings.Context(clusterTokenKey))
 		if err != nil {
 			return "", fmt.Errorf("read the cluster join token: %w", err)
 		}
 		return string(plaintext), nil
 	}
 
+	exists, err := clusterExists()
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return "", errdoc.ClusterTokenMissing(p.clusterTokenPath)
+	}
+
 	token, err := crypto.RandomToken(32)
 	if err != nil {
 		return "", err
 	}
-	newSealed, err := p.keyring.Seal([]byte(token), settings.Context(key))
-	if err != nil {
-		return "", err
-	}
-	if err := p.db.SetSetting(ctx, key, newSealed, true, "system"); err != nil {
+	if err := p.rememberToken(ctx, token); err != nil {
 		return "", err
 	}
 	return token, nil
+}
+
+// tokenFromDisk reads the token the installer copied next to the master key.
+func (p *Provisioner) tokenFromDisk() string {
+	if p.clusterTokenPath == "" {
+		return ""
+	}
+	data, err := os.ReadFile(p.clusterTokenPath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			p.log.Warn("could not read the cluster join token",
+				"path", p.clusterTokenPath, "error", err)
+		}
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func (p *Provisioner) rememberToken(ctx context.Context, token string) error {
+	sealed, err := p.keyring.Seal([]byte(token), settings.Context(clusterTokenKey))
+	if err != nil {
+		return err
+	}
+	return p.db.SetSetting(ctx, clusterTokenKey, sealed, true, "system")
 }
 
 // k3sVersion reads the pinned version, or empty for the stable channel.
@@ -698,6 +778,78 @@ func (p *Provisioner) k3sVersion(ctx context.Context) string {
 		return ""
 	}
 	return value
+}
+
+// controlPlaneAddress returns the address a new server should join, or "" when
+// there is no cluster to join yet.
+//
+// It asks two sources in order, because either can be the only one that knows.
+// The panel's own records cover a cluster the panel built. The Kubernetes API
+// covers a cluster the installer built, which the panel runs inside and has no
+// server rows for — and that is the common case, because install.sh is how
+// most people start.
+func (p *Provisioner) controlPlaneAddress(ctx context.Context, excludeID string) (string, error) {
+	server, err := p.primaryServer(ctx, excludeID)
+	switch {
+	case err == nil:
+		if server.ExternalIP != "" {
+			return server.ExternalIP, nil
+		}
+		return server.Host, nil
+	case !errors.Is(err, store.ErrNotFound):
+		return "", err
+	}
+
+	return p.kubernetesControlPlane(ctx)
+}
+
+// kubernetesControlPlane asks the cluster itself, which is the only source that
+// knows about a cluster the panel did not create.
+func (p *Provisioner) kubernetesControlPlane(ctx context.Context) (string, error) {
+	if p.cluster == nil {
+		// No cluster connection at all, so there is nothing to join and
+		// nothing that could tell us otherwise.
+		return "", nil
+	}
+	nodes, err := p.cluster.Client().Clientset().CoreV1().Nodes().List(ctx, metav1.ListOptions{
+		LabelSelector: "node-role.kubernetes.io/control-plane",
+	})
+	if err != nil {
+		// Being unable to ask is not the same as the answer being no: guessing
+		// "no" here is what builds a second cluster.
+		return "", fmt.Errorf("check whether a cluster already exists: %w", err)
+	}
+	address := firstControlPlaneAddress(nodes.Items)
+	if address != "" {
+		p.log.Info("joining the cluster this panel already runs in", "address", address)
+	}
+	return address, nil
+}
+
+// firstControlPlaneAddress picks the node a new server should point at.
+func firstControlPlaneAddress(nodes []corev1.Node) string {
+	for _, node := range nodes {
+		if address := nodeAddress(node); address != "" {
+			return address
+		}
+	}
+	return ""
+}
+
+// nodeAddress prefers the address another machine can reach.
+func nodeAddress(node corev1.Node) string {
+	var internal string
+	for _, address := range node.Status.Addresses {
+		switch address.Type {
+		case corev1.NodeExternalIP:
+			return address.Address
+		case corev1.NodeInternalIP:
+			if internal == "" {
+				internal = address.Address
+			}
+		}
+	}
+	return internal
 }
 
 // primaryServer returns the control plane server to join, excluding one.

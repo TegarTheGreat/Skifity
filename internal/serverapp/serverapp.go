@@ -84,7 +84,10 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	defer dispatcher.Wait()
 
 	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
-	provisioner := provision.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	provisioner := provision.New(provision.Options{
+		DB: db, Keyring: keyring, Hub: hub, Cluster: clusterAdapter,
+		Notifier: dispatcher, ClusterTokenPath: cfg.ClusterTokenPath, Logger: log,
+	})
 	databases := dbsvc.New(db, keyring, hub, clusterAdapter, deployer, log)
 	backups := backup.New(db, keyring, hub, clusterAdapter, dispatcher, log)
 	watcher := watch.New(db, watchCluster(clusterAdapter), hub, dispatcher, log)

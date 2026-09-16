@@ -1,6 +1,10 @@
 package errdoc
 
-import "net/http"
+import (
+	"net/http"
+
+	"skifity/internal/version"
+)
 
 // This file is the catalogue of failures the panel knows how to explain.
 //
@@ -147,6 +151,25 @@ func K3sInstallFailed(host string, exitCode int, output string) *Problem {
 		WithStatus(http.StatusBadGateway).
 		Retry().
 		With("host", host).With("exit_code", itoa(exitCode)).With("output_tail", tail(output, 2000))
+}
+
+// ClusterTokenMissing reports that the panel cannot add a server to the cluster
+// it is already running in, because it does not know that cluster's join token.
+//
+// This is a dead end worth being loud about. Inventing a token would build a
+// second, separate cluster on the new server, which looks like it worked until
+// somebody wonders why their app is not running anywhere.
+func ClusterTokenMissing(path string) *Problem {
+	if path == "" {
+		path = version.ConfigDir + "/cluster-token"
+	}
+	return New("cluster.token_missing", "Skifity does not have this cluster's join token").
+		WithCause("The panel is running in a Kubernetes cluster it did not create, and a server can only join that cluster with the token it was started with.").
+		WithImpact("No server can be added. Nothing was changed on the server you were adding.").
+		WithFix("On the server the panel runs on, copy the token into place and restart the panel:\n\n  sudo cp /var/lib/rancher/k3s/server/token %s\n  sudo chmod 600 %s", path, path).
+		WithDocs("/docs/adding-servers#when-a-step-fails").
+		WithStatus(http.StatusPreconditionFailed).
+		With("path", path)
 }
 
 // --- builds and deploys ---

@@ -58,6 +58,13 @@ type Config struct {
 	// SetupTokenPath holds the one-time token the installer generates. The file
 	// is deleted once setup completes.
 	SetupTokenPath string `json:"setup_token_path" toml:"setup_token_path"`
+	// ClusterTokenPath holds the k3s join token of the cluster the panel runs
+	// in, copied there by the installer.
+	//
+	// A panel installed onto a server that already runs k3s cannot invent this:
+	// a server added later has to join with the token that cluster was started
+	// with, and the panel has no other way to learn it.
+	ClusterTokenPath string `json:"cluster_token_path" toml:"cluster_token_path"`
 }
 
 // Default returns the configuration used when nothing overrides it.
@@ -74,6 +81,7 @@ func Default() Config {
 		SessionTTL:        7 * 24 * time.Hour,
 		ShutdownGrace:     20 * time.Second,
 		SetupTokenPath:    filepath.Join(version.ConfigDir, "setup-token"),
+		ClusterTokenPath:  filepath.Join(version.ConfigDir, "cluster-token"),
 	}
 }
 
@@ -129,6 +137,7 @@ func (c *Config) applyEnv(lookup func(string) string) {
 	str("DEV_FRONTEND_URL", &c.DevFrontendURL)
 	str("PUBLIC_URL", &c.PublicURL)
 	str("SETUP_TOKEN_PATH", &c.SetupTokenPath)
+	str("CLUSTER_TOKEN_PATH", &c.ClusterTokenPath)
 
 	if v := lookup(EnvPrefix + "DEV_MODE"); v != "" {
 		c.DevMode = truthy(v)

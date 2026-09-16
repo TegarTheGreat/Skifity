@@ -326,6 +326,29 @@ prepare_directories() {
 	ok "$CONFIG_DIR and $DATA_DIR"
 }
 
+# The panel adds servers to this cluster, and a server can only join with the
+# token the cluster was started with. The panel is not on the host and cannot
+# read k3s's own copy, so it is put next to the master key, where the panel
+# already looks and nothing else can.
+#
+# Without it the panel would have no token, invent one, and give the next
+# server --cluster-init — building a second, separate cluster that looks like
+# it worked until somebody wonders why their app is not running anywhere.
+copy_cluster_token() {
+	step "Giving the panel this cluster's join token"
+
+	if [ ! -r /var/lib/rancher/k3s/server/token ]; then
+		warn "k3s has not written its token yet; servers cannot be added until it is copied"
+		note "Once k3s is running: cp /var/lib/rancher/k3s/server/token ${CONFIG_DIR}/cluster-token"
+		return 0
+	fi
+
+	run cp /var/lib/rancher/k3s/server/token "$CONFIG_DIR/cluster-token"
+	run chown "$RUN_UID:$RUN_GID" "$CONFIG_DIR/cluster-token"
+	run chmod 0600 "$CONFIG_DIR/cluster-token"
+	ok "the panel can add servers to this cluster"
+}
+
 generate_setup_token() {
 	step "Preparing first-run setup"
 
@@ -560,6 +583,7 @@ have kubectl || fail \
 
 wait_for_cluster
 prepare_directories
+copy_cluster_token
 generate_setup_token
 choose_hostname
 install_cert_manager

@@ -151,6 +151,29 @@ func (c *Cluster) Manifests(ctx context.Context, app store.App, env store.Enviro
 		objects = append(objects, claim)
 	}
 
+	// The scheduled commands too: this view says it shows what is running, and
+	// a nightly job is as much a part of an app as its Deployment.
+	jobs, err := c.db.ListAppJobs(ctx, app.ID)
+	if err != nil {
+		return "", err
+	}
+	for _, job := range jobs {
+		if !job.Enabled {
+			continue
+		}
+		cron, err := kube.BuildCronJob(kube.RunSpec{
+			App: spec, Name: kube.CronJobName(app.Slug, job.Name),
+			Command: job.Command, Kind: kube.RunKindScheduled,
+		}, job.Schedule)
+		if err != nil {
+			// A schedule that cannot be rendered is worth saying so about,
+			// rather than quietly leaving out of a view that claims to be
+			// complete.
+			return "", fmt.Errorf("render the scheduled command %q: %w", job.Name, err)
+		}
+		objects = append(objects, cron)
+	}
+
 	var b strings.Builder
 	for _, obj := range objects {
 		if obj == nil || isNilPointer(obj) {

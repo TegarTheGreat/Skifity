@@ -1,0 +1,584 @@
+// Package deploy turns a source commit into running instances.
+package deploy
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"skifity/internal/api"
+	"skifity/internal/cluster"
+	"skifity/internal/crypto"
+	"skifity/internal/errdoc"
+	"skifity/internal/events"
+	"skifity/internal/kube"
+	"skifity/internal/settings"
+	"skifity/internal/store"
+)
+
+// Deployer implements api.Deployer.
+type Deployer struct {
+	db      *store.DB
+	keyring *crypto.Keyring
+	hub     *events.Hub
+	cluster *cluster.Cluster
+	log     *slog.Logger
+
+	mu      sync.Mutex
+	running map[string]context.CancelFunc
+}
+
+// New builds a Deployer.
+func New(db *store.DB, keyring *crypto.Keyring, hub *events.Hub, c *cluster.Cluster, log *slog.Logger) *Deployer {
+	return &Deployer{
+		db: db, keyring: keyring, hub: hub, cluster: c, log: log,
+		running: map[string]context.CancelFunc{},
+	}
+}
+
+// maxDeployDuration bounds a whole deploy, build included.
+const maxDeployDuration = 45 * time.Minute
+
+// Deploy queues a deployment and starts it.
+//
+// The record is created synchronously so the UI can open the log view straight
+// away; the build and rollout run in the background.
+func (d *Deployer) Deploy(ctx context.Context, req api.DeployRequest) (store.Deployment, error) {
+	app, err := d.db.GetApp(ctx, req.AppID)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	env, err := d.db.GetEnvironment(ctx, app.EnvironmentID)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+
+	commit := req.CommitSHA
+	if commit == "" {
+		// Without a commit the build clones the branch tip, and the resulting
+		// image is tagged with whatever it turns out to be.
+		commit = ""
+	}
+
+	buildArgs, err := d.buildTimeVariables(ctx, app)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	fingerprint := kube.BuildFingerprint(app.RepoURL, commit, app.Builder, app.DockerfilePath, app.RootDir, buildArgs)
+	if app.SourceType == "image" {
+		// A prebuilt image is its own fingerprint: nothing is built.
+		fingerprint = "image:" + app.Image
+	}
+
+	runtimeSpec, err := d.runtimeSpec(ctx, app, env)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+
+	deployment := store.Deployment{
+		AppID:            app.ID,
+		Status:           store.DeployQueued,
+		Trigger:          req.Trigger,
+		CommitSHA:        commit,
+		BuildFingerprint: fingerprint,
+		RuntimeSpec:      runtimeSpec,
+		CreatedBy:        req.CreatedBy,
+	}
+
+	// The heart of ADR-0007: when the build inputs have not changed, the
+	// existing image is reused and this is a rollout, not a build. Changing an
+	// environment variable or a replica count never rebuilds.
+	if !req.Force && app.SourceType != "image" {
+		if previous, err := d.db.FindDeploymentByFingerprint(ctx, app.ID, fingerprint); err == nil {
+			deployment.Image = previous.Image
+			deployment.CommitSHA = previous.CommitSHA
+			deployment.CommitMessage = previous.CommitMessage
+			deployment.CommitAuthor = previous.CommitAuthor
+		}
+	}
+	if app.SourceType == "image" {
+		deployment.Image = app.Image
+	}
+
+	if err := d.db.CreateDeployment(ctx, &deployment); err != nil {
+		return store.Deployment{}, err
+	}
+	if err := d.db.SupersedeRunningDeployments(ctx, app.ID, deployment.ID); err != nil {
+		d.log.Warn("could not supersede earlier deployments", "app", app.ID, "error", err)
+	}
+
+	d.start(deployment.ID, func(runCtx context.Context) {
+		d.run(runCtx, deployment.ID)
+	})
+	return deployment, nil
+}
+
+// run executes a deployment from start to finish.
+func (d *Deployer) run(ctx context.Context, deploymentID string) {
+	defer d.finish(deploymentID)
+
+	deployment, err := d.db.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		d.log.Error("could not load the deployment to run", "deployment", deploymentID, "error", err)
+		return
+	}
+	app, err := d.db.GetApp(ctx, deployment.AppID)
+	if err != nil {
+		d.fail(ctx, deployment, errdoc.From(err))
+		return
+	}
+	env, err := d.db.GetEnvironment(ctx, app.EnvironmentID)
+	if err != nil {
+		d.fail(ctx, deployment, errdoc.From(err))
+		return
+	}
+
+	if deployment.Image == "" {
+		d.setStatus(ctx, &deployment, store.DeployBuilding)
+		image, err := d.build(ctx, &deployment, app, env)
+		if err != nil {
+			d.fail(ctx, deployment, errdoc.From(err))
+			return
+		}
+		deployment.Image = image
+		if err := d.db.SetDeploymentImage(ctx, deployment.ID, image); err != nil {
+			d.log.Warn("could not record the built image", "deployment", deployment.ID, "error", err)
+		}
+	} else {
+		d.appendLog(ctx, deployment.ID,
+			"Nothing to build: this version was already built, so the existing image is reused.")
+	}
+
+	d.setStatus(ctx, &deployment, store.DeployDeploying)
+	if err := d.apply(ctx, deployment, app, env); err != nil {
+		d.fail(ctx, deployment, errdoc.From(err))
+		return
+	}
+
+	d.appendLog(ctx, deployment.ID, "Deployed.")
+	_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeploySucceeded, "", "", "")
+	_ = d.db.SetAppStatus(ctx, app.ID, "running")
+	d.publish(ctx, deployment.ID)
+
+	// Build logs are by far the largest thing stored; keep the last few.
+	if err := d.db.PruneBuildLogs(ctx, app.ID, 20); err != nil {
+		d.log.Warn("could not prune build logs", "app", app.ID, "error", err)
+	}
+}
+
+// apply renders and applies the app's Kubernetes objects and waits for the
+// rollout.
+func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app store.App, env store.Environment) error {
+	if d.cluster == nil {
+		return errdoc.ClusterUnreachable(nil)
+	}
+
+	spec, err := d.cluster.SpecFor(ctx, app, env, deployment.Image)
+	if err != nil {
+		return err
+	}
+	spec.DeploymentID = deployment.ID
+
+	variables, err := d.runtimeVariables(ctx, app, env)
+	if err != nil {
+		return err
+	}
+	// The pod template carries a hash of the configuration, so a variable
+	// change actually restarts the pods. Kubernetes does not watch a Secret's
+	// contents, so without this the new value would only appear at the next
+	// unrelated restart.
+	spec.Revision = kube.EnvHash(variables) + ":" + deployment.ID
+
+	if err := spec.Validate(); err != nil {
+		return errdoc.BadRequest(err.Error())
+	}
+
+	// Make sure the namespace and its guards exist: an app can be created
+	// before the cluster was reachable.
+	project, err := d.db.GetProject(ctx, env.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err := d.cluster.EnsureNamespace(ctx, env.Namespace, project.TeamID, project.ID); err != nil {
+		return err
+	}
+
+	objects := []any{
+		kube.BuildEnvSecret(spec, variables),
+	}
+	for _, claim := range kube.BuildPVCs(spec) {
+		objects = append(objects, claim)
+	}
+	objects = append(objects,
+		kube.BuildDeployment(spec),
+		kube.BuildService(spec),
+		kube.BuildIngress(spec),
+		kube.BuildHPA(spec),
+		kube.BuildPDB(spec),
+	)
+
+	d.appendLog(ctx, deployment.ID, "Applying the configuration to the cluster.")
+	if err := d.cluster.Client().Applier().ApplyAll(ctx, objects...); err != nil {
+		return err
+	}
+
+	// Objects that are no longer wanted have to be removed explicitly: server-
+	// side apply removes fields, not whole objects.
+	d.removeUnwanted(ctx, spec, app)
+
+	d.appendLog(ctx, deployment.ID, "Waiting for the new instances to become ready.")
+	if err := d.cluster.Client().WaitForRollout(ctx, env.Namespace, app.Slug, 10*time.Minute); err != nil {
+		status, statusErr := d.cluster.AppStatus(ctx, env.Namespace, app.Slug)
+		ready, wanted := 0, int(spec.DesiredReplicas())
+		reason := err.Error()
+		if statusErr == nil {
+			ready = status.ReadyReplicas
+			if status.Detail != "" {
+				reason = status.Detail
+			}
+		}
+		return errdoc.RolloutTimedOut(app.Name, ready, wanted, reason)
+	}
+	return nil
+}
+
+// removeUnwanted deletes objects the app no longer needs.
+func (d *Deployer) removeUnwanted(ctx context.Context, spec kube.AppSpec, app store.App) {
+	applier := d.cluster.Client().Applier()
+
+	if len(spec.Domains) == 0 {
+		if err := applier.Delete(ctx, "networking.k8s.io/v1", "Ingress", spec.Namespace, spec.Name); err != nil {
+			d.log.Warn("could not remove the ingress", "app", app.ID, "error", err)
+		}
+	}
+	if !spec.Autoscale {
+		if err := applier.Delete(ctx, "autoscaling/v2", "HorizontalPodAutoscaler",
+			spec.Namespace, kube.ResourceName(spec.Name, "hpa")); err != nil {
+			d.log.Warn("could not remove the autoscaler", "app", app.ID, "error", err)
+		}
+	}
+	if kube.BuildPDB(spec) == nil {
+		if err := applier.Delete(ctx, "policy/v1", "PodDisruptionBudget",
+			spec.Namespace, kube.ResourceName(spec.Name, "pdb")); err != nil {
+			d.log.Warn("could not remove the disruption budget", "app", app.ID, "error", err)
+		}
+	}
+}
+
+// Sync applies an app's current configuration without building.
+//
+// This is what a change to a variable, a domain or a replica count does, and it
+// is why those changes never trigger a build.
+func (d *Deployer) Sync(ctx context.Context, appID string) error {
+	app, err := d.db.GetApp(ctx, appID)
+	if err != nil {
+		return err
+	}
+	last, err := d.db.LatestSuccessfulDeployment(ctx, appID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			// Nothing has been deployed yet, so there is nothing to update.
+			return nil
+		}
+		return err
+	}
+	env, err := d.db.GetEnvironment(ctx, app.EnvironmentID)
+	if err != nil {
+		return err
+	}
+	if d.cluster == nil {
+		return nil
+	}
+	return d.apply(ctx, last, app, env)
+}
+
+// Rollback re-applies a previous deployment's image and runtime configuration.
+func (d *Deployer) Rollback(ctx context.Context, appID, deploymentID, actorID string) (store.Deployment, error) {
+	previous, err := d.db.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	if previous.AppID != appID {
+		return store.Deployment{}, errdoc.NotFound("deployment", deploymentID)
+	}
+	if previous.Image == "" {
+		return store.Deployment{}, errdoc.BadRequest("That version has no image to roll back to.")
+	}
+
+	// A rollback is a new deployment carrying the old image, so the history
+	// stays a straight line and rolling forward again is just another rollback.
+	deployment := store.Deployment{
+		AppID:            appID,
+		Status:           store.DeployQueued,
+		Trigger:          fmt.Sprintf("rollback to #%d", previous.Number),
+		CommitSHA:        previous.CommitSHA,
+		CommitMessage:    previous.CommitMessage,
+		CommitAuthor:     previous.CommitAuthor,
+		Image:            previous.Image,
+		BuildFingerprint: previous.BuildFingerprint,
+		RuntimeSpec:      previous.RuntimeSpec,
+		CreatedBy:        actorID,
+	}
+	if err := d.db.CreateDeployment(ctx, &deployment); err != nil {
+		return store.Deployment{}, err
+	}
+
+	// Restore the runtime settings the old version ran with, so a rollback
+	// undoes a bad configuration change and not only a bad build.
+	if err := d.restoreRuntimeSpec(ctx, appID, previous.RuntimeSpec); err != nil {
+		d.log.Warn("could not restore the previous settings", "app", appID, "error", err)
+	}
+
+	d.start(deployment.ID, func(runCtx context.Context) {
+		d.run(runCtx, deployment.ID)
+	})
+	return deployment, nil
+}
+
+// Cancel stops an in-flight build or rollout.
+func (d *Deployer) Cancel(ctx context.Context, deploymentID string) error {
+	d.mu.Lock()
+	cancel, running := d.running[deploymentID]
+	d.mu.Unlock()
+	if !running {
+		return errdoc.BadRequest("That deployment is not running.")
+	}
+	cancel()
+	if err := d.db.UpdateDeploymentStatus(ctx, deploymentID, store.DeployCancelled, "cancelled", "Cancelled by a user.", ""); err != nil {
+		return err
+	}
+	d.publish(ctx, deploymentID)
+	return nil
+}
+
+func (d *Deployer) start(deploymentID string, work func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), maxDeployDuration)
+
+	d.mu.Lock()
+	if _, already := d.running[deploymentID]; already {
+		d.mu.Unlock()
+		cancel()
+		return
+	}
+	d.running[deploymentID] = cancel
+	d.mu.Unlock()
+
+	go func() {
+		defer cancel()
+		work(ctx)
+	}()
+}
+
+func (d *Deployer) finish(deploymentID string) {
+	d.mu.Lock()
+	delete(d.running, deploymentID)
+	d.mu.Unlock()
+}
+
+func (d *Deployer) setStatus(ctx context.Context, deployment *store.Deployment, status store.DeploymentStatus) {
+	deployment.Status = status
+	if err := d.db.UpdateDeploymentStatus(ctx, deployment.ID, status, "", "", ""); err != nil {
+		d.log.Warn("could not update the deployment status", "deployment", deployment.ID, "error", err)
+	}
+	d.publish(ctx, deployment.ID)
+}
+
+func (d *Deployer) fail(ctx context.Context, deployment store.Deployment, problem *errdoc.Problem) {
+	// A cancelled deploy is not a failure to shout about.
+	if errors.Is(problem, context.Canceled) {
+		_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeployCancelled, "cancelled", "Cancelled.", "")
+		d.publish(ctx, deployment.ID)
+		return
+	}
+	d.log.Error("deployment failed",
+		"deployment", deployment.ID, "app", deployment.AppID, "code", problem.Code, "error", problem.Error())
+
+	_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeployFailed,
+		problem.Code, problem.Error(), problem.Fix)
+	_ = d.db.SetAppStatus(ctx, deployment.AppID, "failed")
+
+	d.appendLog(ctx, deployment.ID, "")
+	for _, line := range strings.Split(problem.Text(), "\n") {
+		d.appendLog(ctx, deployment.ID, line)
+	}
+	d.hub.Publish(events.DeploymentTopic(deployment.ID), "failed", problem)
+	d.publish(ctx, deployment.ID)
+}
+
+func (d *Deployer) publish(ctx context.Context, deploymentID string) {
+	deployment, err := d.db.GetDeployment(ctx, deploymentID)
+	if err != nil {
+		return
+	}
+	d.hub.Publish(events.DeploymentTopic(deploymentID), "deployment", deployment)
+	if teamID, err := d.db.TeamIDForApp(ctx, deployment.AppID); err == nil {
+		d.hub.Publish(events.TeamTopic(teamID), "deployment", deployment)
+	}
+}
+
+// appendLog stores a line and streams it.
+func (d *Deployer) appendLog(ctx context.Context, deploymentID, line string) {
+	seq, err := d.db.AppendBuildLog(ctx, deploymentID, "stdout", line)
+	if err != nil {
+		d.log.Warn("could not store a build log line", "deployment", deploymentID, "error", err)
+		return
+	}
+	d.hub.Publish(events.DeploymentTopic(deploymentID), "log",
+		map[string]any{"seq": seq, "stream": "stdout", "line": line})
+}
+
+// runtimeVariables collects everything that becomes an environment variable:
+// the project's shared variables, then the app's own, then the connection
+// strings of the databases linked to it.
+//
+// Later sources win, so an app can override a shared value, and a database link
+// cannot be shadowed by accident.
+func (d *Deployer) runtimeVariables(ctx context.Context, app store.App, env store.Environment) (map[string]string, error) {
+	out := map[string]string{}
+
+	shared, err := d.db.ListSharedVariables(ctx, env.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range shared {
+		plaintext, err := d.keyring.Open(row.Sealed, "shared_variable:"+env.ProjectID+":"+row.Key)
+		if err != nil {
+			return nil, fmt.Errorf("read the shared variable %s: %w", row.Key, err)
+		}
+		out[row.Key] = string(plaintext)
+	}
+
+	own, err := d.db.ListVariables(ctx, app.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range own {
+		plaintext, err := d.keyring.Open(row.Sealed, "variable:"+app.ID+":"+row.Key)
+		if err != nil {
+			return nil, fmt.Errorf("read the variable %s: %w", row.Key, err)
+		}
+		out[row.Key] = string(plaintext)
+	}
+	return out, nil
+}
+
+// buildTimeVariables are the subset that affects what the image contains, and
+// therefore the build fingerprint.
+func (d *Deployer) buildTimeVariables(ctx context.Context, app store.App) (map[string]string, error) {
+	rows, err := d.db.ListVariables(ctx, app.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, row := range rows {
+		if !row.BuildTime {
+			continue
+		}
+		plaintext, err := d.keyring.Open(row.Sealed, "variable:"+app.ID+":"+row.Key)
+		if err != nil {
+			return nil, fmt.Errorf("read the build variable %s: %w", row.Key, err)
+		}
+		out[row.Key] = string(plaintext)
+	}
+	return out, nil
+}
+
+// runtimeSpec captures the settings a deployment ran with, so a rollback can
+// restore them rather than only the image.
+func (d *Deployer) runtimeSpec(ctx context.Context, app store.App, env store.Environment) (string, error) {
+	domains, err := d.db.ListDomains(ctx, app.ID)
+	if err != nil {
+		return "", err
+	}
+	hostnames := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		hostnames = append(hostnames, domain.Hostname)
+	}
+
+	spec := map[string]any{
+		"replicas":       app.Replicas,
+		"autoscale":      app.Autoscale,
+		"min_replicas":   app.MinReplicas,
+		"max_replicas":   app.MaxReplicas,
+		"cpu_target":     app.CPUTarget,
+		"cpu_request_m":  app.CPURequestM,
+		"cpu_limit_m":    app.CPULimitM,
+		"mem_request_mb": app.MemRequestMB,
+		"mem_limit_mb":   app.MemLimitMB,
+		"port":           app.Port,
+		"health_path":    app.HealthPath,
+		"start_command":  app.StartCommand,
+		"domains":        hostnames,
+	}
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("record the runtime settings: %w", err)
+	}
+	return string(encoded), nil
+}
+
+// restoreRuntimeSpec puts back the settings a previous deployment ran with.
+func (d *Deployer) restoreRuntimeSpec(ctx context.Context, appID, encoded string) error {
+	if encoded == "" || encoded == "{}" {
+		return nil
+	}
+	var spec struct {
+		Replicas     int    `json:"replicas"`
+		Autoscale    bool   `json:"autoscale"`
+		MinReplicas  int    `json:"min_replicas"`
+		MaxReplicas  int    `json:"max_replicas"`
+		CPUTarget    int    `json:"cpu_target"`
+		CPURequestM  int    `json:"cpu_request_m"`
+		CPULimitM    int    `json:"cpu_limit_m"`
+		MemRequestMB int    `json:"mem_request_mb"`
+		MemLimitMB   int    `json:"mem_limit_mb"`
+		Port         int    `json:"port"`
+		HealthPath   string `json:"health_path"`
+		StartCommand string `json:"start_command"`
+	}
+	if err := json.Unmarshal([]byte(encoded), &spec); err != nil {
+		return fmt.Errorf("read the recorded settings: %w", err)
+	}
+
+	app, err := d.db.GetApp(ctx, appID)
+	if err != nil {
+		return err
+	}
+	app.Replicas = spec.Replicas
+	app.Autoscale = spec.Autoscale
+	app.MinReplicas = spec.MinReplicas
+	app.MaxReplicas = spec.MaxReplicas
+	app.CPUTarget = spec.CPUTarget
+	app.CPURequestM = spec.CPURequestM
+	app.CPULimitM = spec.CPULimitM
+	app.MemRequestMB = spec.MemRequestMB
+	app.MemLimitMB = spec.MemLimitMB
+	app.Port = spec.Port
+	app.HealthPath = spec.HealthPath
+	app.StartCommand = spec.StartCommand
+	return d.db.UpdateApp(ctx, &app)
+}
+
+// registryAddress is where images are pushed, which is the in-cluster registry
+// unless an external one is configured.
+func (d *Deployer) registryAddress(ctx context.Context) (address string, insecure bool, secret string, err error) {
+	external, _, err := d.db.GetSetting(ctx, settings.KeyRegistryURL)
+	if err != nil {
+		return "", false, "", err
+	}
+	if external != "" {
+		return strings.TrimSuffix(external, "/"), false, registrySecretName, nil
+	}
+	if d.cluster == nil {
+		return "", false, "", errdoc.ClusterUnreachable(nil)
+	}
+	return d.cluster.RegistryAddress(), true, "", nil
+}
+
+// registrySecretName is the Secret holding credentials for an external registry.
+const registrySecretName = "skifity-registry-auth"

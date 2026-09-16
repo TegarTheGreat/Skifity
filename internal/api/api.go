@@ -424,12 +424,22 @@ func (s *Server) audit(r *http.Request, teamID, action, targetType, targetID, ta
 
 // Background starts the panel's periodic housekeeping. It returns when ctx ends.
 func (s *Server) Background(ctx context.Context) {
+	// The event hub is swept far more often than the hourly work below: every
+	// deployment, operation and log stream is a topic of its own, and a panel
+	// that never forgets them holds every log line it ever streamed.
+	sweep := time.NewTicker(5 * time.Minute)
+	defer sweep.Stop()
+
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-sweep.C:
+			if dropped := s.hub.Sweep(time.Now()); dropped > 0 {
+				s.log.Debug("forgot the history of finished topics", "topics", dropped)
+			}
 		case <-ticker.C:
 			if _, err := s.db.PurgeExpiredSessions(ctx); err != nil {
 				s.log.Warn("purge expired sessions", "error", err)

@@ -59,8 +59,24 @@ type Hub struct {
 	buffer int
 	// history keeps recent events per topic so a reconnecting client can catch
 	// up without refetching the whole resource.
-	history      map[string][]Event
+	//
+	// Every deployment, every operation and every app's log stream is its own
+	// topic, so this map grows with everything that ever happened. It is swept
+	// by age: a client that reconnects within the window catches up, and one
+	// that does not was never going to.
+	history      map[string]*topicHistory
 	historyLimit int
+	// historyTTL is how long a finished topic's events are worth keeping.
+	historyTTL time.Duration
+	// maxTopics bounds the map between sweeps, for the burst a sweep has not
+	// caught up with yet.
+	maxTopics int
+}
+
+// topicHistory is one topic's recent events and when it last saw one.
+type topicHistory struct {
+	events []Event
+	lastAt time.Time
 }
 
 // NewHub creates a hub. buffer is the per-subscriber queue depth.
@@ -71,8 +87,13 @@ func NewHub(buffer int) *Hub {
 	return &Hub{
 		subscribers:  map[*subscriber]struct{}{},
 		buffer:       buffer,
-		history:      map[string][]Event{},
+		history:      map[string]*topicHistory{},
 		historyLimit: 200,
+		// Half an hour: long enough that a laptop lid closed over lunch still
+		// catches up on a build, short enough that a panel running for months
+		// is not holding every log line it ever streamed.
+		historyTTL: 30 * time.Minute,
+		maxTopics:  5000,
 	}
 }
 
@@ -87,11 +108,21 @@ func (h *Hub) Publish(topic, eventType string, data any) Event {
 	}
 
 	h.mu.Lock()
-	hist := append(h.history[topic], ev)
-	if len(hist) > h.historyLimit {
-		hist = hist[len(hist)-h.historyLimit:]
+	entry := h.history[topic]
+	if entry == nil {
+		if len(h.history) >= h.maxTopics {
+			// A burst between sweeps. Dropping the oldest topic loses a catch-up
+			// nobody is waiting for; not dropping it loses the panel.
+			h.evictOldestLocked()
+		}
+		entry = &topicHistory{}
+		h.history[topic] = entry
 	}
-	h.history[topic] = hist
+	entry.events = append(entry.events, ev)
+	if len(entry.events) > h.historyLimit {
+		entry.events = entry.events[len(entry.events)-h.historyLimit:]
+	}
+	entry.lastAt = ev.At
 	targets := make([]*subscriber, 0, len(h.subscribers))
 	for s := range h.subscribers {
 		if s.topics[topic] {
@@ -153,7 +184,11 @@ func (h *Hub) Subscribe(ctx context.Context, lastSeq int64, topics ...string) *S
 	var replay []Event
 	if lastSeq > 0 {
 		for _, t := range topics {
-			for _, ev := range h.history[t] {
+			entry := h.history[t]
+			if entry == nil {
+				continue
+			}
+			for _, ev := range entry.events {
 				if ev.Seq > lastSeq {
 					replay = append(replay, ev)
 				}
@@ -198,6 +233,49 @@ func (h *Hub) ForgetTopic(topic string) {
 	h.mu.Lock()
 	delete(h.history, topic)
 	h.mu.Unlock()
+}
+
+// Sweep drops the history of topics nothing has published to for a while, and
+// returns how many it dropped.
+//
+// This is what keeps the hub bounded. Producers are not asked to remember: a
+// deployment that failed, an operation that was cancelled and an app whose log
+// window was closed all stop publishing, and all end up here.
+func (h *Hub) Sweep(now time.Time) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	dropped := 0
+	for topic, entry := range h.history {
+		if now.Sub(entry.lastAt) > h.historyTTL {
+			delete(h.history, topic)
+			dropped++
+		}
+	}
+	return dropped
+}
+
+// TopicCount reports how many topics hold history, for /api/health and for a
+// test that wants to see the sweep work.
+func (h *Hub) TopicCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.history)
+}
+
+// evictOldestLocked removes the least recently used topic. The caller holds the
+// lock.
+func (h *Hub) evictOldestLocked() {
+	var oldest string
+	var oldestAt time.Time
+	for topic, entry := range h.history {
+		if oldest == "" || entry.lastAt.Before(oldestAt) {
+			oldest, oldestAt = topic, entry.lastAt
+		}
+	}
+	if oldest != "" {
+		delete(h.history, oldest)
+	}
 }
 
 // Topic helpers keep topic strings in one place rather than spread as literals.

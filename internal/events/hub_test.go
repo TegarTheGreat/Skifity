@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -160,5 +161,67 @@ func TestForgetTopicDropsHistory(t *testing.T) {
 	case got := <-sub.Events():
 		t.Fatalf("history survived ForgetTopic: %+v", got)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// TestHistoryIsForgotten is the leak this exists for: every deployment, every
+// operation and every app's log stream is its own topic, and the hub used to
+// keep all of them, with their log lines, for as long as the panel ran.
+func TestHistoryIsForgotten(t *testing.T) {
+	hub := NewHub(8)
+	start := time.Now()
+
+	for i := range 50 {
+		hub.Publish(DeploymentTopic(fmt.Sprintf("dep_%d", i)), "log", "a line of build output")
+	}
+	if got := hub.TopicCount(); got != 50 {
+		t.Fatalf("the hub holds %d topics, want 50", got)
+	}
+
+	// Nothing has been published to any of them since. A sweep an hour later
+	// finds nothing worth keeping.
+	if dropped := hub.Sweep(start.Add(time.Hour)); dropped != 50 {
+		t.Fatalf("the sweep dropped %d topics, want 50", dropped)
+	}
+	if got := hub.TopicCount(); got != 0 {
+		t.Fatalf("%d topics survived a sweep an hour after their last event", got)
+	}
+}
+
+// TestALiveTopicIsKept: a build that is still running, and a client that
+// reconnects while it is, must not lose its catch-up.
+func TestALiveTopicIsKept(t *testing.T) {
+	hub := NewHub(8)
+	first := hub.Publish(DeploymentTopic("dep_live"), "log", "starting")
+	hub.Publish(DeploymentTopic("dep_live"), "log", "still building")
+
+	if dropped := hub.Sweep(time.Now().Add(time.Minute)); dropped != 0 {
+		t.Fatalf("the sweep dropped %d topics a minute after they were written to", dropped)
+	}
+
+	// A reconnecting client says what it last saw, and gets what came after.
+	sub := hub.Subscribe(t.Context(), first.Seq, DeploymentTopic("dep_live"))
+	defer sub.Close()
+	select {
+	case ev := <-sub.Events():
+		if ev.Data != "still building" {
+			t.Fatalf("replayed %v", ev.Data)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("a live topic's history was not replayed")
+	}
+}
+
+// TestTheHubDoesNotGrowWithoutBound: a burst between sweeps must not be the
+// thing that ends the panel.
+func TestTheHubDoesNotGrowWithoutBound(t *testing.T) {
+	hub := NewHub(8)
+	hub.maxTopics = 10
+
+	for i := range 100 {
+		hub.Publish(DeploymentTopic(fmt.Sprintf("dep_%d", i)), "log", "output")
+	}
+	if got := hub.TopicCount(); got > 10 {
+		t.Fatalf("the hub holds %d topics with a limit of 10", got)
 	}
 }

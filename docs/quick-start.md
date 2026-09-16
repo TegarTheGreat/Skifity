@@ -32,25 +32,19 @@ If it stops, it says what happened and what to do about it. The full log is at
 
 ## 2. Create your account
 
-<p align="center">
-  <img src="images/setup.png" alt="The setup screen, asking for the token and the first account" width="760">
-</p>
+![The setup screen, asking for the token and the first account](images/setup.png)
 
 Open the URL. Paste the setup token, choose an email address and a password,
 and name your team.
 
-<p align="center">
-  <img src="images/recovery-key.png" alt="The recovery key screen, which cannot be passed without acknowledging it" width="760">
-</p>
+![The recovery key screen, which cannot be passed without acknowledging it](images/recovery-key.png)
 
 You are then shown a **recovery key**. It is the only copy: it can decrypt every
 secret Skifity stores, and without it a restored backup is unreadable. Download
 it and put it somewhere that is not this server. The panel will keep reminding
 you until you say you have.
 
-<p align="center">
-  <img src="images/overview.png" alt="The overview on a brand new install" width="760">
-</p>
+![The overview on a brand new install](images/overview.png)
 
 ## 3. Deploy something
 

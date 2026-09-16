@@ -214,7 +214,7 @@ func (s *Server) handlePromoteServer(w http.ResponseWriter, r *http.Request) {
 			WithCause("This cluster has %d servers. Embedded etcd needs three control plane members to survive one of them failing.", len(servers)).
 			WithImpact("Nothing was changed.").
 			WithFix("Add servers until you have at least three, then promote three of them.").
-			WithDocs("/docs/servers/high-availability").
+			WithDocs("/docs/adding-servers#control-plane-servers").
 			WithStatus(http.StatusConflict))
 		return
 	}

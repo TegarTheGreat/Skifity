@@ -602,7 +602,7 @@ func (p *Provisioner) stepWaitReady(ctx context.Context, state *addState) error 
 				WithCause("Kubernetes was installed on %s, but no node became ready within five minutes.", server.Host).
 				WithImpact("The server is registered but is not running anything yet.").
 				WithFix("Check that this server can reach the first server on port 6443, and that the two can reach each other on UDP 51820. A firewall in your provider's control panel is the usual cause.").
-				WithDocs("/docs/servers/firewall").
+				WithDocs("/docs/adding-servers#when-a-step-fails").
 				Retry()
 		}
 		select {

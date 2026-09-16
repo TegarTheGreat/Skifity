@@ -25,9 +25,9 @@ Some providers have a firewall in their control panel that the server cannot
 see.
 
 **A certificate warning.** With no domain of your own, the panel is served over
-plain HTTP at an `sslip.io` address, on purpose: see
-[ADR-0015](decisions.md). Add a domain in Settings and HTTPS is turned on for
-it automatically.
+plain HTTP at an `sslip.io` address, on purpose: Let's Encrypt rate limits are
+per domain, and every Skifity install in the world shares sslip.io's. Add a
+domain in Settings and HTTPS is turned on for it automatically.
 
 ## I have lost the setup token
 

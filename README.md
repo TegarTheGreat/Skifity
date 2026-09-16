@@ -114,6 +114,10 @@ themselves the first time you use them, and each one says what it costs first.
 
 ## Documentation
 
+Also served by the panel itself, at `/docs`, from inside the binary — which is
+where you want it when the cluster is broken and the server has no browser and
+no way out to the internet.
+
 | | |
 |---|---|
 | [Quick start](docs/quick-start.md) | Empty server to a running app |

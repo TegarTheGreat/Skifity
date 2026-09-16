@@ -46,10 +46,11 @@ internal/
   manifests/        Renders the panel's own Kubernetes objects from deploy/.
   settings/, templates/, notify/, gitsrc/, audit/, events/, logging/, config/
 web/                The frontend. Built into web/dist and embedded in the binary.
+  docsite/          Renders docs/ into the panel, so the links in errors work.
 deploy/             The panel's own Kubernetes objects, with placeholders.
+docs/               Also a Go package: the user-facing pages are embedded.
 installer/          install.sh and uninstall.sh. POSIX shell, no bashisms.
 test/smoke/         End-to-end shell tests that run a real panel.
-docs/               Research, architecture, decisions, progress, user guides.
 ```
 
 ## Commands
@@ -75,6 +76,8 @@ turns cgo back on for that run only.
 * **Errors are documented, not printed.** A failure returns an `errdoc.Problem`
   with a cause, an impact and a fix. If a new failure has no entry in
   `internal/errdoc/catalogue.go`, add one rather than returning a bare error.
+  A `WithDocs` link must resolve to a page the panel serves, at an anchor that
+  exists; a test in `internal/docsite` enforces both.
 * **Nothing is logged that a secret could be inside.** `internal/logging`
   redacts by key and by value pattern. A value that genuinely has to be logged
   is wrapped in `logging.Public`, and that should stay rare.

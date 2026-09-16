@@ -126,8 +126,12 @@ Added since:
   a complete API and no way to reach it from the panel. Connecting a Git account
   shows the webhook address once, with a copy button, because a self-hosted
   Gitea whose token cannot register a webhook needs it pasted in by hand.
-* `docs/configuration.md`: every startup setting, every settings group, and
-  what to back up.
+* `docs/configuration.md` and `docs/backups.md`.
+* The documentation is served by the panel itself, from inside the binary, so
+  the roughly twenty links in the error catalogue resolve on a server with no
+  outbound network — which is when they matter. A test walks every `WithDocs`
+  link and every link between pages, and fails on a missing page or a missing
+  anchor. Both failure modes were confirmed by breaking a link on purpose.
 
 ### Phase 10 — done, except a run on real hardware
 

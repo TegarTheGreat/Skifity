@@ -45,7 +45,7 @@ func (s *setupState) check(candidate string) error {
 			WithCause("This panel already has an administrator account.").
 			WithImpact("No account was created.").
 			WithFix("Sign in with the account that was created during setup. If you have lost the password, see the account recovery guide.").
-			WithDocs("/docs/troubleshooting#lost-admin-password").
+			WithDocs("/docs/troubleshooting#i-have-forgotten-my-password").
 			WithStatus(http.StatusConflict)
 	}
 	if s.token == "" {

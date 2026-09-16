@@ -176,7 +176,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </NavLink>
         )}
         <a
-          href="/docs"
+          href="/docs/"
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"

@@ -136,6 +136,28 @@ test("every language is complete on the pages a new user sees", async ({ page })
   ).toBeVisible()
 })
 
+// Every error the panel can show links into this, and an operator whose panel
+// is broken may have no other browser and no way out to the internet.
+test("the documentation is served from the binary", async ({ page }) => {
+  await page.goto("/docs/")
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("documentation")
+
+  await page.getByRole("link", { name: "Troubleshooting" }).click()
+  await expect(page.getByRole("heading", { name: "Troubleshooting", level: 1 })).toBeVisible()
+
+  // A link written for the repository has to work here too.
+  await page.getByRole("link", { name: "Configuration" }).first().click()
+  await expect(page.getByRole("heading", { name: "Configuration", level: 1 })).toBeVisible()
+
+  // And the images have to load, not 404.
+  await page.goto("/docs/quick-start")
+  const image = page.getByRole("img").first()
+  await expect(image).toBeVisible()
+  expect(await image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(
+    0,
+  )
+})
+
 test("the theme can be changed and is remembered", async ({ page }) => {
   await signIn(page)
 

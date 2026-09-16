@@ -9,9 +9,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"skifity/docs"
 	"skifity/internal/auth"
 	"skifity/internal/config"
 	"skifity/internal/crypto"
+	"skifity/internal/docsite"
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/store"
@@ -260,6 +262,14 @@ func (s *Server) routes() chi.Router {
 				WithStatus(http.StatusMethodNotAllowed))
 		})
 	})
+
+	// The documentation is served from inside the binary, before the
+	// single-page app gets the rest. An operator whose panel is broken is
+	// often on a machine with no other browser and no outbound network, and
+	// that is exactly when the troubleshooting page is needed.
+	docsHandler := docsite.New(docs.FS(), "/docs/").Handler()
+	r.Handle("/docs", http.RedirectHandler("/docs/", http.StatusMovedPermanently))
+	r.Handle("/docs/*", docsHandler)
 
 	// Everything else is the single-page app.
 	if s.frontend != nil {

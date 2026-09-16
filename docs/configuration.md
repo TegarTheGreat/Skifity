@@ -47,9 +47,7 @@ database_path = "/var/lib/skifity/panel.db"
 
 ## Settings in the panel
 
-<p align="center">
-  <img src="images/settings-git.png" alt="The Git tab in Settings: connected accounts, then the GitHub App fields" width="820">
-</p>
+![The Git tab in Settings: connected accounts, then the GitHub App fields](images/settings-git.png)
 
 These are stored encrypted where they are secret, and none of them is required
 to get started.

@@ -74,7 +74,7 @@ func SSHUnreachable(host string, port int, err error) *Problem {
 		WithCause("Nothing answered on %s port %d.", host, port).
 		WithImpact("The server was not added. Nothing was changed on it.").
 		WithFix("Check that the IP address and port are right, that the server is running, and that your provider's firewall allows inbound TCP on port %d. Many providers block everything by default in their control panel, which SSH cannot open from here.", port).
-		WithDocs("/docs/troubleshooting#ssh-unreachable").
+		WithDocs("/docs/adding-servers#when-a-step-fails").
 		WithStatus(http.StatusBadGateway).
 		Retry().
 		With("host", host).
@@ -93,7 +93,7 @@ func SSHAuthFailed(host, user string, usedKey bool) *Problem {
 		WithCause("Signing in as %s on %s with a %s was rejected.", user, host, method).
 		WithImpact("The server was not added. Nothing was changed on it.").
 		WithFix("%s", fix).
-		WithDocs("/docs/servers/adding#credentials").
+		WithDocs("/docs/adding-servers#the-password").
 		WithStatus(http.StatusBadRequest).
 		With("host", host).With("user", user).With("auth_method", method)
 }
@@ -105,7 +105,7 @@ func SSHHostKeyChanged(host, expected, got string) *Problem {
 		WithCause("%s presented a different SSH host key than the one recorded when it was added.", host).
 		WithImpact("The connection was refused. Skifity will not run commands on a server it cannot recognise.").
 		WithFix("If you rebuilt or reinstalled this server, remove it from Skifity and add it again. If you did not, stop and investigate: something may be intercepting the connection.").
-		WithDocs("/docs/troubleshooting#host-key-changed").
+		WithDocs("/docs/adding-servers#when-a-step-fails").
 		WithStatus(http.StatusConflict).
 		WithSeverity(SeverityError).
 		With("host", host).
@@ -119,7 +119,7 @@ func PreflightFailed(check, detail, fix string) *Problem {
 		WithCause("%s", detail).
 		WithImpact("The server was not added. Nothing was changed on it.").
 		WithFix("%s", fix).
-		WithDocs("/docs/servers/requirements").
+		WithDocs("/docs/quick-start#what-you-need").
 		WithStatus(http.StatusBadRequest).
 		Retry().
 		With("check", check)
@@ -131,7 +131,7 @@ func PortBlocked(host string, port int, proto string) *Problem {
 		WithCause("Cluster members could not reach %s on %s/%d.", host, proto, port).
 		WithImpact("The node cannot join the cluster, or pods on it cannot talk to pods elsewhere.").
 		WithFix("Open %s/%d between your servers. Skifity configures UFW and iptables on the server itself, but a firewall in your provider's control panel has to be opened there. Check the security group or firewall rules for this machine.", proto, port).
-		WithDocs("/docs/servers/firewall").
+		WithDocs("/docs/adding-servers#when-a-step-fails").
 		WithStatus(http.StatusBadGateway).
 		Retry().
 		With("host", host).With("port", itoa(port)).With("protocol", proto)
@@ -143,7 +143,7 @@ func K3sInstallFailed(host string, exitCode int, output string) *Problem {
 		WithCause("The k3s installer exited with code %d on %s.", exitCode, host).
 		WithImpact("The server is registered but is not part of the cluster. No workloads are running on it.").
 		WithFix("Open the step output below. The most common causes are no outbound internet access, an old kernel without the required modules, and a conflicting container runtime. Fix the cause and press Retry; the step is safe to run again.").
-		WithDocs("/docs/troubleshooting#k3s-install").
+		WithDocs("/docs/adding-servers#when-a-step-fails").
 		WithStatus(http.StatusBadGateway).
 		Retry().
 		With("host", host).With("exit_code", itoa(exitCode)).With("output_tail", tail(output, 2000))
@@ -157,7 +157,7 @@ func BuildFailed(app, stage, logTail string) *Problem {
 		WithCause("Building %s failed during the %s stage.", app, stage).
 		WithImpact("The new version was not deployed. The previous version is still running and still serving traffic.").
 		WithFix("Read the build log below. Then fix it in your repository and push again, or press Retry if you believe it was a transient failure.").
-		WithDocs("/docs/apps/builds#failures").
+		WithDocs("/docs/troubleshooting#a-deployment-failed").
 		WithStatus(http.StatusBadRequest).
 		Retry().
 		With("app", app).With("stage", stage).With("log_tail", tail(logTail, 4000))
@@ -169,7 +169,7 @@ func NoBuilderDetected(repo string) *Problem {
 		WithCause("No Dockerfile was found in %s, and the files present do not match any language Skifity recognises.", repo).
 		WithImpact("No build was started.").
 		WithFix("Add a Dockerfile to the repository, or set the root directory if your app lives in a subfolder of a monorepo, or choose a prebuilt image instead.").
-		WithDocs("/docs/apps/builds#detection").
+		WithDocs("/docs/troubleshooting#a-deployment-failed").
 		WithStatus(http.StatusBadRequest).
 		With("repository", repo)
 }
@@ -180,7 +180,7 @@ func RolloutTimedOut(app string, ready, want int, reason string) *Problem {
 		WithCause("%d of %d instances of %s became ready before the timeout. %s", ready, want, app, reason).
 		WithImpact("Kubernetes kept the previous version running, so your app is still up. The new version was not rolled out.").
 		WithFix("Check the app logs for a crash on startup. The usual causes are a missing environment variable, a health check path that does not exist yet, and a port mismatch between the app and the configured port.").
-		WithDocs("/docs/apps/deploys#rollout-failed").
+		WithDocs("/docs/troubleshooting#a-deployment-failed").
 		WithStatus(http.StatusGatewayTimeout).
 		Retry().
 		With("app", app).With("ready_instances", itoa(ready)).With("wanted_instances", itoa(want))
@@ -203,7 +203,7 @@ func CrashLoop(app string, restarts int, logTail string) *Problem {
 		WithCause("%s has restarted %d times in a row. Kubernetes is backing off between restarts.", app, restarts).
 		WithImpact("The app is not serving traffic reliably.").
 		WithFix("Read the last log lines below: the cause is almost always in them. Missing environment variables, a database that is not reachable, and a port the app does not actually listen on are the usual three.").
-		WithDocs("/docs/apps/troubleshooting#crash-loop").
+		WithDocs("/docs/troubleshooting#an-app-is-crashing").
 		WithStatus(http.StatusBadGateway).
 		With("app", app).With("restarts", itoa(restarts)).With("log_tail", tail(logTail, 4000))
 }
@@ -216,7 +216,7 @@ func DNSNotPointing(hostname, want, got string) *Problem {
 		WithCause("%s currently resolves to %s, but it needs to resolve to %s.", hostname, orNone(got), want).
 		WithImpact("The certificate cannot be issued and the domain will not serve your app.").
 		WithFix("Create an A record for %s pointing to %s, then wait for it to propagate. Skifity checks again every minute.", hostname, want).
-		WithDocs("/docs/domains#dns").
+		WithDocs("/docs/troubleshooting#a-domain-does-not-work").
 		WithStatus(http.StatusBadRequest).
 		WithSeverity(SeverityWarning).
 		Retry().
@@ -229,7 +229,7 @@ func CertificateFailed(hostname, reason string) *Problem {
 		WithCause("Let's Encrypt refused to issue a certificate for %s: %s", hostname, reason).
 		WithImpact("The domain works over HTTP but not HTTPS.").
 		WithFix("Check that the domain resolves to this cluster and that port 80 is reachable from the internet, which is how the challenge is verified. If you have hit a rate limit, wait an hour before retrying.").
-		WithDocs("/docs/domains#certificates").
+		WithDocs("/docs/troubleshooting#a-domain-does-not-work").
 		WithStatus(http.StatusBadGateway).
 		Retry().
 		With("hostname", hostname).With("reason", reason)
@@ -243,7 +243,7 @@ func InsufficientCapacity(what, detail string) *Problem {
 		WithCause("%s could not be scheduled: %s", what, detail).
 		WithImpact("The instances are pending and not serving traffic.").
 		WithFix("Add another server in Servers, lower this app's CPU or memory request, or reduce the number of instances.").
-		WithDocs("/docs/servers/capacity").
+		WithDocs("/docs/performance").
 		WithStatus(http.StatusConflict).
 		Retry().
 		With("workload", what)
@@ -255,7 +255,7 @@ func ClusterUnreachable(err error) *Problem {
 		WithCause("The Kubernetes API did not answer.").
 		WithImpact("Your apps keep running, but Skifity cannot make changes or read live status right now.").
 		WithFix("This usually clears up on its own within a minute. If it does not, check that the control plane server is up and that port 6443 is reachable between your servers.").
-		WithDocs("/docs/troubleshooting#cluster-unreachable").
+		WithDocs("/docs/troubleshooting#the-cluster-is-unreachable").
 		WithStatus(http.StatusServiceUnavailable).
 		Retry().
 		Wrap(err)
@@ -267,7 +267,7 @@ func QuorumRisk(remaining int) *Problem {
 		WithCause("This is a control plane server, and removing it would leave %d of them. Embedded etcd needs an odd number of at least three to survive a failure.", remaining).
 		WithImpact("Nothing was changed. The server is still part of the cluster.").
 		WithFix("Promote another server to control plane first, then remove this one. With one control plane server you can remove it only by removing the whole cluster.").
-		WithDocs("/docs/servers/high-availability").
+		WithDocs("/docs/adding-servers#control-plane-servers").
 		WithStatus(http.StatusConflict).
 		With("remaining_control_planes", itoa(remaining))
 }
@@ -327,7 +327,7 @@ func ScalingRisk(reason, fix string) *Problem {
 		WithCause("%s", reason).
 		WithImpact("With several instances running, some requests will behave differently from others.").
 		WithFix("%s", fix).
-		WithDocs("/docs/scaling#readiness").
+		WithDocs("/docs/concepts#instances-and-scaling").
 		WithSeverity(SeverityWarning).
 		WithStatus(http.StatusOK)
 }

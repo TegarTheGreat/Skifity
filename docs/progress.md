@@ -24,7 +24,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 | 6 | Scaling | code complete, cluster not exercised |
 | 7 | Databases, storage, backups | code complete, cluster not exercised |
 | 8 | Developer experience and vibe coding | done |
-| 9 | Differentiating features | partly done |
+| 9 | Differentiating features | done |
 | 10 | Hardening and release | done, except a run on real hardware |
 
 ## What is done
@@ -122,6 +122,12 @@ Added since:
   panel's database directly on the server. Nobody being able to sign in is the
   one thing the API cannot fix, and a self-hosted panel has no mail server it
   can trust to send a reset link.
+* Connecting a Git account and choosing where to be notified, both of which had
+  a complete API and no way to reach it from the panel. Connecting a Git account
+  shows the webhook address once, with a copy button, because a self-hosted
+  Gitea whose token cannot register a webhook needs it pasted in by hand.
+* `docs/configuration.md`: every startup setting, every settings group, and
+  what to back up.
 
 ### Phase 10 — done, except a run on real hardware
 

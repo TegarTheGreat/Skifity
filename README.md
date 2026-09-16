@@ -122,6 +122,7 @@ themselves the first time you use them, and each one says what it costs first.
 | [The CLI and AI assistants](docs/cli.md) | Terminal, API, MCP |
 | [Troubleshooting](docs/troubleshooting.md) | When something is wrong |
 | [Questions](docs/faq.md) | Including the ones with awkward answers |
+| [Configuration](docs/configuration.md) | Every setting, and what to back up |
 | [What it costs](docs/performance.md) | Memory and size, measured |
 | [Architecture](docs/architecture.md) | How it fits together |
 | [Decisions](docs/decisions.md) | Why it is like this |

@@ -73,6 +73,15 @@ test("capture", async ({ page }) => {
   await expect(page.getByLabel(/IP address or hostname/i)).toBeVisible()
   await page.screenshot({ path: join(OUT, "add-server.png") })
 
+  // Settings, where the Git accounts and the notification channels live.
+  await page.getByRole("link", { name: /settings/i }).click()
+  await page.getByRole("tab", { name: /^git$/i }).click()
+  await expect(page.getByRole("button", { name: /connect an account/i })).toBeVisible()
+  // The tab highlight is a CSS transition, and a screenshot taken the instant
+  // the content mounts catches it half way, with two tabs looking selected.
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: join(OUT, "settings-git.png") })
+
   // Another language, to show that this is not a token gesture.
   await page.locator('[data-slot="language-switcher"]').click()
   await page.getByRole("menuitem", { name: "Русский" }).click()

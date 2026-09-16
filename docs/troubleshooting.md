@@ -136,7 +136,8 @@ The panel's database and master key live on the first control plane server, in
 4. Start it again: `kubectl -n skifity-system scale deploy/skifity-panel --replicas=1`
 
 Without the master key the database is unreadable, which is the point of the
-recovery key you were asked to download.
+recovery key you were asked to download. [Configuration](configuration.md) has
+the full list of what to back up.
 
 ## Everything is fine but I want to look underneath
 

@@ -75,11 +75,13 @@ export function SettingsPage() {
         </TabsList>
 
         <TabsContent value="panel" className="space-y-6 pt-4">
-          <SettingGroups />
+          {/* Git has its own tab, where the connected accounts are. */}
+          <SettingGroups except={["git"]} />
           <VersionCard />
         </TabsContent>
-        <TabsContent value="git" className="pt-4">
+        <TabsContent value="git" className="space-y-6 pt-4">
           <GitSources />
+          <SettingGroups only={["git"]} />
         </TabsContent>
         <TabsContent value="notifications" className="pt-4">
           <NotificationChannels />
@@ -101,7 +103,7 @@ export function SettingsPage() {
   )
 }
 
-function SettingGroups() {
+function SettingGroups({ only, except }: { only?: string[]; except?: string[] }) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState<Record<string, string>>({})
 
@@ -126,9 +128,13 @@ function SettingGroups() {
   const items = settings.data?.items ?? []
   const dirty = Object.keys(draft).length > 0
 
+  const shown = GROUPS.filter(
+    (group) => (!only || only.includes(group.key)) && (!except || !except.includes(group.key)),
+  )
+
   return (
     <div className="space-y-6">
-      {GROUPS.map((group) => {
+      {shown.map((group) => {
         const groupItems = items.filter((setting) => setting.group === group.key)
         if (groupItems.length === 0) return null
         return (

@@ -62,6 +62,8 @@ export function toneFor(status: string): Tone {
     case "stopped":
     case "cancelled":
     case "superseded":
+    case "created":
+    case "not_deployed":
       return "idle"
     default:
       return "neutral"

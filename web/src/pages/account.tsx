@@ -2,7 +2,14 @@ import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { DownloadIcon, KeyRoundIcon, PlusIcon, ShieldCheckIcon, Trash2Icon } from "lucide-react"
+import {
+  DownloadIcon,
+  KeyRoundIcon,
+  PlusIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
+  Trash2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { ErrorDisplay } from "@/components/error-display"
@@ -37,7 +44,7 @@ export function AccountPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title={t("nav.account")} description={t("auth.apiTokensHelp")} />
+      <PageHeader title={t("nav.account")} description={t("auth.subtitle")} />
 
       {params.get("recovery") === "1" && !user?.recovery_saved && (
         <RecoveryReminder onAcknowledged={() => void refresh()} />
@@ -248,13 +255,14 @@ function TwoFactorCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ShieldCheckIcon className="size-4" />
-          {t("auth.enableTwoFactor")}
+          {t("auth.twoFactorTitle")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {user?.totp_enabled ? (
           <>
             <p className="flex items-center gap-2 text-sm text-success">
+              <ShieldCheckIcon className="size-4 shrink-0" />
               {t("auth.twoFactorEnabled")}
             </p>
             {disable.error != null && <ErrorDisplay error={disable.error} compact />}
@@ -302,9 +310,13 @@ function TwoFactorCard() {
           </form>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">{t("auth.twoFactorIntro")}</p>
+            <p className="flex items-center gap-2 text-sm text-warning">
+              <ShieldAlertIcon className="size-4 shrink-0" />
+              {t("auth.twoFactorOff")}
+            </p>
             {start.error != null && <ErrorDisplay error={start.error} compact />}
             <Button variant="outline" disabled={start.isPending} onClick={() => start.mutate()}>
+              {start.isPending && <Spinner />}
               {t("auth.enableTwoFactor")}
             </Button>
           </>

@@ -121,7 +121,10 @@
     "newToken": "新建令牌",
     "tokenName": "用途是什么？",
     "tokenShownOnce": "令牌只显示这一次，请现在复制。",
-    "revokeToken": "吊销"
+    "revokeToken": "吊销",
+    "subtitle": "你的登录方式、已登录的设备，以及代表你行事的令牌。",
+    "twoFactorTitle": "双因素认证",
+    "twoFactorOff": "未开启。此时只有一个密码挡在任何人和这个集群之间。"
   },
   "dashboard": {
     "title": "总览",
@@ -221,7 +224,8 @@
       "failed": "失败",
       "stopped": "已停止",
       "not_deployed": "尚未部署",
-      "unknown": "未知"
+      "unknown": "未知",
+      "created": "尚未部署"
     }
   },
   "deploy": {

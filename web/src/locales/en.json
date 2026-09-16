@@ -128,7 +128,10 @@
     "newToken": "New token",
     "tokenName": "What is it for?",
     "tokenShownOnce": "This is the only time the token is shown. Copy it now.",
-    "revokeToken": "Revoke"
+    "revokeToken": "Revoke",
+    "subtitle": "Your sign-in, the devices you are signed in on, and the tokens that act as you.",
+    "twoFactorTitle": "Two-factor authentication",
+    "twoFactorOff": "Off. A password on its own is the only thing between anyone and this cluster."
   },
   "dashboard": {
     "title": "Overview",
@@ -228,7 +231,8 @@
       "failed": "Failed",
       "stopped": "Stopped",
       "not_deployed": "Not deployed yet",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "created": "Not deployed yet"
     }
   },
   "deploy": {

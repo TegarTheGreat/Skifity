@@ -18,7 +18,7 @@ import {
 import { EmptyState } from "@/components/empty-state"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
-import { Page, PageHeader } from "@/components/page"
+import { Page, PageHeader, Section } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
 import { Badge } from "@/components/ui/badge"
@@ -39,6 +39,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -53,8 +62,17 @@ import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
+import { repoName } from "@/lib/format"
 import { queryClient } from "@/lib/query"
-import type { App, CanvasEdge, CanvasNode, Database, Environment, Project } from "@/lib/types"
+import type {
+  App,
+  AppStatus,
+  CanvasEdge,
+  CanvasNode,
+  Database,
+  Environment,
+  Project,
+} from "@/lib/types"
 
 export function ProjectDetailPage() {
   const { t } = useTranslation()
@@ -228,16 +246,16 @@ function EnvironmentServices({ environmentId }: { environmentId: string }) {
     queryFn: () => api.get<List<Database>>(`/api/environments/${environmentId}/databases`),
   })
 
-  const noServices =
-    (apps.data?.items.length ?? 0) === 0 && (databases.data?.items.length ?? 0) === 0
+  const appItems = apps.data?.items ?? []
+  const databaseItems = databases.data?.items ?? []
+  const noServices = appItems.length === 0 && databaseItems.length === 0
 
   if (apps.error) return <ErrorDisplay error={apps.error} onRetry={() => void apps.refetch()} />
+  if (apps.isLoading) return <Skeleton className="h-40" />
 
-  return (
-    <div className="space-y-6">
-      {apps.isLoading ? (
-        <Skeleton className="h-32" />
-      ) : noServices ? (
+  if (noServices) {
+    return (
+      <>
         <EmptyState
           icon={RocketIcon}
           title={t("apps.empty")}
@@ -246,65 +264,90 @@ function EnvironmentServices({ environmentId }: { environmentId: string }) {
             <div className="flex flex-wrap justify-center gap-2">
               <Button asChild>
                 <Link to={`/environments/${environmentId}/apps/new`}>
-                  <PlusIcon className="size-4" />
+                  <PlusIcon />
                   {t("apps.newApp")}
                 </Link>
               </Button>
-              <Button variant="outline" asChild>
+              <Button variant="outline" onClick={() => setNewDatabase(true)}>
+                <DatabaseIcon />
+                {t("databases.newDatabase")}
+              </Button>
+              <Button variant="ghost" asChild>
                 <Link to="/templates">{t("templates.title")}</Link>
               </Button>
             </div>
           }
         />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {apps.data?.items.map((app) => (
-            <Link key={app.id} to={`/apps/${app.id}`} className="group">
-              <Card className="h-full transition-colors group-hover:border-primary/50">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="truncate text-base">{app.name}</CardTitle>
-                    <StatusBadge status={app.status} />
-                  </div>
-                  <CardDescription className="truncate font-mono text-xs">
-                    {app.source_type === "image" ? app.image : app.repo_url}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-          ))}
-          {databases.data?.items.map((database) => (
-            <Link key={database.id} to={`/databases/${database.id}`} className="group">
-              <Card className="h-full transition-colors group-hover:border-primary/50">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="flex min-w-0 items-center gap-2 text-base">
-                      <DatabaseIcon className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{database.name}</span>
-                    </CardTitle>
+        <NewDatabaseDialog
+          environmentId={environmentId}
+          open={newDatabase}
+          onOpenChange={setNewDatabase}
+        />
+      </>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {appItems.length > 0 && (
+        <Section title={t("nav.apps")}>
+          <ItemGroup className="rounded-lg border">
+            {appItems.map((app) => (
+              <AppRow key={app.id} app={app} />
+            ))}
+          </ItemGroup>
+        </Section>
+      )}
+
+      <Section
+        title={t("nav.databases")}
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => setNewDatabase(true)}>
+            <PlusIcon />
+            {t("databases.newDatabase")}
+          </Button>
+        }
+      >
+        {databaseItems.length === 0 ? (
+          <EmptyState
+            icon={DatabaseIcon}
+            title={t("databases.empty")}
+            description={t("databases.emptyHelp")}
+            action={
+              <Button size="sm" onClick={() => setNewDatabase(true)}>
+                <PlusIcon />
+                {t("databases.newDatabase")}
+              </Button>
+            }
+          />
+        ) : (
+          <ItemGroup className="rounded-lg border">
+            {databaseItems.map((database) => (
+              <Item key={database.id} asChild>
+                <Link to={`/databases/${database.id}`}>
+                  <ItemMedia variant="icon">
+                    <DatabaseIcon />
+                  </ItemMedia>
+                  <ItemContent>
+                    <ItemTitle>{database.name}</ItemTitle>
+                    <ItemDescription className="font-mono">
+                      {database.engine} {database.engine_version} · {database.storage_gb} GB
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
                     <StatusBadge
                       status={database.status}
                       label={t(`databases.status.${database.status}`, {
                         defaultValue: database.status,
                       })}
                     />
-                  </div>
-                  <CardDescription className="font-mono text-xs">
-                    {database.engine} {database.engine_version}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => setNewDatabase(true)}>
-          <DatabaseIcon className="size-4" />
-          {t("databases.newDatabase")}
-        </Button>
-      </div>
+                  </ItemActions>
+                </Link>
+              </Item>
+            ))}
+          </ItemGroup>
+        )}
+      </Section>
 
       <NewDatabaseDialog
         environmentId={environmentId}
@@ -312,6 +355,60 @@ function EnvironmentServices({ environmentId }: { environmentId: string }) {
         onOpenChange={setNewDatabase}
       />
     </div>
+  )
+}
+
+/**
+ * One app in the list.
+ *
+ * The row asks for the app's live state separately, because the app record
+ * itself only knows what was last written to it: an app that crashed five
+ * minutes ago still says "running" in the database.
+ */
+function AppRow({ app }: { app: App }) {
+  const { t } = useTranslation()
+
+  const status = useQuery({
+    queryKey: ["app-status", app.id],
+    queryFn: () => api.get<AppStatus>(`/api/apps/${app.id}/status`),
+    refetchInterval: 30_000,
+    retry: false,
+  })
+
+  const phase = status.data?.phase ?? app.status
+  const url = status.data?.urls?.[0]
+
+  return (
+    <Item asChild>
+      <Link to={`/apps/${app.id}`}>
+        <ItemMedia variant="icon">
+          <BoxIcon />
+        </ItemMedia>
+        <ItemContent>
+          <ItemTitle>{app.name}</ItemTitle>
+          <ItemDescription className="font-mono">
+            {app.source_type === "image" ? app.image : repoName(app.repo_url) || app.repo_url}
+            {app.branch ? ` · ${app.branch}` : ""}
+          </ItemDescription>
+        </ItemContent>
+        <ItemActions className="gap-3">
+          {url && (
+            <span className="hidden max-w-48 truncate text-xs text-muted-foreground lg:inline">
+              {url.replace(/^https?:\/\//, "")}
+            </span>
+          )}
+          {status.data && status.data.desired_replicas > 0 && (
+            <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
+              {status.data.ready_replicas}/{status.data.desired_replicas}
+            </span>
+          )}
+          <StatusBadge
+            status={phase}
+            label={t(`apps.phase.${phase}`, { defaultValue: phase })}
+          />
+        </ItemActions>
+      </Link>
+    </Item>
   )
 }
 

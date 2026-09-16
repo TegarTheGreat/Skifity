@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // --- teams ---
@@ -442,4 +443,40 @@ func trimSpaceAndNewlines(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// StalePreviewEnvironments returns preview environments that nothing has
+// deployed to since a point in time.
+//
+// Previews are made by a webhook and were only ever removed by another one. A
+// pull request that is merged while the panel is down, a repository whose
+// webhook is deleted, a branch renamed on the server — each leaves a namespace
+// running forever, and a self-hosted cluster quietly runs out of memory.
+//
+// The clock is the most recent deployment in the environment, falling back to
+// when the environment was made, so a preview that is still being pushed to
+// survives however long the pull request stays open.
+func (db *DB) StalePreviewEnvironments(ctx context.Context, before time.Time) ([]Environment, error) {
+	rows, err := db.QueryContext(ctx, `SELECT `+prefixColumns("e", envColumns)+` FROM environments e
+		WHERE e.kind = 'preview'
+		AND COALESCE(
+			(SELECT MAX(d.created_at) FROM deployments d
+			 JOIN apps a ON a.id = d.app_id
+			 WHERE a.environment_id = e.id),
+			e.created_at
+		) < ?
+		ORDER BY e.created_at`, FormatTime(before))
+	if err != nil {
+		return nil, fmt.Errorf("list stale preview environments: %w", err)
+	}
+	defer rows.Close()
+	out := []Environment{}
+	for rows.Next() {
+		e, err := scanEnvironment(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

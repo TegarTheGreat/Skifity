@@ -93,6 +93,7 @@ const (
 const (
 	KeyPanelURL          = "general.panel_url"
 	KeyK3sVersion        = "cluster.k3s_version"
+	KeyPreviewTTLDays    = "cluster.preview_ttl_days"
 	KeyWildcardDomain    = "domains.wildcard"
 	KeyClusterIP         = "domains.cluster_ip"
 	KeyACMEEmail         = "domains.acme_email"
@@ -151,6 +152,13 @@ var Definitions = []Definition{
 		// A k3s release, which is a Kubernetes version with a k3s suffix.
 		Placeholder: "v1.34.1+k3s1",
 		Validate:    validateK3sVersion,
+	},
+	{
+		Key: KeyPreviewTTLDays, Label: "Remove preview environments after", Group: GroupCluster,
+		Help:        "Days with no deployment before a pull request's preview environment is removed. A preview that is still being pushed to survives however long the pull request stays open. Set to 0 to keep them until their pull request closes, which is how previews are normally removed — but a webhook that never arrives then leaves one running forever.",
+		Placeholder: "7",
+		Kind:        KindNumber,
+		Validate:    validateInt,
 	},
 	{
 		Key: KeyWildcardDomain, Label: "Wildcard domain", Group: GroupDomains,

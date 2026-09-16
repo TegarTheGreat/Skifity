@@ -12,6 +12,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"skifity/internal/api"
@@ -19,6 +20,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -41,13 +43,19 @@ type Store interface {
 
 	ListDomains(ctx context.Context, appID string) ([]store.Domain, error)
 	SetDomainStatus(ctx context.Context, id, status, detail string) error
+
+	StalePreviewEnvironments(ctx context.Context, before time.Time) ([]store.Environment, error)
+	DeleteEnvironment(ctx context.Context, id string) error
+	GetSetting(ctx context.Context, key string) (value string, encrypted bool, err error)
 }
 
-// Cluster is the part of the cluster a watcher reads.
+// Cluster is the part of the cluster a watcher reads, plus the one thing it
+// removes.
 type Cluster interface {
 	Summary(ctx context.Context) (api.ClusterSummary, error)
 	AppStatus(ctx context.Context, namespace, appSlug string) (api.AppRuntimeStatus, error)
 	CertificateStatus(ctx context.Context, namespace, name string) (cluster.CertificateState, error)
+	DeleteNamespace(ctx context.Context, namespace string) error
 }
 
 // Publisher is the part of the event hub a watcher uses to refresh open pages.
@@ -115,6 +123,60 @@ func (w *Watcher) Once(ctx context.Context) {
 
 	w.checkServers(ctx)
 	w.checkApps(ctx)
+	w.reclaimPreviews(ctx)
+}
+
+// DefaultPreviewTTLDays is how long a preview environment survives with no
+// deployment when nothing says otherwise.
+const DefaultPreviewTTLDays = 7
+
+// reclaimPreviews removes preview environments nothing has deployed to.
+//
+// A preview is made by a webhook and was only ever removed by another one. A
+// pull request merged while the panel was down, a repository whose webhook was
+// deleted, a branch renamed on the server — each left a namespace running
+// forever, and a self-hosted cluster quietly runs out of memory. That is the
+// complaint people have about every product that does preview environments.
+func (w *Watcher) reclaimPreviews(ctx context.Context) {
+	days := w.previewTTLDays(ctx)
+	if days <= 0 {
+		// Deliberately off: the operator would rather keep them.
+		return
+	}
+
+	stale, err := w.db.StalePreviewEnvironments(ctx, time.Now().Add(-time.Duration(days)*24*time.Hour))
+	if err != nil {
+		w.log.Warn("could not list preview environments", "error", err)
+		return
+	}
+	for _, env := range stale {
+		w.log.Info("removing a preview environment nothing has deployed to",
+			"environment", env.ID, "namespace", env.Namespace, "after_days", days)
+		if err := w.cluster.DeleteNamespace(ctx, env.Namespace); err != nil {
+			w.log.Warn("could not remove a preview namespace",
+				"namespace", env.Namespace, "error", err)
+			// The row stays, so the next pass tries again rather than leaving
+			// a namespace with nothing in the panel pointing at it.
+			continue
+		}
+		if err := w.db.DeleteEnvironment(ctx, env.ID); err != nil {
+			w.log.Warn("could not remove a preview environment", "environment", env.ID, "error", err)
+		}
+	}
+}
+
+// previewTTLDays reads the setting, falling back to the default.
+func (w *Watcher) previewTTLDays(ctx context.Context) int {
+	value, _, err := w.db.GetSetting(ctx, settings.KeyPreviewTTLDays)
+	if err != nil || strings.TrimSpace(value) == "" {
+		return DefaultPreviewTTLDays
+	}
+	days, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		w.log.Warn("the preview lifetime setting is not a number", "value", value)
+		return DefaultPreviewTTLDays
+	}
+	return days
 }
 
 // checkServers marks servers whose node stopped being ready, and records that

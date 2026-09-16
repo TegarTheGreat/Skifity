@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"skifity/internal/api"
 	"skifity/internal/cluster"
 	"skifity/internal/notify"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -22,14 +24,20 @@ type fakeStore struct {
 	seen        map[string]time.Time
 	appStatuses map[string]string
 	domainSet   map[string]string
+
+	stalePreviews  []store.Environment
+	deletedEnvs    []string
+	settingValues  map[string]string
+	previewsBefore time.Time
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		domains:     map[string][]store.Domain{},
-		seen:        map[string]time.Time{},
-		appStatuses: map[string]string{},
-		domainSet:   map[string]string{},
+		domains:       map[string][]store.Domain{},
+		seen:          map[string]time.Time{},
+		appStatuses:   map[string]string{},
+		domainSet:     map[string]string{},
+		settingValues: map[string]string{},
 	}
 }
 
@@ -84,11 +92,35 @@ func (f *fakeStore) SetDomainStatus(_ context.Context, id, status, _ string) err
 	return nil
 }
 
+func (f *fakeStore) StalePreviewEnvironments(_ context.Context, before time.Time) ([]store.Environment, error) {
+	f.previewsBefore = before
+	return f.stalePreviews, nil
+}
+
+func (f *fakeStore) DeleteEnvironment(_ context.Context, id string) error {
+	f.deletedEnvs = append(f.deletedEnvs, id)
+	return nil
+}
+
+func (f *fakeStore) GetSetting(_ context.Context, key string) (string, bool, error) {
+	return f.settingValues[key], false, nil
+}
+
 // fakeCluster answers with whatever the test set up.
 type fakeCluster struct {
-	nodes []api.NodeInfo
-	apps  map[string]api.AppRuntimeStatus
-	certs map[string]cluster.CertificateState
+	nodes           []api.NodeInfo
+	apps            map[string]api.AppRuntimeStatus
+	certs           map[string]cluster.CertificateState
+	deletedSpaces   []string
+	deleteNamespace error
+}
+
+func (f *fakeCluster) DeleteNamespace(_ context.Context, namespace string) error {
+	if f.deleteNamespace != nil {
+		return f.deleteNamespace
+	}
+	f.deletedSpaces = append(f.deletedSpaces, namespace)
+	return nil
 }
 
 func (f *fakeCluster) Summary(context.Context) (api.ClusterSummary, error) {
@@ -359,5 +391,77 @@ func TestNoClusterIsNotAFailure(t *testing.T) {
 	}
 	if db.servers[0].Status != store.ServerReady {
 		t.Fatal("a server was marked not ready because the panel has no cluster")
+	}
+}
+
+// TestAbandonedPreviewsAreReclaimed: a preview is made by a webhook and was
+// only ever removed by another one. A pull request merged while the panel was
+// down leaves a namespace running forever, and a self-hosted cluster quietly
+// runs out of memory.
+func TestAbandonedPreviewsAreReclaimed(t *testing.T) {
+	db := newFakeStore()
+	db.stalePreviews = []store.Environment{
+		{ID: "env_1", Namespace: "acme-shop-pr-7", Kind: store.EnvPreview},
+		{ID: "env_2", Namespace: "acme-shop-pr-9", Kind: store.EnvPreview},
+	}
+	c := &fakeCluster{}
+
+	w, _ := testWatcher(t, db, c)
+	w.Once(t.Context())
+
+	if len(c.deletedSpaces) != 2 {
+		t.Fatalf("removed %d namespaces, want 2", len(c.deletedSpaces))
+	}
+	if len(db.deletedEnvs) != 2 {
+		t.Fatalf("removed %d environments, want 2", len(db.deletedEnvs))
+	}
+	// A week by default, counted from the last deployment.
+	if age := time.Since(db.previewsBefore); age < 6*24*time.Hour || age > 8*24*time.Hour {
+		t.Fatalf("previews are reclaimed after %s, want about a week", age)
+	}
+}
+
+// TestThePanelRowSurvivesAFailedDelete: removing the row while the namespace
+// is still there would leave a namespace nothing in the panel points at.
+func TestThePanelRowSurvivesAFailedDelete(t *testing.T) {
+	db := newFakeStore()
+	db.stalePreviews = []store.Environment{{ID: "env_1", Namespace: "acme-shop-pr-7"}}
+	c := &fakeCluster{deleteNamespace: errors.New("the cluster said no")}
+
+	w, _ := testWatcher(t, db, c)
+	w.Once(t.Context())
+
+	if len(db.deletedEnvs) != 0 {
+		t.Fatal("the environment was forgotten while its namespace was still running")
+	}
+}
+
+// TestReclaimingCanBeTurnedOff: an operator who would rather keep previews
+// until their pull request closes sets the lifetime to zero.
+func TestReclaimingCanBeTurnedOff(t *testing.T) {
+	db := newFakeStore()
+	db.settingValues[settings.KeyPreviewTTLDays] = "0"
+	db.stalePreviews = []store.Environment{{ID: "env_1", Namespace: "acme-shop-pr-7"}}
+	c := &fakeCluster{}
+
+	w, _ := testWatcher(t, db, c)
+	w.Once(t.Context())
+
+	if len(c.deletedSpaces) != 0 || len(db.deletedEnvs) != 0 {
+		t.Fatal("previews were reclaimed although the lifetime is set to zero")
+	}
+}
+
+// TestTheConfiguredLifetimeIsUsed.
+func TestTheConfiguredLifetimeIsUsed(t *testing.T) {
+	db := newFakeStore()
+	db.settingValues[settings.KeyPreviewTTLDays] = "2"
+	c := &fakeCluster{}
+
+	w, _ := testWatcher(t, db, c)
+	w.Once(t.Context())
+
+	if age := time.Since(db.previewsBefore); age < 36*time.Hour || age > 60*time.Hour {
+		t.Fatalf("previews are reclaimed after %s, want about two days", age)
 	}
 }

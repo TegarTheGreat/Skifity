@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 func baseSpec() AppSpec {
@@ -508,5 +509,102 @@ func TestNetworkPoliciesDenyByDefaultAndBlockMetadata(t *testing.T) {
 	// asks, which is a well-trodden path from a compromised app to the account.
 	if !sawMetadataBlock {
 		t.Fatal("egress to the cloud metadata endpoint is not blocked")
+	}
+}
+
+// TestScaleToZeroRendersWhatItPromises: the toggle carried all the way into
+// the spec and then rendered nothing at all, so turning it on installed KEDA
+// and changed the app not one bit.
+// scalableSpec is an app with a hostname, which is what scale to zero needs.
+func scalableSpec() AppSpec {
+	spec := baseSpec()
+	spec.Domains = []DomainSpec{{Hostname: "shop.example.com", Path: "/", TLS: true}}
+	return spec
+}
+
+func TestScaleToZeroRendersWhatItPromises(t *testing.T) {
+	spec := scalableSpec()
+	spec.ScaleToZero = true
+	spec.Autoscale = true
+	spec.MinReplicas, spec.MaxReplicas = 1, 4
+
+	scaled := BuildHTTPScaledObject(spec)
+	if scaled == nil {
+		t.Fatal("scale to zero renders no KEDA object, so nothing ever scales to zero")
+	}
+	replicas, _, _ := unstructured.NestedMap(scaled.Object, "spec", "replicas")
+	if replicas["min"] != int64(0) {
+		t.Errorf("the floor is %v, want 0", replicas["min"])
+	}
+	if replicas["max"] != int64(4) {
+		t.Errorf("the ceiling is %v, want the app's maximum", replicas["max"])
+	}
+	hosts, _, _ := unstructured.NestedSlice(scaled.Object, "spec", "hosts")
+	if len(hosts) != len(spec.Domains) {
+		t.Errorf("the object knows %d hostnames, want %d", len(hosts), len(spec.Domains))
+	}
+
+	// The interceptor is what wakes the app, so the Ingress has to go through
+	// it. Pointing at the app's own Service would give a sleeping app a 503
+	// and start nothing.
+	ingress := BuildIngress(spec)
+	if ingress == nil {
+		t.Fatal("no ingress")
+	}
+	backend := ingress.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name
+	if backend != InterceptorServiceName(spec.Name) {
+		t.Fatalf("the ingress points at %q, so a request to a sleeping app wakes nothing", backend)
+	}
+	if BuildInterceptorService(spec) == nil {
+		t.Fatal("the ingress points at a service that is never created")
+	}
+}
+
+// TestWithoutScaleToZeroNothingChanges keeps the ordinary path ordinary.
+func TestWithoutScaleToZeroNothingChanges(t *testing.T) {
+	spec := scalableSpec()
+	spec.ScaleToZero = false
+
+	if BuildHTTPScaledObject(spec) != nil || BuildInterceptorService(spec) != nil {
+		t.Fatal("an app that does not scale to zero got KEDA objects anyway")
+	}
+	ingress := BuildIngress(spec)
+	if got := ingress.Spec.Rules[0].HTTP.Paths[0].Backend.Service.Name; got != spec.Name {
+		t.Fatalf("the ingress points at %q, want the app's own service", got)
+	}
+}
+
+// TestScaleToZeroNeedsAHostname: the interceptor routes by Host header, so an
+// app nobody can reach by name has nothing to be woken by.
+func TestScaleToZeroNeedsAHostname(t *testing.T) {
+	spec := scalableSpec()
+	spec.ScaleToZero = true
+	spec.Domains = nil
+
+	if BuildHTTPScaledObject(spec) != nil {
+		t.Fatal("an app with no hostname was given a scaler that could never fire")
+	}
+}
+
+// TestTheInterceptorCanReachTheApp: KEDA runs in its own namespace, and the
+// environment's default-deny policy would otherwise drop the request that woke
+// the app.
+func TestTheInterceptorCanReachTheApp(t *testing.T) {
+	policies := BuildNetworkPolicies("acme-shop-production", "skifity-system")
+	var allowed bool
+	for _, policy := range policies {
+		for _, rule := range policy.Spec.Ingress {
+			for _, peer := range rule.From {
+				if peer.NamespaceSelector == nil {
+					continue
+				}
+				if peer.NamespaceSelector.MatchLabels["kubernetes.io/metadata.name"] == KEDANamespace {
+					allowed = true
+				}
+			}
+		}
+	}
+	if !allowed {
+		t.Fatal("an app that scales to zero wakes up and then drops the request that woke it")
 	}
 }

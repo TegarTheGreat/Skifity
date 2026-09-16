@@ -142,6 +142,8 @@ func (c *Cluster) Manifests(ctx context.Context, app store.App, env store.Enviro
 		kube.BuildIngress(spec),
 		kube.BuildHPA(spec),
 		kube.BuildPDB(spec),
+		kube.BuildInterceptorService(spec),
+		kube.BuildHTTPScaledObject(spec),
 	}
 	for _, claim := range kube.BuildPVCs(spec) {
 		objects = append(objects, claim)

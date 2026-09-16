@@ -248,6 +248,8 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 		kube.BuildIngress(spec),
 		kube.BuildHPA(spec),
 		kube.BuildPDB(spec),
+		kube.BuildInterceptorService(spec),
+		kube.BuildHTTPScaledObject(spec),
 	)
 
 	d.appendLog(ctx, deployment.ID, "Applying the configuration to the cluster.")
@@ -294,6 +296,18 @@ func (d *Deployer) removeUnwanted(ctx context.Context, spec kube.AppSpec, app st
 		if err := applier.Delete(ctx, "policy/v1", "PodDisruptionBudget",
 			spec.Namespace, kube.ResourceName(spec.Name, "pdb")); err != nil {
 			d.log.Warn("could not remove the disruption budget", "app", app.ID, "error", err)
+		}
+	}
+	if !kube.ScaleToZeroEnabled(spec) {
+		// Left behind, these would keep routing traffic through an interceptor
+		// for an app that no longer sleeps.
+		if err := applier.Delete(ctx, "http.keda.sh/v1alpha1", "HTTPScaledObject",
+			spec.Namespace, spec.Name); err != nil {
+			d.log.Warn("could not remove the scale-to-zero object", "app", app.ID, "error", err)
+		}
+		if err := applier.Delete(ctx, "v1", "Service",
+			spec.Namespace, kube.InterceptorServiceName(spec.Name)); err != nil {
+			d.log.Warn("could not remove the wake service", "app", app.ID, "error", err)
 		}
 	}
 }

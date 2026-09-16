@@ -155,6 +155,12 @@ func BuildNetworkPolicies(namespace, systemNamespace string) []*networkingv1.Net
 					{NamespaceSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{"kubernetes.io/metadata.name": systemNamespace},
 					}},
+					// KEDA's interceptor, which is what a request to an app
+					// that has scaled to zero arrives through. Without this the
+					// app wakes up and the request that woke it is dropped.
+					{NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{"kubernetes.io/metadata.name": KEDANamespace},
+					}},
 					// And between pods of this same environment, so an app can
 					// reach its own database.
 					{PodSelector: &metav1.LabelSelector{}},

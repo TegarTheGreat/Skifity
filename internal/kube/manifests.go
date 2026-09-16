@@ -216,6 +216,15 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 		annotations["traefik.ingress.kubernetes.io/router.middlewares"] = "skifity-system-redirect-https@kubernetescrd"
 	}
 
+	// An app that can scale to zero is reached through KEDA's interceptor,
+	// which is what wakes it. Pointing the Ingress straight at the app's own
+	// Service would mean a request to a sleeping app got a 503 and nothing
+	// ever started it.
+	backend := s.Name
+	if ScaleToZeroEnabled(s) {
+		backend = InterceptorServiceName(s.Name)
+	}
+
 	pathType := networkingv1.PathTypePrefix
 	rules := make([]networkingv1.IngressRule, 0, len(s.Domains))
 	for _, d := range s.Domains {
@@ -232,7 +241,7 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 						PathType: &pathType,
 						Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
-								Name: s.Name,
+								Name: backend,
 								Port: networkingv1.ServiceBackendPort{Number: 80},
 							},
 						},

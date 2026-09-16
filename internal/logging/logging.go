@@ -3,6 +3,7 @@ package logging
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
@@ -37,6 +38,21 @@ func parseLevel(level string) slog.Level {
 
 // Redacted is the placeholder written in place of a sensitive value.
 const Redacted = "[redacted]"
+
+// Public wraps a value that must survive redaction.
+//
+// Redacting by key name is the right default, but a few values have
+// secret-shaped names and still have to be readable: the one-time setup token
+// is the only way to claim a fresh panel, and a redacted one leaves an operator
+// with a panel nobody can ever sign in to. Wrapping is deliberate and greppable,
+// which a carefully chosen key name would not be.
+type Public struct{ Value any }
+
+// String makes a wrapped value print as itself.
+func (p Public) String() string { return fmt.Sprint(p.Value) }
+
+// LogValue keeps the wrapper invisible in the output.
+func (p Public) LogValue() slog.Value { return slog.AnyValue(p.Value) }
 
 // sensitiveKey matches attribute names whose values must never be logged.
 var sensitiveKey = regexp.MustCompile(`(?i)(pass|secret|token|key|credential|authorization|cookie|private|otp|seed|signature)`)
@@ -79,6 +95,10 @@ func (r *redactor) WithGroup(name string) slog.Handler {
 }
 
 func redactAttr(a slog.Attr) slog.Attr {
+	// An explicitly public value is never redacted, whatever it is called.
+	if public, ok := a.Value.Any().(Public); ok {
+		return slog.Any(a.Key, public.Value)
+	}
 	if sensitiveKey.MatchString(a.Key) {
 		return slog.String(a.Key, Redacted)
 	}

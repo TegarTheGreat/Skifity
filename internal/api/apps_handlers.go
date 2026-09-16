@@ -97,7 +97,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		Builder:        defaultString(req.Builder, "auto"),
 		DockerfilePath: strings.TrimSpace(req.DockerfilePath),
 		Image:          strings.TrimSpace(req.Image),
-		Port:           req.Port,
+		Port:           defaultInt(req.Port, kube.DefaultAppPort),
 		HealthPath:     strings.TrimSpace(req.HealthPath),
 		StartCommand:   strings.TrimSpace(req.StartCommand),
 		// Safe defaults, per the product principles: one instance, modest
@@ -721,7 +721,7 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if err := s.db.DeleteVolume(r.Context(), chi.URLParam(r, "volumeID")); err != nil {
+	if err := s.db.DeleteVolume(r.Context(), app.ID, chi.URLParam(r, "volumeID")); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -735,6 +735,15 @@ func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 func variableContext(appID, key string) string { return "variable:" + appID + ":" + key }
 func sharedVariableContext(projectID, key string) string {
 	return "shared_variable:" + projectID + ":" + key
+}
+
+// defaultInt is for the settings where zero means "nothing was said" rather
+// than "zero".
+func defaultInt(v, fallback int) int {
+	if v == 0 {
+		return fallback
+	}
+	return v
 }
 
 func defaultString(v, fallback string) string {

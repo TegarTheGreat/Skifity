@@ -185,6 +185,19 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 		return errdoc.ClusterUnreachable(nil)
 	}
 
+	// Every app gets a working address, and it is worked out here rather than
+	// at creation because the settings it depends on — a wildcard domain, the
+	// cluster's public IP — are often filled in after the app already exists.
+	teamID, err := d.db.TeamIDForApp(ctx, app.ID)
+	if err != nil {
+		return err
+	}
+	if err := d.cluster.EnsureAutoDomain(ctx, app, env, teamID); err != nil {
+		// An app that cannot be given a free URL can still be deployed on a
+		// domain of its own, so this is a warning and not a failure.
+		d.log.Warn("could not give the app an automatic domain", "app", app.ID, "error", err)
+	}
+
 	spec, err := d.cluster.SpecFor(ctx, app, env, deployment.Image)
 	if err != nil {
 		return err

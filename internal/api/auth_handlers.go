@@ -86,6 +86,10 @@ type meResponse struct {
 	User          store.User   `json:"user"`
 	Teams         []store.Team `json:"teams"`
 	RecoverySaved bool         `json:"recovery_saved"`
+	// RecoveryCodesLeft is how many unused two-factor recovery codes remain.
+	// It is on this response because the account page is the only place that
+	// can tell somebody they are down to their last one.
+	RecoveryCodesLeft int `json:"recovery_codes_left"`
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +99,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, meResponse{User: user, Teams: teams, RecoverySaved: user.RecoverySaved})
+	codesLeft, err := s.auth.RecoveryCodesLeft(r.Context(), user.ID)
+	if err != nil {
+		s.log.Warn("could not count recovery codes", "user", user.ID, "error", err)
+	}
+	writeJSON(w, http.StatusOK, meResponse{
+		User: user, Teams: teams, RecoverySaved: user.RecoverySaved, RecoveryCodesLeft: codesLeft,
+	})
 }
 
 type updateMeRequest struct {
@@ -226,6 +236,13 @@ func (s *Server) handleStartTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	codes, err := auth.GenerateRecoveryCodes(8)
 	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	// This is the only moment these exist in readable form, so they are stored
+	// before they are shown. A code the user wrote down and the panel forgot
+	// is worse than no recovery at all.
+	if err := s.auth.StoreRecoveryCodes(r.Context(), user.ID, codes); err != nil {
 		writeError(w, r, err)
 		return
 	}

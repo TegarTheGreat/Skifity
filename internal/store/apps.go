@@ -385,6 +385,21 @@ func (db *DB) ListDomains(ctx context.Context, appID string) ([]Domain, error) {
 	return out, rows.Err()
 }
 
+// SetAutoDomain moves an app's automatic hostname, which happens when the
+// operator configures a wildcard domain after the app was already deployed.
+//
+// It touches only the automatic domain: one somebody typed in themselves is
+// theirs, and a settings change must never rewrite it.
+func (db *DB) SetAutoDomain(ctx context.Context, id, hostname string, tls bool) error {
+	_, err := db.Exec(ctx,
+		`UPDATE domains SET hostname = ?, tls = ?, status = 'pending', status_detail = '' WHERE id = ? AND auto = 1`,
+		hostname, tls, id)
+	if err != nil {
+		return fmt.Errorf("move the automatic domain: %w", err)
+	}
+	return nil
+}
+
 // SetDomainStatus records certificate and routing progress.
 func (db *DB) SetDomainStatus(ctx context.Context, id, status, detail string) error {
 	_, err := db.Exec(ctx, `UPDATE domains SET status = ?, status_detail = ? WHERE id = ?`, status, detail, id)
@@ -449,8 +464,11 @@ func (db *DB) ListVolumes(ctx context.Context, appID string) ([]Volume, error) {
 
 // DeleteVolume detaches a volume record. The PVC is removed separately so the
 // data can be kept deliberately.
-func (db *DB) DeleteVolume(ctx context.Context, id string) error {
-	res, err := db.Exec(ctx, `DELETE FROM volumes WHERE id = ?`, id)
+func (db *DB) DeleteVolume(ctx context.Context, appID, id string) error {
+	// The app is part of the condition rather than something the caller is
+	// trusted to have checked: a volume id from another team must not delete
+	// anything, however the handler above got here.
+	res, err := db.Exec(ctx, `DELETE FROM volumes WHERE id = ? AND app_id = ?`, id, appID)
 	if err != nil {
 		return fmt.Errorf("delete volume: %w", err)
 	}

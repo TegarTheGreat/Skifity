@@ -128,6 +128,16 @@ func shortHash(input string, n int) string {
 	return encoded[:n]
 }
 
+// DefaultAppPort is where an app is expected to listen when nothing says
+// otherwise.
+//
+// This is not a guess. The panel sets PORT in the container's environment, so
+// the number here is an instruction the app is told to follow, the same
+// contract every buildpack in the world already implements. The alternative is
+// a port of zero, which renders no Service, no Ingress and no URL: an app that
+// deployed successfully and cannot be reached.
+const DefaultAppPort = 8080
+
 // AutoHostname builds the automatic subdomain for an app.
 //
 // With a wildcard domain configured it is <app>-<env>.<wildcard>. Without one it

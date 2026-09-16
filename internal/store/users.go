@@ -387,3 +387,64 @@ func defaultStr(v, fallback string) string {
 	}
 	return v
 }
+
+// --- two-factor recovery codes ---
+
+// ReplaceRecoveryCodes stores a fresh set of hashed codes, forgetting any the
+// user had before.
+//
+// Replacing rather than adding is the safe direction: the codes on screen are
+// the only ones the user has written down, so anything older is a set nobody
+// can produce and everybody would still accept.
+func (db *DB) ReplaceRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	return db.Tx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+			return fmt.Errorf("clear recovery codes: %w", err)
+		}
+		now := Now()
+		for _, hash := range hashes {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO recovery_codes (id, user_id, code_hash, created_at) VALUES (?,?,?,?)`,
+				NewID("rec"), userID, hash, now); err != nil {
+				return fmt.Errorf("store a recovery code: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// UseRecoveryCode consumes one unused code and reports whether it was there.
+//
+// The update is the check: doing it in one statement means two logins racing
+// with the same code cannot both win.
+func (db *DB) UseRecoveryCode(ctx context.Context, userID, hash string) (bool, error) {
+	res, err := db.Exec(ctx,
+		`UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL`,
+		Now(), userID, hash)
+	if err != nil {
+		return false, fmt.Errorf("use a recovery code: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+// CountRecoveryCodes returns how many codes are left unused, which is what the
+// account page shows.
+func (db *DB) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count recovery codes: %w", err)
+	}
+	return n, nil
+}
+
+// DeleteRecoveryCodes forgets a user's codes, which happens when two-factor is
+// turned off.
+func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID string) error {
+	if _, err := db.Exec(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("delete recovery codes: %w", err)
+	}
+	return nil
+}

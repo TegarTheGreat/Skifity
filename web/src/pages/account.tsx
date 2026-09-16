@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import {
+  CopyIcon,
   DownloadIcon,
   KeyRoundIcon,
   PlusIcon,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -36,6 +38,13 @@ import { api, type List } from "@/lib/api"
 import { formatDateTime, formatRelative } from "@/lib/format"
 import { queryClient } from "@/lib/query"
 import type { APIToken, Session } from "@/lib/types"
+
+/** What /api/me/totp answers with when two-factor setup begins. */
+type TwoFactorSetup = {
+  secret: string
+  uri: string
+  recovery_codes: string[]
+}
 
 export function AccountPage() {
   const { t } = useTranslation()
@@ -227,12 +236,13 @@ function PasswordCard() {
 
 function TwoFactorCard() {
   const { t } = useTranslation()
-  const { user, refresh } = useSession()
-  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null)
+  const { user, recoveryCodesLeft, refresh } = useSession()
+  const [setup, setSetup] = useState<TwoFactorSetup | null>(null)
   const [code, setCode] = useState("")
+  const confirmReplace = useConfirm()
 
   const start = useMutation({
-    mutationFn: () => api.post<{ secret: string; uri: string }>("/api/me/totp"),
+    mutationFn: () => api.post<TwoFactorSetup>("/api/me/totp"),
     onSuccess: (data) => setSetup(data),
   })
 
@@ -250,6 +260,8 @@ function TwoFactorCard() {
     onSuccess: () => void refresh(),
   })
 
+  const codesLeft = recoveryCodesLeft
+
   return (
     <Card>
       <CardHeader>
@@ -259,16 +271,53 @@ function TwoFactorCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Codes are shown whenever the panel has just generated them, on or
+            off: this is the only moment they exist in readable form. */}
+        {setup?.recovery_codes?.length ? (
+          <RecoveryCodes codes={setup.recovery_codes} />
+        ) : null}
+
         {user?.totp_enabled ? (
           <>
             <p className="flex items-center gap-2 text-sm text-success">
               <ShieldCheckIcon className="size-4 shrink-0" />
               {t("auth.twoFactorEnabled")}
             </p>
+            {codesLeft > 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("auth.recoveryCodesLeft", { count: codesLeft })}
+              </p>
+            ) : (
+              <p className="text-sm text-warning">{t("auth.recoveryCodesNone")}</p>
+            )}
             {disable.error != null && <ErrorDisplay error={disable.error} compact />}
-            <Button variant="outline" disabled={disable.isPending} onClick={() => disable.mutate()}>
-              {t("auth.twoFactorDisable")}
-            </Button>
+            {start.error != null && <ErrorDisplay error={start.error} compact />}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                disabled={start.isPending}
+                onClick={() => {
+                  void confirmReplace({
+                    title: t("auth.recoveryCodesRegenerate"),
+                    description: t("auth.recoveryCodesIntro"),
+                    consequence: t("auth.recoveryCodesReplaced"),
+                    confirmLabel: t("auth.recoveryCodesRegenerate"),
+                  }).then((yes) => {
+                    if (yes) start.mutate()
+                  })
+                }}
+              >
+                {start.isPending && <Spinner />}
+                {t("auth.recoveryCodesRegenerate")}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={disable.isPending}
+                onClick={() => disable.mutate()}
+              >
+                {t("auth.twoFactorDisable")}
+              </Button>
+            </div>
           </>
         ) : setup ? (
           <form
@@ -301,6 +350,7 @@ function TwoFactorCard() {
             {confirm.error != null && <ErrorDisplay error={confirm.error} compact />}
             <div className="flex gap-2">
               <Button type="submit" disabled={confirm.isPending || code.length < 6}>
+                {confirm.isPending && <Spinner />}
                 {t("auth.twoFactorConfirm")}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setSetup(null)}>
@@ -323,6 +373,61 @@ function TwoFactorCard() {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * The recovery codes, at the one moment they are readable.
+ *
+ * The panel stores only their hashes, so this screen is the only copy that
+ * will ever exist. That is why there is a download button and not just a
+ * paragraph telling somebody to write them down.
+ */
+function RecoveryCodes({ codes }: { codes: string[] }) {
+  const { t } = useTranslation()
+
+  const download = () => {
+    const blob = new Blob([`${codes.join("\n")}\n`], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "skifity-recovery-codes.txt"
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const copy = () => {
+    void navigator.clipboard.writeText(codes.join("\n")).then(
+      () => toast.success(t("common.copied")),
+      () => toast.error(t("errors.somethingWentWrong")),
+    )
+  }
+
+  return (
+    <Alert variant="warning">
+      <KeyRoundIcon />
+      <AlertTitle>{t("auth.recoveryCodesTitle")}</AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p>{t("auth.recoveryCodesIntro")}</p>
+        <ul className="grid w-full grid-cols-2 gap-x-6 gap-y-1 rounded-md border bg-background p-3 font-mono text-xs sm:grid-cols-4">
+          {codes.map((recoveryCode) => (
+            <li key={recoveryCode} className="tabular-nums">
+              {recoveryCode}
+            </li>
+          ))}
+        </ul>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={download}>
+            <DownloadIcon className="size-4" />
+            {t("auth.download")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={copy}>
+            <CopyIcon className="size-4" />
+            {t("common.copy")}
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
   )
 }
 

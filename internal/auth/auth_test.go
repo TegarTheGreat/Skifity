@@ -192,8 +192,14 @@ func TestGenerateRecoveryCodesAreUnique(t *testing.T) {
 			t.Fatalf("duplicate recovery code %q", c)
 		}
 		seen[c] = true
-		if len(c) != 9 || c[4] != '-' {
-			t.Fatalf("recovery code %q is not in the XXXX-XXXX shape", c)
+		if len(c) != 14 || c[4] != '-' || c[9] != '-' {
+			t.Fatalf("recovery code %q is not in the XXXX-XXXX-XXXX shape", c)
+		}
+		// These are hashed with a fast hash on purpose, so their length is the
+		// only thing protecting them in a stolen database. Twelve base32
+		// characters is sixty bits.
+		if len(NormaliseRecoveryCode(c)) < 12 {
+			t.Fatalf("recovery code %q carries too little entropy", c)
 		}
 	}
 }

@@ -116,16 +116,42 @@ func decodeTOTPSecret(secret string) ([]byte, error) {
 }
 
 // GenerateRecoveryCodes returns single-use codes for when a phone is lost.
+//
+// Twelve base32 characters is sixty bits. That is far more than an online
+// guess needs to be hopeless, and it is chosen for the other case: a stolen
+// database, where the only thing between an attacker and somebody's second
+// factor is how long the code takes to find.
 func GenerateRecoveryCodes(n int) ([]string, error) {
 	codes := make([]string, 0, n)
 	for range n {
-		buf := make([]byte, 5)
+		buf := make([]byte, 8)
 		if _, err := rand.Read(buf); err != nil {
 			return nil, fmt.Errorf("read random bytes: %w", err)
 		}
-		// 8 base32 characters, split in two for readability: "A1B2-C3D4".
+		// Twelve characters in threes, because a code that has to be typed off
+		// a piece of paper is typed wrong when it is one long run.
 		s := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf)
-		codes = append(codes, s[:4]+"-"+s[4:8])
+		codes = append(codes, s[0:4]+"-"+s[4:8]+"-"+s[8:12])
 	}
 	return codes, nil
+}
+
+// NormaliseRecoveryCode puts a typed code into the one form that is hashed.
+//
+// People type these off paper, so they arrive with the dashes left out, with
+// spaces in, and in whichever case their keyboard was in.
+func NormaliseRecoveryCode(code string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(strings.TrimSpace(code)) {
+		if (r >= 'A' && r <= 'Z') || (r >= '2' && r <= '7') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// HashRecoveryCode is what is stored. A recovery code has full entropy of its
+// own, so it is hashed like a token rather than like a password.
+func HashRecoveryCode(code string) string {
+	return HashToken("recovery:" + NormaliseRecoveryCode(code))
 }

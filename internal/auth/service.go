@@ -78,6 +78,10 @@ type LoginResult struct {
 	Token     string
 	CSRFToken string
 	ExpiresAt time.Time
+	// UsedRecoveryCode is true when the second factor was a recovery code
+	// rather than the authenticator, so the panel can say one is gone.
+	UsedRecoveryCode  bool
+	RecoveryCodesLeft int
 }
 
 // Login verifies credentials and issues a session.
@@ -113,6 +117,7 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
+	usedRecoveryCode := false
 	if user.TOTPEnabled {
 		if totpCode == "" {
 			return LoginResult{}, ErrTOTPRequired
@@ -122,8 +127,18 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 			return LoginResult{}, fmt.Errorf("read two-factor secret: %w", err)
 		}
 		if err := VerifyTOTP(string(secret), totpCode, time.Now()); err != nil {
-			s.recordFailure(ctx, email, ip)
-			return LoginResult{}, err
+			// A phone is lost often enough that the codes written down when
+			// two-factor was turned on have to actually work. They are tried
+			// second, so a real code is never spent by a mistyped one.
+			used, recoveryErr := s.db.UseRecoveryCode(ctx, user.ID, HashRecoveryCode(totpCode))
+			if recoveryErr != nil {
+				return LoginResult{}, fmt.Errorf("check recovery codes: %w", recoveryErr)
+			}
+			if !used {
+				s.recordFailure(ctx, email, ip)
+				return LoginResult{}, err
+			}
+			usedRecoveryCode = true
 		}
 	}
 
@@ -143,6 +158,10 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 	_ = s.db.RecordLoginAttempt(ctx, email, ip, true)
 	_ = s.db.ClearLoginAttempts(ctx, email)
 	_ = s.db.TouchUserLogin(ctx, user.ID)
+	if usedRecoveryCode {
+		result.UsedRecoveryCode = true
+		result.RecoveryCodesLeft, _ = s.db.CountRecoveryCodes(ctx, user.ID)
+	}
 	return result, nil
 }
 
@@ -270,6 +289,25 @@ func (s *Service) SetupTOTP(ctx context.Context, user *store.User, issuer string
 	return secret, TOTPURI(issuer, user.Email, secret), nil
 }
 
+// StoreRecoveryCodes keeps the hashes of the codes shown to a user.
+//
+// They are stored when the setup screen shows them, not when two-factor is
+// confirmed: the screen is the only place they exist in readable form, and a
+// user who writes them down and then closes the tab has to be able to use
+// them. They do nothing until two-factor is on.
+func (s *Service) StoreRecoveryCodes(ctx context.Context, userID string, codes []string) error {
+	hashes := make([]string, 0, len(codes))
+	for _, code := range codes {
+		hashes = append(hashes, HashRecoveryCode(code))
+	}
+	return s.db.ReplaceRecoveryCodes(ctx, userID, hashes)
+}
+
+// RecoveryCodesLeft reports how many unused codes a user has.
+func (s *Service) RecoveryCodesLeft(ctx context.Context, userID string) (int, error) {
+	return s.db.CountRecoveryCodes(ctx, userID)
+}
+
 // ConfirmTOTP enables two-factor once the user proves they can generate a code.
 func (s *Service) ConfirmTOTP(ctx context.Context, user *store.User, code string) error {
 	if user.TOTPSecretEnc == "" {
@@ -290,7 +328,12 @@ func (s *Service) ConfirmTOTP(ctx context.Context, user *store.User, code string
 func (s *Service) DisableTOTP(ctx context.Context, user *store.User) error {
 	user.TOTPEnabled = false
 	user.TOTPSecretEnc = ""
-	return s.db.UpdateUser(ctx, user)
+	if err := s.db.UpdateUser(ctx, user); err != nil {
+		return err
+	}
+	// The codes only ever existed to get past this secret. Keeping them would
+	// leave a second way in that the user believes they have turned off.
+	return s.db.DeleteRecoveryCodes(ctx, user.ID)
 }
 
 // ChangePassword sets a new password and signs every other session out.

@@ -167,6 +167,88 @@ func (c *Cluster) Manifests(ctx context.Context, app store.App, env store.Enviro
 	return b.String(), nil
 }
 
+// EnsureAutoDomain gives an app the free URL it was promised.
+//
+// This is the difference between a deploy that ends with an address and one
+// that ends with "now go and buy a domain". With a wildcard domain configured
+// it is <app>-<env>.<wildcard>; without one it is an sslip.io address built
+// from the cluster's public IP, which needs no DNS and no account.
+//
+// A certificate is only requested under a domain the operator owns. ADR-0015
+// explains why the sslip.io address is served over plain HTTP: every Skifity
+// install in the world shares sslip.io's Let's Encrypt rate limit.
+func (c *Cluster) EnsureAutoDomain(ctx context.Context, app store.App, env store.Environment, teamID string) error {
+	wildcard, _, err := c.db.GetSetting(ctx, settings.KeyWildcardDomain)
+	if err != nil {
+		return err
+	}
+	hostname := kube.AutoHostname(app.Slug, env.Slug, wildcard, c.clusterAddress(ctx, teamID))
+	if hostname == "" {
+		// No wildcard domain and no address to build an sslip.io name from.
+		// Saying nothing is right: a hostname that resolves nowhere is worse
+		// than no hostname at all.
+		c.log.Debug("no automatic domain for this app yet", "app", app.ID)
+		return nil
+	}
+	tls := wildcard != ""
+
+	domains, err := c.db.ListDomains(ctx, app.ID)
+	if err != nil {
+		return err
+	}
+	for _, domain := range domains {
+		if !domain.Auto {
+			continue
+		}
+		if domain.Hostname == hostname && domain.TLS == tls {
+			return nil
+		}
+		c.log.Info("moving an app's automatic domain",
+			"app", app.ID, "from", domain.Hostname, "to", hostname)
+		return c.db.SetAutoDomain(ctx, domain.ID, hostname, tls)
+	}
+
+	domain := store.Domain{AppID: app.ID, Hostname: hostname, Path: "/", TLS: tls, Auto: true}
+	// Without TLS there is no certificate to wait for, so the address works as
+	// soon as the ingress does and "waiting for DNS" would be a lie.
+	if !tls {
+		domain.Status = "active"
+	}
+	if err := c.db.CreateDomain(ctx, &domain); err != nil {
+		return err
+	}
+	c.log.Info("gave an app its automatic domain", "app", app.ID, "hostname", hostname)
+	return nil
+}
+
+// clusterAddress is the public IP apps are reached on.
+//
+// The setting wins, because an operator behind a load balancer knows something
+// the panel cannot see. Otherwise a control-plane server's own external
+// address is used, so a single-server install works with nothing configured.
+func (c *Cluster) clusterAddress(ctx context.Context, teamID string) string {
+	if ip, _, err := c.db.GetSetting(ctx, settings.KeyClusterIP); err == nil && ip != "" {
+		return strings.TrimSpace(ip)
+	}
+	servers, err := c.db.ListServers(ctx, teamID)
+	if err != nil {
+		return ""
+	}
+	fallback := ""
+	for _, server := range servers {
+		if server.Status != store.ServerReady || server.ExternalIP == "" {
+			continue
+		}
+		if server.Role == "control-plane" {
+			return server.ExternalIP
+		}
+		if fallback == "" {
+			fallback = server.ExternalIP
+		}
+	}
+	return fallback
+}
+
 // SpecFor builds the AppSpec for an app, reading the settings that affect it.
 func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environment, image string) (kube.AppSpec, error) {
 	project, err := c.db.GetProject(ctx, env.ProjectID)

@@ -21,6 +21,8 @@ type SessionState = {
   teams: Team[]
   team: Team | null
   meta: Meta | null
+  /** Unused two-factor recovery codes, so the account page can say so. */
+  recoveryCodesLeft: number
   setTeam: (team: Team) => void
   refresh: () => Promise<void>
   signOut: () => Promise<void>
@@ -36,6 +38,7 @@ type Bootstrap = {
   meta: Meta | null
   user: User | null
   teams: Team[]
+  recoveryCodesLeft: number
 }
 
 async function loadSession(): Promise<Bootstrap> {
@@ -44,14 +47,24 @@ async function loadSession(): Promise<Bootstrap> {
     api.anonymous<Meta>("/api/meta"),
   ])
   if (status.needs_setup) {
-    return { needsSetup: true, meta, user: null, teams: [] }
+    return { needsSetup: true, meta, user: null, teams: [], recoveryCodesLeft: 0 }
   }
   try {
-    const me = await api.anonymous<{ user: User; teams: Team[] }>("/api/me")
-    return { needsSetup: false, meta, user: me.user, teams: me.teams }
+    const me = await api.anonymous<{
+      user: User
+      teams: Team[]
+      recovery_codes_left?: number
+    }>("/api/me")
+    return {
+      needsSetup: false,
+      meta,
+      user: me.user,
+      teams: me.teams,
+      recoveryCodesLeft: me.recovery_codes_left ?? 0,
+    }
   } catch {
     // Not signed in. That is an answer, not a failure.
-    return { needsSetup: false, meta, user: null, teams: [] }
+    return { needsSetup: false, meta, user: null, teams: [], recoveryCodesLeft: 0 }
   }
 }
 
@@ -122,6 +135,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       teams,
       team,
       meta: session.data?.meta ?? null,
+      recoveryCodesLeft: session.data?.recoveryCodesLeft ?? 0,
       setTeam,
       refresh,
       signOut,

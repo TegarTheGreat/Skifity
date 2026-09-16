@@ -1,0 +1,98 @@
+# Releases.
+#
+#   git tag v0.1.0 && git push --tags
+#
+# CI does the rest: static binaries for Linux and macOS on both architectures,
+# a multi-architecture container image, checksums, and a changelog built from
+# the commit messages.
+version: 2
+
+project_name: skifity
+
+before:
+  hooks:
+    # The frontend is embedded in the binary, so it has to exist before any
+    # of the builds start.
+    - npm --prefix web ci --no-audit --no-fund
+    - npm --prefix web run build
+    - go mod download
+
+builds:
+  - id: skifity
+    main: ./cmd/skifity
+    binary: skifity
+    env:
+      # Pure Go all the way down: the SQLite driver needs no libc, so one
+      # binary runs on Alpine, on Debian and on a distroless image.
+      - CGO_ENABLED=0
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X skifity/internal/version.Version={{.Version}}
+      - -X skifity/internal/version.Commit={{.ShortCommit}}
+      - -X skifity/internal/version.Date={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  # The installer downloads a bare binary, not an archive, so the name it
+  # expects is what the binary is published as.
+  - id: binaries
+    formats: [binary]
+    name_template: "skifity-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+dockers_v2:
+  - id: panel
+    images:
+      - "ghcr.io/skifity/skifity"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    dockerfile: Dockerfile.release
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: Skifity
+      org.opencontainers.image.description: Self-hosted apps, powered by Kubernetes.
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.licenses: Apache-2.0
+      org.opencontainers.image.source: https://github.com/skifity/skifity
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\(.+\))?:'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\(.+\))?:'
+      order: 1
+    - title: Everything else
+      order: 99
+  filters:
+    exclude:
+      - '^docs(\(.+\))?:'
+      - '^test(\(.+\))?:'
+      - '^chore(\(.+\))?:'
+
+release:
+  footer: |
+    ## Installing
+
+    ```sh
+    curl -fsSL https://get.skifity.io | sudo sh
+    ```
+
+    Already running Skifity? Upgrade from Settings, or:
+
+    ```sh
+    kubectl -n skifity-system set image deployment/skifity-panel \
+      panel=ghcr.io/skifity/skifity:{{ .Version }}
+    ```

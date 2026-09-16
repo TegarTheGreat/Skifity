@@ -50,22 +50,43 @@ func ConfigPath() (string, error) {
 	return filepath.Join(dir, version.Binary, "config.json"), nil
 }
 
-// LoadConfig reads the stored configuration.
+// LoadConfig reads the stored configuration, letting the environment override
+// it.
+//
+// SKIFITY_URL and SKIFITY_TOKEN exist so that a CI job, a container or an AI
+// assistant can use the CLI without an interactive sign-in, and so that a
+// machine with no stored configuration at all still works. They win over the
+// file, because someone who sets them meant them.
 func LoadConfig() (Config, error) {
+	var cfg Config
+
 	path, err := ConfigPath()
 	if err != nil {
 		return Config{}, err
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return Config{}, fmt.Errorf("you are not signed in. Run `%s login` first", version.Binary)
+	data, readErr := os.ReadFile(path)
+	if readErr == nil {
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return Config{}, fmt.Errorf("read %s: %w", path, err)
 		}
-		return Config{}, fmt.Errorf("read %s: %w", path, err)
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return Config{}, fmt.Errorf("read %s: %w", path, readErr)
 	}
-	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return Config{}, fmt.Errorf("read %s: %w", path, err)
+
+	if url := strings.TrimSpace(os.Getenv("SKIFITY_URL")); url != "" {
+		cfg.PanelURL = url
+	}
+	if token := strings.TrimSpace(os.Getenv("SKIFITY_TOKEN")); token != "" {
+		cfg.Token = token
+	}
+	if team := strings.TrimSpace(os.Getenv("SKIFITY_TEAM")); team != "" {
+		cfg.TeamID = team
+	}
+
+	if cfg.PanelURL == "" || cfg.Token == "" {
+		return Config{}, fmt.Errorf(
+			"you are not signed in. Run `%s login` first, or set SKIFITY_URL and SKIFITY_TOKEN",
+			version.Binary)
 	}
 	return cfg, nil
 }

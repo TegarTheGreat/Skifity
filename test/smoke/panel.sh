@@ -194,6 +194,48 @@ grep -q 'verysecret' "$WORKDIR/server.log" && fail "a secret reached the panel's
 grep -q "$PASSWORD" "$WORKDIR/server.log" && fail "the password reached the panel's log"
 pass "no secrets reached the panel's log"
 
+# A CI job, a container or an AI assistant never runs `skifity login`, so the
+# CLI has to work from the environment alone, with no stored configuration and
+# no team ever chosen.
+ENV_OUT=$(SKIFITY_CONFIG="$WORKDIR/does-not-exist.json" \
+  SKIFITY_URL="$BASE" SKIFITY_TOKEN="$API_TOKEN" "$BINARY" whoami 2>&1) ||
+  fail "the CLI could not authenticate from the environment: $ENV_OUT"
+echo "$ENV_OUT" | grep -q "owner@example.test" || fail "whoami from the environment did not report the user"
+pass "the CLI authenticates from SKIFITY_URL and SKIFITY_TOKEN"
+
+SKIFITY_CONFIG="$WORKDIR/does-not-exist.json" \
+  SKIFITY_URL="$BASE" SKIFITY_TOKEN="$API_TOKEN" "$BINARY" apps --json >/dev/null ||
+  fail "the CLI could not find the team from the token alone"
+pass "the CLI finds the only team without being told"
+
+# With nothing at all, the error has to name the way out rather than just
+# refusing.
+NO_AUTH=$(SKIFITY_CONFIG="$WORKDIR/does-not-exist.json" "$BINARY" whoami 2>&1 || true)
+echo "$NO_AUTH" | grep -q 'SKIFITY_URL' ||
+  fail "signing in with nothing set should mention SKIFITY_URL, got: $NO_AUTH"
+pass "an unauthenticated CLI says how to authenticate"
+
+# Nobody can sign in is the one situation the API cannot fix, so the recovery
+# path has to work: it reads the database directly, on the server.
+"$BINARY" admin list-users --database "$WORKDIR/panel.db" | grep -q 'owner@example.test' ||
+  fail "admin list-users did not find the account"
+pass "an administrator can list the accounts from the server"
+
+"$BINARY" admin reset-password --database "$WORKDIR/panel.db" \
+  --password 'an entirely different passphrase' owner@example.test >/dev/null ||
+  fail "admin reset-password failed"
+
+code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"owner@example.test","password":"'"$PASSWORD"'"}')
+[ "$code" = "401" ] || fail "the old password still worked after a reset, answered $code"
+
+code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"owner@example.test","password":"an entirely different passphrase"}')
+[ "$code" = "200" ] || fail "the new password did not work after a reset, answered $code"
+pass "a password can be reset from the server, and the old one stops working"
+
 # Logging out must end the session.
 "$BINARY" logout >/dev/null
 printf '\nAll panel smoke checks passed.\n\n'

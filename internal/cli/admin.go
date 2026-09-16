@@ -1,0 +1,180 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"skifity/internal/auth"
+	"skifity/internal/config"
+	"skifity/internal/errdoc"
+	"skifity/internal/store"
+	"skifity/internal/version"
+)
+
+// Admin commands work on the panel's files directly, not through the API.
+//
+// They exist for the situation the API cannot help with: nobody can sign in. A
+// self-hosted panel has no mail server it can trust, so there is no emailed
+// reset link; the way back in is to be root on the server, which is the same
+// level of access that could read the database anyway.
+func cmdAdmin(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
+		fmt.Fprintf(out, `%s admin - recover access from the server
+
+Usage:
+  %s admin reset-password <email>   set a new password for an account
+  %s admin list-users              show the accounts on this panel
+
+These run on the server the panel is installed on and read its database
+directly, so they work when nobody can sign in. They need to be run as root.
+`, version.Binary, version.Binary, version.Binary)
+		return nil
+	}
+
+	switch args[0] {
+	case "reset-password":
+		return adminResetPassword(ctx, args[1:], out)
+	case "list-users":
+		return adminListUsers(ctx, args[1:], out)
+	default:
+		return errdoc.BadRequest(fmt.Sprintf("%q is not an admin command. Try `%s admin help`.",
+			args[0], version.Binary))
+	}
+}
+
+// openPanelDatabase opens the panel's own database, wherever it is configured
+// to live. An empty override means "wherever the panel would look".
+func openPanelDatabase(ctx context.Context, override string) (*store.DB, error) {
+	path := override
+	if path == "" {
+		cfg, err := config.Load("")
+		if err != nil {
+			return nil, err
+		}
+		path = cfg.DatabasePath
+	}
+	if _, err := os.Stat(path); err != nil {
+		return nil, errdoc.New("admin.no_database", "The panel's database is not here").
+			WithCause("There is no file at %s.", path).
+			WithImpact("Nothing was changed.").
+			WithFix("Run this on the server the panel is installed on, as root. If the database is somewhere else, pass --database, or set SKIFITY_DATABASE_PATH.")
+	}
+	db, err := store.Open(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+func adminResetPassword(ctx context.Context, args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("reset-password", flag.ContinueOnError)
+	flags.SetOutput(out)
+	databasePath := flags.String("database", "", "the panel database to use")
+	password := flags.String("password", "", "the new password; read from the terminal when not given")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 1 {
+		return errdoc.BadRequest(fmt.Sprintf("Give the email address of the account to reset, for example `%s admin reset-password you@example.com`.", version.Binary))
+	}
+	email := strings.ToLower(strings.TrimSpace(flags.Arg(0)))
+
+	db, err := openPanelDatabase(ctx, *databasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	user, err := db.GetUserByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return errdoc.New("admin.no_such_user", "No account with that address").
+				WithCause("Nobody on this panel uses %s.", email).
+				WithImpact("Nothing was changed.").
+				WithFix("Run `%s admin list-users` to see the accounts that do exist.", version.Binary)
+		}
+		return err
+	}
+
+	next := *password
+	if next == "" {
+		next = promptSecret(out, "New password: ")
+		again := promptSecret(out, "Again: ")
+		fmt.Fprintln(out)
+		if next != again {
+			return errdoc.BadRequest("Those two passwords are not the same. Nothing was changed.")
+		}
+	}
+	if len(next) < 12 {
+		return errdoc.BadRequest("A password needs at least 12 characters. Nothing was changed.")
+	}
+
+	hash, err := auth.HashPassword(next)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = hash
+	if err := db.UpdateUser(ctx, &user); err != nil {
+		return err
+	}
+
+	// Anyone already signed in as this account is signed out. If the reason for
+	// the reset is that somebody else has the old password, leaving their
+	// session alive would make the reset pointless.
+	if err := db.DeleteUserSessions(ctx, user.ID); err != nil {
+		fmt.Fprintf(out, "\nThe password was changed, but existing sessions could not be ended: %s\n", err)
+		return nil
+	}
+
+	fmt.Fprintf(out, "\nThe password for %s has been changed, and every signed-in device was signed out.\n", user.Email)
+	if user.TOTPEnabled {
+		fmt.Fprintln(out, "Two-factor authentication is still on for this account, so you will need your authenticator app.")
+	}
+	fmt.Fprintln(out)
+	return nil
+}
+
+func adminListUsers(ctx context.Context, args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("list-users", flag.ContinueOnError)
+	flags.SetOutput(out)
+	databasePath := flags.String("database", "", "the panel database to use")
+	asJSON := flags.Bool("json", false, "print the result as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	db, err := openPanelDatabase(ctx, *databasePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	users, err := db.ListUsers(ctx)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return writeJSON(out, users)
+	}
+	if len(users) == 0 {
+		fmt.Fprintln(out, "This panel has no accounts yet.")
+		return nil
+	}
+	for _, user := range users {
+		role := "member"
+		if user.IsAdmin {
+			role = "admin"
+		}
+		state := ""
+		if user.Disabled {
+			state = " (disabled)"
+		}
+		fmt.Fprintf(out, "%s  %s%s\n", user.Email, role, state)
+	}
+	return nil
+}

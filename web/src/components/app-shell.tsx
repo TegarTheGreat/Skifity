@@ -199,7 +199,7 @@ function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("nav.account")}>
+        <Button variant="ghost" size="icon" aria-label={t("nav.account")} data-slot="account-menu">
           <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
             {initial}
           </span>

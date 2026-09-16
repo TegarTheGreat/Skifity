@@ -36,7 +36,12 @@ export function LanguageSwitcher({ signedIn }: { signedIn?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t("nav.language")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("nav.language")}
+          data-slot="language-switcher"
+        >
           <LanguagesIcon className="size-4" />
         </Button>
       </DropdownMenuTrigger>

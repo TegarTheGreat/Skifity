@@ -23,9 +23,9 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 | 5 | App deployment | code complete, builds not exercised |
 | 6 | Scaling | code complete, cluster not exercised |
 | 7 | Databases, storage, backups | code complete, cluster not exercised |
-| 8 | Developer experience and vibe coding | CLI and MCP done; `llms.txt` and docs pending |
+| 8 | Developer experience and vibe coding | done |
 | 9 | Differentiating features | partly done |
-| 10 | Hardening and release | not started |
+| 10 | Hardening and release | done, except a run on real hardware |
 
 ## What is done
 
@@ -103,30 +103,68 @@ Exercised against a fake clientset, golden manifests, a real in-process SSH
 server that records the commands it receives, and `sh -n` on every generated
 script. Not exercised against a real cluster.
 
-### Phases 8–9 — partly done
+### Phases 8–9 — done
 
 The CLI and the MCP server are built on the same API as the panel, and both
 render errors with their cause, impact and fix. The panel has the project canvas,
 one-step templates, the error catalogue, and the build fingerprint that keeps a
 configuration change from rebuilding an image.
 
+Added since:
+
+* `llms.txt`, describing the whole product on one page, served by the panel at
+  `/llms.txt`.
+* `SKIFITY_URL` and `SKIFITY_TOKEN`, so the CLI and the MCP server work with no
+  interactive sign-in and no stored configuration — which is how CI, a
+  container and an assistant's sandbox actually use them. The team is worked
+  out from the token's account when there is only one.
+* `skifity admin reset-password` and `skifity admin list-users`, which read the
+  panel's database directly on the server. Nobody being able to sign in is the
+  one thing the API cannot fix, and a self-hosted panel has no mail server it
+  can trust to send a reset link.
+
+### Phase 10 — done, except a run on real hardware
+
+* `govulncheck` and `npm audit` are clean and run in CI. The one advisory left
+  is `golang.org/x/crypto/openpgp` being unmaintained, in a package this code
+  never imports; govulncheck reports zero reachable vulnerabilities.
+* A Playwright interface test covering first-run setup, the recovery-key gate,
+  the shell, the theme, and all five languages. It runs against the real binary
+  serving the embedded frontend, so what is tested is what ships.
+* GoReleaser: static binaries for Linux and macOS on both architectures, and a
+  multi-architecture distroless image, on a tag.
+* The documentation set: quick start, concepts, adding servers, the CLI and AI
+  assistants, troubleshooting, questions — plus a README with real screenshots
+  taken by the test suite, so an image can never show a screen that no longer
+  exists.
+* Apache 2.0.
+
+**The interface test found a real bug the completeness checker could not:**
+Simplified Chinese resolved to English at runtime. `nonExplicitSupportedLngs`
+makes i18next check the *language part* of a code against `supportedLngs`, so
+asking for `zh-CN` looked up `zh`, did not find it, and fell back. The locale
+file was complete the whole time. Fixed by registering the bundle under `zh` as
+well, which also gets `zh-TW` and `zh-HK` a Simplified page rather than an
+English one.
+
 ## Next tasks
 
-1. **Phase 8**: `llms.txt`, and the CLI/API/MCP reference.
-2. **Phase 10**: `govulncheck` and `npm audit`, resilience checks, GoReleaser,
-   publishing the container image, the documentation set, the README, idle RAM
-   measurements, and the Playwright UI smoke test covering setup, sign-in and all
-   five languages.
-3. Run the installer end to end on a real Ubuntu server, which is the one thing
-   that cannot be done here.
+1. Run the installer end to end on a real Ubuntu server and measure idle memory.
+   Both need hardware this sandbox cannot provide.
+2. Tag a release, which publishes the binaries and the image the installer
+   points at.
+3. Deploy a real application from Git, end to end, on that server — the one
+   flow that has never been exercised against a live cluster.
 
 ## Open issues
 
 * Cluster smoke tests cannot run in this sandbox. The scripts exist and are
   reviewed, not executed.
 * The installer references `ghcr.io/skifity/skifity`, which is not published
-  yet. Until Phase 10 pushes it, an install needs `SKIFITY_IMAGE` pointed at an
+  until the first tag. Until then an install needs `SKIFITY_IMAGE` pointed at an
   image built locally with `make image`.
+* The interface test needs a Chromium. It uses one already on the machine when
+  `CHROMIUM_PATH` is set, and CI installs its own.
 * Idle RAM has not been measured yet; it needs a running cluster.
 
 ## Idle resource usage

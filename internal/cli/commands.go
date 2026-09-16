@@ -57,6 +57,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = cmdServers(ctx, rest, stdout)
 	case "open":
 		err = cmdOpen(ctx, rest, stdout)
+	case "admin":
+		err = cmdAdmin(ctx, rest, stdout)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0
@@ -111,6 +113,9 @@ Working with apps:
 
 Cluster:
   servers               List the servers in a team
+
+On the panel's own server:
+  admin                 Recover access when nobody can sign in
 
 Other:
   version               Print the version
@@ -400,14 +405,16 @@ func cmdServers(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if cfg.TeamID == "" {
-		return errdoc.BadRequest("No team is selected. Sign in again to pick one.")
+	client := NewClient(cfg)
+	teamID, err := resolveTeam(ctx, client, cfg)
+	if err != nil {
+		return err
 	}
 
 	var response struct {
 		Items []store.Server `json:"items"`
 	}
-	if err := NewClient(cfg).Do(ctx, "GET", "/api/teams/"+cfg.TeamID+"/servers", nil, &response); err != nil {
+	if err := client.Do(ctx, "GET", "/api/teams/"+teamID+"/servers", nil, &response); err != nil {
 		return err
 	}
 	if *asJSON {

@@ -22,3 +22,11 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Copied from the repository root at build time so the panel serves /llms.txt.
+web/public/llms.txt
+
+# Interface test output
+web/test-results/
+web/playwright-report/
+web/.e2e-workdir

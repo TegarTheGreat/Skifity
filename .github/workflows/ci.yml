@@ -46,6 +46,11 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Known vulnerabilities
+        # govulncheck reports what the code actually reaches, so an unused
+        # package in a dependency does not fail the build for everybody.
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
       - name: Test with the race detector
         # The race detector needs cgo, so this job turns it back on for this
         # step only. Release binaries stay static.
@@ -71,6 +76,10 @@ jobs:
       - name: Translations are complete in every language
         run: npm run check:i18n
 
+      - name: Known vulnerabilities
+        # Dev dependencies do not ship, so only what reaches a browser counts.
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Lint
         run: npm run lint
 
@@ -79,6 +88,42 @@ jobs:
 
       - name: Build
         run: npx vite build
+
+  interface:
+    name: Interface
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build the panel
+        run: make build
+
+      - name: Install the browser
+        run: npm --prefix web exec -- playwright install --with-deps chromium
+
+      - name: Interface test
+        # Runs against the binary built above, serving the frontend embedded in
+        # it: what is tested is what ships.
+        run: npm --prefix web run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7
 
   smoke:
     name: Smoke

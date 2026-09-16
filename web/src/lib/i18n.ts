@@ -36,12 +36,21 @@ void i18n
       hi: { translation: hi },
       ru: { translation: ru },
       "zh-CN": { translation: zhCN },
+      // Registered under "zh" as well, so that a browser asking for zh-TW or
+      // zh-HK gets Simplified Chinese rather than English. See supportedLngs
+      // below: without this alias, nonExplicitSupportedLngs makes i18next
+      // check "zh" against the supported list, find it missing, and fall all
+      // the way back to English — including for zh-CN itself.
+      zh: { translation: zhCN },
     },
     fallbackLng: "en",
-    supportedLngs: LANGUAGES.map((language) => language.code),
-    // zh-TW and zh-HK would otherwise fall back past zh-CN to English; a
-    // Simplified page is closer than an English one, and the fallback chain
-    // handles the rest.
+    // "zh" is here as well as "zh-CN" because nonExplicitSupportedLngs makes
+    // i18next test the language part of a code against this list. With only
+    // "zh-CN" listed, asking for zh-CN resolves "zh", does not find it, and
+    // falls back to English: the whole language would be silently unreachable.
+    supportedLngs: [...LANGUAGES.map((language) => language.code), "zh"],
+    // A Simplified page is closer than an English one for zh-TW and zh-HK, and
+    // the fallback chain handles the rest.
     nonExplicitSupportedLngs: true,
     detection: {
       // The stored choice wins, then the browser's own languages. A user who
@@ -72,8 +81,13 @@ export function setLanguage(code: LanguageCode) {
 /** The language currently in use, normalised to one we ship. */
 export function currentLanguage(): LanguageCode {
   const active = i18n.resolvedLanguage ?? i18n.language ?? "en"
-  const match = LANGUAGES.find((language) => language.code === active)
-  return match?.code ?? "en"
+  const exact = LANGUAGES.find((language) => language.code === active)
+  if (exact) return exact.code
+  // A browser resolved to a bare "zh" still formats dates and numbers as
+  // Chinese, so map it to the variant this panel ships rather than to English.
+  const part = active.split("-")[0]
+  const related = LANGUAGES.find((language) => language.code.split("-")[0] === part)
+  return related?.code ?? "en"
 }
 
 // Keep the document's lang attribute in step, which screen readers and the

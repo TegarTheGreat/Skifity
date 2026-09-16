@@ -24,7 +24,7 @@ export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
 .PHONY: help build frontend backend dev dev-api test test-go test-race lint lint-go \
-	lint-web fmt check i18n smoke e2e image clean deps tidy release install-hooks
+	lint-web fmt check i18n smoke e2e screenshots image audit clean deps tidy release install-hooks
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*##" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -82,14 +82,21 @@ fmt: ## Format Go and frontend code
 	gofmt -w ./cmd ./internal
 	npm --prefix web run format
 
+audit: ## Report known vulnerabilities in the dependencies
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	npm --prefix web audit --omit=dev --audit-level=high
+
 check: lint test ## What CI runs
 
 smoke: backend ## Run the smoke tests against a freshly built binary
 	./test/smoke/panel.sh
 	./test/smoke/installer.sh
 
-e2e: ## Run the Playwright user interface test
+e2e: backend ## Run the Playwright user interface test against the real binary
 	npm --prefix web run test:e2e
+
+screenshots: backend ## Recapture the screenshots in the README
+	SKIFITY_SCREENSHOTS=1 npm --prefix web exec -- playwright test screenshots
 
 image: ## Build the panel's container image
 	docker build \

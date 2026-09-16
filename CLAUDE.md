@@ -43,10 +43,13 @@ internal/
   deploy/           Deployments, rollbacks, scaling and the readiness checker.
   dbsvc/, backup/   Managed databases and their backups.
   cli/, mcpserver/  The CLI and the MCP server, both against the same API.
+  manifests/        Renders the panel's own Kubernetes objects from deploy/.
   settings/, templates/, notify/, gitsrc/, audit/, events/, logging/, config/
 web/                The frontend. Built into web/dist and embedded in the binary.
+deploy/             The panel's own Kubernetes objects, with placeholders.
+installer/          install.sh and uninstall.sh. POSIX shell, no bashisms.
 test/smoke/         End-to-end shell tests that run a real panel.
-docs/               Research, architecture, decisions, progress.
+docs/               Research, architecture, decisions, progress, user guides.
 ```
 
 ## Commands
@@ -56,7 +59,10 @@ make build       Frontend and binary, in that order.
 make dev-api     The panel in dev mode, proxying the UI to Vite.
 make dev         The Vite dev server (a second terminal).
 make check       What CI runs: every linter, then the tests.
-make smoke       Build and run the panel smoke test.
+make smoke       Build and run the smoke tests against a real panel.
+make e2e         The Playwright interface test, against the real binary.
+make audit       Known vulnerabilities, Go and npm.
+make image       The panel's container image.
 make release     Static binaries for linux and darwin, amd64 and arm64.
 ```
 
@@ -91,6 +97,11 @@ encryption and key rotation, manifest generation, config parsing, permission
 checks, preflight parsing, the scaling readiness checker. One smoke test covers
 each core flow, running the real binary rather than mocks. No snapshot tests, no
 coverage targets.
+
+One Playwright test covers the interface: first-run setup, the recovery-key
+gate, the shell, the theme, and all five languages. It runs against the real
+binary serving the embedded frontend, not a dev server, so what is tested is
+what ships. Set `CHROMIUM_PATH` to use a browser already on the machine.
 
 The sandbox this was built in refuses privileged containers, so a real k3s
 cluster could never be started here (ADR-0010). Where something has not been

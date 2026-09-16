@@ -195,3 +195,60 @@ func TestEnvSubcommand(t *testing.T) {
 		}
 	}
 }
+
+// The CLI has to work where nobody ever ran `skifity login`: a CI job, a
+// container, an AI assistant's sandbox. SKIFITY_URL and SKIFITY_TOKEN are how,
+// and they have to win over a stored configuration so that setting them is not
+// silently ignored on a machine that happens to have one.
+func TestLoadConfigFromEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	t.Setenv("SKIFITY_CONFIG", path)
+
+	t.Run("no configuration at all", func(t *testing.T) {
+		t.Setenv("SKIFITY_URL", "")
+		t.Setenv("SKIFITY_TOKEN", "")
+		if _, err := LoadConfig(); err == nil {
+			t.Fatal("expected an error when there is no configuration and no environment")
+		} else if !strings.Contains(err.Error(), "SKIFITY_URL") {
+			t.Errorf("the error should mention the environment variables, got %q", err)
+		}
+	})
+
+	t.Run("environment only", func(t *testing.T) {
+		t.Setenv("SKIFITY_URL", "https://panel.example.test")
+		t.Setenv("SKIFITY_TOKEN", "skf_not_a_real_token")
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if cfg.PanelURL != "https://panel.example.test" || cfg.Token != "skf_not_a_real_token" {
+			t.Errorf("the environment was not used: %+v", cfg)
+		}
+	})
+
+	t.Run("environment beats the file", func(t *testing.T) {
+		if err := os.WriteFile(path,
+			[]byte(`{"panel_url":"https://stored.example.test","token":"stored-token","team_id":"team_stored"}`),
+			0o600); err != nil {
+			t.Fatalf("write the stored config: %v", err)
+		}
+		t.Setenv("SKIFITY_URL", "https://override.example.test")
+		t.Setenv("SKIFITY_TOKEN", "override-token")
+
+		cfg, err := LoadConfig()
+		if err != nil {
+			t.Fatalf("load: %v", err)
+		}
+		if cfg.PanelURL != "https://override.example.test" {
+			t.Errorf("the environment should win, got %q", cfg.PanelURL)
+		}
+		if cfg.Token != "override-token" {
+			t.Errorf("the environment should win, got the stored token")
+		}
+		// Anything the environment does not set still comes from the file.
+		if cfg.TeamID != "team_stored" {
+			t.Errorf("the stored team should survive, got %q", cfg.TeamID)
+		}
+	})
+}

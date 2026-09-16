@@ -388,6 +388,9 @@ function SessionsCard() {
 
 function TokensCard() {
   const { t } = useTranslation()
+  // A token cannot grant more than the person creating it has, so it is scoped
+  // to a team rather than to the account.
+  const { team } = useSession()
   const [name, setName] = useState("")
   const [secret, setSecret] = useState<string | null>(null)
 
@@ -397,7 +400,11 @@ function TokensCard() {
   })
 
   const create = useMutation({
-    mutationFn: () => api.post<{ secret: string }>("/api/me/tokens", { name: name.trim() }),
+    mutationFn: () =>
+      api.post<{ secret: string }>("/api/me/tokens", {
+        name: name.trim(),
+        team_id: team?.id,
+      }),
     onSuccess: (data) => {
       setSecret(data.secret)
       setName("")
@@ -485,7 +492,7 @@ function TokensCard() {
               required
             />
           </div>
-          <Button type="submit" disabled={!name.trim() || create.isPending}>
+          <Button type="submit" disabled={!name.trim() || !team || create.isPending}>
             <PlusIcon className="size-4" />
             {t("auth.newToken")}
           </Button>

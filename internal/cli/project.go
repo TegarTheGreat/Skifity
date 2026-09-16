@@ -240,19 +240,57 @@ func resolveApp(ctx context.Context, client *Client, cfg Config, explicit string
 	}
 }
 
+// resolveTeam finds the team to work in.
+//
+// `skifity login` stores one, but a CLI authenticating from SKIFITY_TOKEN in a
+// CI job or an AI assistant's sandbox never logged in. Almost everybody has one
+// team, so asking which one is a question with a single possible answer.
+func resolveTeam(ctx context.Context, client *Client, cfg Config) (string, error) {
+	if cfg.TeamID != "" {
+		return cfg.TeamID, nil
+	}
+
+	var me struct {
+		Teams []store.Team `json:"teams"`
+	}
+	if err := client.Do(ctx, "GET", "/api/me", nil, &me); err != nil {
+		return "", err
+	}
+	switch len(me.Teams) {
+	case 0:
+		return "", errdoc.New("cli.no_team", "You are not in any team").
+			WithCause("This account belongs to no team, so there is nothing to act on.").
+			WithImpact("Nothing was changed.").
+			WithFix("Ask someone in the team to add you, or create a team in the panel.")
+	case 1:
+		return me.Teams[0].ID, nil
+	}
+
+	names := make([]string, 0, len(me.Teams))
+	for _, team := range me.Teams {
+		names = append(names, team.Name+" ("+team.ID+")")
+	}
+	return "", errdoc.New("cli.team_ambiguous", "You are in more than one team").
+		WithCause("This account is in %d teams, so the one to use is not obvious.", len(me.Teams)).
+		WithImpact("Nothing was changed.").
+		WithFix("Run `%s login` to choose one, or set SKIFITY_TEAM to the id of: %s",
+			version.Binary, strings.Join(names, ", "))
+}
+
 // resolveEnvironment finds the environment to work in.
 func resolveEnvironment(ctx context.Context, client *Client, cfg Config) (string, error) {
 	if file, _, err := LoadProjectFile(); err == nil && file.Environment != "" {
 		return file.Environment, nil
 	}
-	if cfg.TeamID == "" {
-		return "", errdoc.BadRequest("No team is selected. Sign in again to pick one.")
+	teamID, err := resolveTeam(ctx, client, cfg)
+	if err != nil {
+		return "", err
 	}
 
 	var projects struct {
 		Items []store.Project `json:"items"`
 	}
-	if err := client.Do(ctx, "GET", "/api/teams/"+cfg.TeamID+"/projects", nil, &projects); err != nil {
+	if err := client.Do(ctx, "GET", "/api/teams/"+teamID+"/projects", nil, &projects); err != nil {
 		return "", err
 	}
 	if len(projects.Items) == 0 {

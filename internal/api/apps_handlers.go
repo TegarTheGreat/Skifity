@@ -9,6 +9,7 @@ import (
 
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
+	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
 	"skifity/internal/store"
 )
@@ -68,12 +69,22 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 			sourceType = "git"
 		}
 	}
+	repoURL := strings.TrimSpace(req.RepoURL)
 	switch sourceType {
 	case "git":
-		if strings.TrimSpace(req.RepoURL) == "" {
+		if repoURL == "" {
 			writeError(w, r, errdoc.BadRequest("Enter the URL of the Git repository to deploy."))
 			return
 		}
+		// The address ends up in a shell script in the build pod and decides
+		// where a Git token is sent, so it is checked here rather than trusted
+		// there.
+		checked, err := gitsrc.ValidateRepoURL(repoURL)
+		if err != nil {
+			writeError(w, r, errdoc.BadRequest(capitalise(err.Error())+"."))
+			return
+		}
+		repoURL = checked
 	case "image":
 		if strings.TrimSpace(req.Image) == "" {
 			writeError(w, r, errdoc.BadRequest("Enter the image to run, for example nginx:1.27."))
@@ -91,7 +102,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		Slug:           kube.Slugify(name),
 		SourceType:     sourceType,
 		GitSourceID:    req.GitSourceID,
-		RepoURL:        strings.TrimSpace(req.RepoURL),
+		RepoURL:        repoURL,
 		Branch:         strings.TrimSpace(req.Branch),
 		RootDir:        strings.TrimPrefix(strings.TrimSpace(req.RootDir), "/"),
 		Builder:        defaultString(req.Builder, "auto"),
@@ -744,6 +755,15 @@ func defaultInt(v, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// capitalise turns a validator's message into a sentence, because validators
+// speak in fragments and the error catalogue speaks in sentences.
+func capitalise(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func defaultString(v, fallback string) string {

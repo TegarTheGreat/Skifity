@@ -13,6 +13,7 @@ import (
 
 	"skifity/internal/builder"
 	"skifity/internal/errdoc"
+	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
 	"skifity/internal/logging"
 	"skifity/internal/store"
@@ -77,9 +78,13 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 		BuildKitAddress:  d.buildKitAddress(),
 	}
 	if app.GitSourceID != "" {
-		spec.CloneSecret = cloneSecretName(app.GitSourceID)
-		if err := d.ensureCloneSecret(ctx, app.GitSourceID, spec.Namespace); err != nil {
+		attached, err := d.attachCloneSecret(ctx, app, &spec)
+		if err != nil {
 			return "", err
+		}
+		if !attached {
+			d.appendLog(ctx, deployment.ID,
+				"This repository is not on the host the connected Git account is for, so the build runs without credentials.")
 		}
 	}
 
@@ -326,6 +331,30 @@ func stageName(container string) string {
 	default:
 		return "building the image"
 	}
+}
+
+// attachCloneSecret gives the build the team's Git token, but only when the
+// repository is on the host that token is for.
+//
+// Without the host check, an app pointed at a repository of somebody's
+// choosing, with the team's GitHub connection selected, sends that token
+// straight to them: the clone puts it in the URL, and the remote receives it.
+// Any member who can create an app could do it.
+func (d *Deployer) attachCloneSecret(ctx context.Context, app store.App, spec *builder.JobSpec) (bool, error) {
+	source, err := d.db.GetGitSource(ctx, app.GitSourceID)
+	if err != nil {
+		return false, err
+	}
+	if !gitsrc.SameHost(app.RepoURL, source.BaseURL) {
+		d.log.Warn("not sending a Git token to a host the connection is not for",
+			"app", app.ID, "git_source", source.ID)
+		return false, nil
+	}
+	if err := d.ensureCloneSecret(ctx, app.GitSourceID, spec.Namespace); err != nil {
+		return false, err
+	}
+	spec.CloneSecret = cloneSecretName(app.GitSourceID)
+	return true, nil
 }
 
 // ensureCloneSecret copies a Git connection's token into a Secret the build can

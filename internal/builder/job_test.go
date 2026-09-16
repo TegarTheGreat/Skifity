@@ -1,6 +1,7 @@
 package builder
 
 import (
+	batchv1 "k8s.io/api/batch/v1"
 	"os/exec"
 	"strings"
 	"testing"
@@ -80,11 +81,59 @@ func TestCloneIsShallowAndPinned(t *testing.T) {
 	if !strings.Contains(script, "--depth 1") {
 		t.Fatal("the clone is not shallow; a large repository would take minutes")
 	}
-	if !strings.Contains(script, `"a1b2c3d4e5f6a7b8"`) {
-		t.Fatalf("the exact commit is not fetched:\n%s", script)
+	if !strings.Contains(script, `git fetch --depth 1 -q origin "$GIT_REF"`) {
+		t.Fatalf("the ref is not fetched from the environment:\n%s", script)
+	}
+	if got := cloneEnv(t, job, "GIT_REF"); got != "a1b2c3d4e5f6a7b8" {
+		t.Fatalf("GIT_REF is %q, want the exact commit", got)
 	}
 	if !strings.Contains(script, "git checkout -q FETCH_HEAD") {
 		t.Fatal("the fetched commit is not checked out")
+	}
+}
+
+// cloneEnv reads one environment variable off the clone container.
+func cloneEnv(t *testing.T, job *batchv1.Job, name string) string {
+	t.Helper()
+	for _, env := range job.Spec.Template.Spec.InitContainers[0].Env {
+		if env.Name == name {
+			return env.Value
+		}
+	}
+	t.Fatalf("the clone container has no %s", name)
+	return ""
+}
+
+// TestCloneScriptCannotBeInjected: the address and the ref are things a user
+// types, and they used to be pasted into a shell script that runs in the build
+// pod with the team's Git token in its environment.
+func TestCloneScriptCannotBeInjected(t *testing.T) {
+	spec := baseJob()
+	// A double quote was the one break-out character the old check let past,
+	// and the address was pasted between two of them.
+	spec.RepoURL = `https://example.test/r.git`
+	spec.Branch = `main"; id; echo "`
+	spec.CommitSHA = ""
+	spec.CloneSecret = "github-token"
+
+	job, err := BuildJob(spec)
+	if err != nil {
+		t.Fatalf("BuildJob: %v", err)
+	}
+	script := job.Spec.Template.Spec.InitContainers[0].Args[0]
+
+	if strings.Contains(script, "example.test") {
+		t.Fatalf("the repository address reached the script:\n%s", script)
+	}
+	if strings.Contains(script, "id;") {
+		t.Fatalf("the branch reached the script:\n%s", script)
+	}
+	// Both belong in the environment, where a shell never re-reads them.
+	if got := cloneEnv(t, job, "REPO_URL"); got != spec.RepoURL {
+		t.Fatalf("REPO_URL is %q, want the address unchanged", got)
+	}
+	if got := cloneEnv(t, job, "GIT_REF"); got != spec.Branch {
+		t.Fatalf("GIT_REF is %q, want the branch unchanged", got)
 	}
 }
 

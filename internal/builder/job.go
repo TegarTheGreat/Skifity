@@ -133,9 +133,11 @@ func (s JobSpec) Validate() error {
 	if s.Builder != BuilderStatic && s.RepoURL == "" {
 		return fmt.Errorf("a build needs a repository to build from")
 	}
-	if strings.ContainsAny(s.RepoURL, " \t\n;&|`$") {
-		// The URL goes into a shell command; anything that could change its
-		// meaning is refused rather than escaped.
+	// The address and the ref reach the build pod through the environment, not
+	// through the script, so nothing here can change a command's meaning. This
+	// is the second lock on the same door: a shell is involved somewhere in
+	// every build system, and a repository address is something a user types.
+	if strings.ContainsAny(s.RepoURL, " \t\n;&|`$\"'\\<>(){}") {
 		return fmt.Errorf("the repository URL contains characters that are not allowed")
 	}
 	if s.CommitSHA != "" && !isHex(s.CommitSHA) {
@@ -242,6 +244,10 @@ func cloneContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
 			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
 		},
 	}
+	container.Env = append(container.Env,
+		corev1.EnvVar{Name: "REPO_URL", Value: s.RepoURL},
+		corev1.EnvVar{Name: "GIT_REF", Value: s.cloneRef()},
+	)
 	if s.CloneSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name: "GIT_TOKEN",
@@ -258,37 +264,46 @@ func cloneContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
 
 // cloneScript fetches exactly one commit rather than the whole history, which
 // on a large repository is the difference between seconds and minutes.
+//
+// Nothing the user typed is written into this script. The repository address
+// and the ref arrive through the environment, because a script is a shell
+// program and a repository address that ends a quoted string would otherwise
+// be a way to run commands inside the build pod.
 func cloneScript(s JobSpec) string {
 	var b strings.Builder
 	b.WriteString("set -e\n")
 	b.WriteString("echo '==> Fetching the repository'\n")
 
-	url := s.RepoURL
 	if s.CloneSecret != "" {
 		// The token is injected at runtime from the environment, so it never
 		// appears in the Job spec, which anyone with read access could see.
-		b.WriteString(`URL=$(printf '%s' "` + url + `" | sed "s#https://#https://x-access-token:${GIT_TOKEN}@#")` + "\n")
+		// Only the scheme is replaced, so the host stays exactly as given.
+		b.WriteString(`URL=$(printf '%s' "$REPO_URL" | sed "s#^https://#https://x-access-token:${GIT_TOKEN}@#")` + "\n")
 	} else {
-		fmt.Fprintf(&b, "URL=%q\n", url)
+		b.WriteString(`URL="$REPO_URL"` + "\n")
 	}
 
 	b.WriteString("cd " + workspace + "\n")
 	b.WriteString("git init -q .\n")
 	b.WriteString(`git remote add origin "$URL"` + "\n")
-
-	ref := s.CommitSHA
-	if ref == "" {
-		ref = s.Branch
-		if ref == "" {
-			ref = "HEAD"
-		}
-	}
-	fmt.Fprintf(&b, "git fetch --depth 1 -q origin %q\n", ref)
+	b.WriteString(`git fetch --depth 1 -q origin "$GIT_REF"` + "\n")
 	b.WriteString("git checkout -q FETCH_HEAD\n")
 	// Submodules are common enough that failing on them would be surprising.
 	b.WriteString("git submodule update --init --recursive --depth 1 -q 2>/dev/null || true\n")
 	b.WriteString(`echo "==> Checked out $(git rev-parse --short HEAD)"` + "\n")
 	return b.String()
+}
+
+// cloneRef is the exact thing to fetch: a commit when there is one, otherwise
+// the branch, otherwise whatever the remote calls its default.
+func (s JobSpec) cloneRef() string {
+	if s.CommitSHA != "" {
+		return s.CommitSHA
+	}
+	if s.Branch != "" {
+		return s.Branch
+	}
+	return "HEAD"
 }
 
 // prepareContainer runs `railpack prepare`, which writes the build plan the

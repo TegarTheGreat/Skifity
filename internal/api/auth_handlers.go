@@ -99,6 +99,18 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// A bound token sees the one team it is for. Listing the others would send
+	// the CLI, which picks the only team when there is one, to a team every
+	// other request would then refuse.
+	if token, ok := apiTokenFrom(r.Context()); ok && token.TeamID != "" {
+		bound := make([]store.Team, 0, 1)
+		for _, team := range teams {
+			if team.ID == token.TeamID {
+				bound = append(bound, team)
+			}
+		}
+		teams = bound
+	}
 	codesLeft, err := s.auth.RecoveryCodesLeft(r.Context(), user.ID)
 	if err != nil {
 		s.log.Warn("could not count recovery codes", "user", user.ID, "error", err)
@@ -329,6 +341,10 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	var ttl time.Duration
 	if req.TTLHours > 0 {
 		ttl = time.Duration(req.TTLHours) * time.Hour
+	}
+	if err := auth.ValidateScopes(req.Scopes); err != nil {
+		writeError(w, r, errdoc.BadRequest(capitalise(err.Error())+"."))
+		return
 	}
 	record, secret, err := s.auth.CreateAPIToken(r.Context(), user.ID, req.TeamID, req.Name, req.Scopes, ttl)
 	if err != nil {

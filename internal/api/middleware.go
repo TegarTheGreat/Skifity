@@ -232,6 +232,18 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			if ok {
 				user, apiToken, err := s.auth.AuthenticateToken(ctx, strings.TrimSpace(token))
 				if err == nil {
+					// A scope narrower than the owner's access is checked here
+					// rather than per handler, so a read-only token cannot
+					// reach a route that nobody thought to guard — starting
+					// with the one that issues a token with no scopes at all.
+					if !auth.TokenAllows(apiToken.Scopes, r.Method) {
+						writeError(w, r, errdoc.New("auth.token_scope", "This token cannot make that request").
+							WithCause("The token %s is limited to %s.", apiToken.Name, apiToken.Scopes).
+							WithImpact("The request was refused. Nothing was changed.").
+							WithFix("Use a token without a scope, or create one that can write, under Account.").
+							WithStatus(http.StatusForbidden))
+						return
+					}
 					ctx = context.WithValue(ctx, ctxUser, user)
 					ctx = context.WithValue(ctx, ctxAPIToken, apiToken)
 					next.ServeHTTP(w, r.WithContext(ctx))

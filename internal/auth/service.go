@@ -439,3 +439,53 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
+
+// API token scopes.
+//
+// A token with no scopes can do everything its owner can, which is what every
+// token issued before this existed does. The named scopes narrow it.
+const (
+	// ScopeRead allows requests that only read.
+	ScopeRead = "read"
+	// ScopeWrite allows everything else.
+	ScopeWrite = "write"
+)
+
+// TokenAllows reports whether a token's scopes permit a request method.
+//
+// The scopes were stored from the day tokens were added and never once
+// consulted, so a token marked read-only could do anything its owner could.
+func TokenAllows(scopes, method string) bool {
+	scopes = strings.TrimSpace(scopes)
+	if scopes == "" {
+		return true
+	}
+	readOnly := method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
+	for _, scope := range strings.Split(scopes, ",") {
+		switch strings.TrimSpace(scope) {
+		case ScopeWrite:
+			return true
+		case ScopeRead:
+			if readOnly {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ValidateScopes rejects a scope the panel would not enforce, so a token is
+// never narrower than its owner believes.
+func ValidateScopes(scopes string) error {
+	if strings.TrimSpace(scopes) == "" {
+		return nil
+	}
+	for _, scope := range strings.Split(scopes, ",") {
+		switch strings.TrimSpace(scope) {
+		case ScopeRead, ScopeWrite:
+		default:
+			return fmt.Errorf("%q is not a scope; use read, write, or leave it empty for full access", strings.TrimSpace(scope))
+		}
+	}
+	return nil
+}

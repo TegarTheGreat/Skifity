@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -311,5 +312,55 @@ func TestUnknownAccountLooksLikeAWrongPassword(t *testing.T) {
 	}
 	if wrongPassword.Error() != noSuchAccount.Error() {
 		t.Errorf("the two failures read differently: %q and %q", wrongPassword, noSuchAccount)
+	}
+}
+
+// A token's scopes were stored from the day tokens were added and never once
+// consulted, so a token marked read-only could do everything its owner could.
+func TestTokenScopesAreEnforced(t *testing.T) {
+	for _, tc := range []struct {
+		scopes, method string
+		want           bool
+	}{
+		// No scope is full access, which is what every existing token has.
+		{"", http.MethodGet, true},
+		{"", http.MethodPost, true},
+		{"   ", http.MethodDelete, true},
+
+		{ScopeRead, http.MethodGet, true},
+		{ScopeRead, http.MethodHead, true},
+		{ScopeRead, http.MethodOptions, true},
+		{ScopeRead, http.MethodPost, false},
+		{ScopeRead, http.MethodPatch, false},
+		{ScopeRead, http.MethodPut, false},
+		{ScopeRead, http.MethodDelete, false},
+
+		{ScopeWrite, http.MethodDelete, true},
+		{ScopeWrite, http.MethodGet, true},
+		{ScopeRead + "," + ScopeWrite, http.MethodDelete, true},
+		{" read , write ", http.MethodPost, true},
+
+		// A scope nobody enforces must not quietly mean full access.
+		{"admin", http.MethodGet, false},
+		{"readonly", http.MethodGet, false},
+	} {
+		if got := TokenAllows(tc.scopes, tc.method); got != tc.want {
+			t.Errorf("TokenAllows(%q, %s) = %v, want %v", tc.scopes, tc.method, got, tc.want)
+		}
+	}
+}
+
+// A scope the panel would not enforce must be refused when the token is made,
+// or somebody ends up with a token they believe is narrower than it is.
+func TestUnknownScopesAreRefused(t *testing.T) {
+	for _, scopes := range []string{"", "read", "write", "read,write", " read , write "} {
+		if err := ValidateScopes(scopes); err != nil {
+			t.Errorf("ValidateScopes(%q): %v", scopes, err)
+		}
+	}
+	for _, scopes := range []string{"admin", "read,admin", "deploy", "*"} {
+		if err := ValidateScopes(scopes); err == nil {
+			t.Errorf("ValidateScopes(%q) accepted a scope nothing enforces", scopes)
+		}
 	}
 }

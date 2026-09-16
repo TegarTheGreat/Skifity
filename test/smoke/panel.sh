@@ -122,6 +122,50 @@ curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/me" | grep -q 'owner@
   || fail "the API token does not authenticate"
 pass "the API token authenticates"
 
+# A token is issued for one team, and that binding was stored and never read,
+# so a token made for one team worked on every team its owner belonged to.
+SECOND_TEAM=$(curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/teams" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"name":"Other"}')
+SECOND_TEAM_ID=$(echo "$SECOND_TEAM" | sed -n 's/.*"id":"\(team_[^"]*\)".*/\1/p')
+[ -n "$SECOND_TEAM_ID" ] || fail "a second team was not created"
+
+curl -fsS -b "$WORKDIR/cookies" "$BASE/api/teams/$SECOND_TEAM_ID/projects" >/dev/null \
+  || fail "the owner cannot reach their own second team"
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $API_TOKEN" \
+  "$BASE/api/teams/$SECOND_TEAM_ID/projects")
+[ "$code" = "404" ] || fail "a token bound to one team reached another and answered $code, want 404"
+pass "a token cannot be used on a team it was not issued for"
+
+# The bound token must also not be told the other team exists, or the CLI
+# would pick a team every later request refuses.
+curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/me" | grep -q "$SECOND_TEAM_ID" \
+  && fail "a bound token was shown a team it cannot use"
+pass "a bound token is only shown its own team"
+
+# A token's scopes were stored and never consulted, so a read-only token could
+# do everything its owner could, including issue a token with no scopes.
+READONLY=$(curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/me/tokens" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"name":"read only","team_id":"'"$TEAM_ID"'","scopes":"read"}')
+READONLY_TOKEN=$(echo "$READONLY" | sed -n 's/.*"secret":"\([^"]*\)".*/\1/p')
+[ -n "$READONLY_TOKEN" ] || fail "no read-only token was returned"
+
+curl -fsS -H "Authorization: Bearer $READONLY_TOKEN" "$BASE/api/teams" >/dev/null \
+  || fail "a read-only token could not read"
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $READONLY_TOKEN" \
+  -X POST "$BASE/api/me/tokens" -H 'Content-Type: application/json' \
+  -d '{"name":"escalated","team_id":"'"$TEAM_ID"'"}')
+[ "$code" = "403" ] || fail "a read-only token wrote and answered $code, want 403"
+pass "a read-only token can read and cannot write"
+
+# A scope nothing enforces must be refused, not stored and ignored.
+code=$(curl -sS -b "$WORKDIR/cookies" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/me/tokens" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"name":"bogus","team_id":"'"$TEAM_ID"'","scopes":"admin"}')
+[ "$code" = "400" ] || fail "an unenforced scope answered $code, want 400"
+pass "a scope the panel does not enforce is refused"
+
 # A made-up token must not.
 code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer skf_not_a_real_token" "$BASE/api/me")
 [ "$code" = "401" ] || fail "an invalid token answered $code, want 401"

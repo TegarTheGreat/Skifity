@@ -290,6 +290,14 @@ func (s *Server) authorizeTeam(r *http.Request, teamID string, required store.Ro
 	if !ok {
 		return store.User{}, errdoc.Unauthorized()
 	}
+	// A token is issued for one team — the panel's form has no other option —
+	// and until now that binding was stored and never read, so a token made
+	// for one team worked on every team its owner belonged to. The answer is
+	// the same as for a team that does not exist, so a token cannot be used to
+	// find out which other teams there are.
+	if token, ok := apiTokenFrom(r.Context()); ok && token.TeamID != "" && token.TeamID != teamID {
+		return store.User{}, errdoc.NotFound("team", teamID)
+	}
 	membership, err := s.db.GetMembership(r.Context(), teamID, user.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {

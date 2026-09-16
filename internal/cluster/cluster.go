@@ -103,8 +103,10 @@ func (c *Cluster) AppStatus(ctx context.Context, namespace, appSlug string) (api
 }
 
 // AppLogs streams an app's logs.
-func (c *Cluster) AppLogs(ctx context.Context, namespace, appSlug string, tailLines int64, follow bool) (io.ReadCloser, error) {
-	return c.client.AppLogs(ctx, namespace, appSlug, tailLines, follow)
+func (c *Cluster) AppLogs(ctx context.Context, namespace, appSlug string, opts api.LogOptions) (io.ReadCloser, error) {
+	return c.client.AppLogs(ctx, namespace, appSlug, kube.LogOptions{
+		TailLines: opts.TailLines, Follow: opts.Follow, Previous: opts.Previous,
+	})
 }
 
 // RestartApp triggers a rolling restart.

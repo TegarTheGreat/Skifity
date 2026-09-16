@@ -156,8 +156,9 @@ type deployOutput struct {
 }
 
 type logsInput struct {
-	AppID string `json:"app_id" jsonschema:"the app's id"`
-	Lines int    `json:"lines,omitempty" jsonschema:"how many lines to return, up to 500"`
+	AppID    string `json:"app_id" jsonschema:"the app's id"`
+	Lines    int    `json:"lines,omitempty" jsonschema:"how many lines to return, up to 500"`
+	Previous bool   `json:"previous,omitempty" jsonschema:"read the container that ran before the current one; this is where a crash-looping app printed why it crashed"`
 }
 
 type logsOutput struct {
@@ -281,7 +282,7 @@ func (s *Server) register() {
 
 	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name:        "get_app_logs",
-		Description: "Read an app's recent log lines. This is where the cause of a crash or a failed start is.",
+		Description: "Read an app's recent log lines. This is where the cause of a crash or a failed start is. For an app that keeps restarting, pass previous=true: the container that printed the reason has already been replaced and the live log no longer has it.",
 	}, s.getAppLogs)
 
 	mcp.AddTool(s.mcp, &mcp.Tool{
@@ -500,7 +501,7 @@ func (s *Server) getAppLogs(ctx context.Context, _ *mcp.CallToolRequest, in logs
 	var response struct {
 		Lines []string `json:"lines"`
 	}
-	path := fmt.Sprintf("/api/apps/%s/logs?tail=%d", in.AppID, lines)
+	path := fmt.Sprintf("/api/apps/%s/logs?tail=%d&previous=%t", in.AppID, lines, in.Previous)
 	if err := s.client.Do(ctx, "GET", path, nil, &response); err != nil {
 		return errorResult(err), logsOutput{}, nil
 	}

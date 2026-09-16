@@ -153,13 +153,19 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	follow := queryBool(r, "follow")
+	// "previous" reads the container that ran before the current one. When an
+	// app crash-loops, the container that printed the reason has already been
+	// replaced and the live stream no longer has it: this is the only copy.
+	previous := queryBool(r, "previous")
+	follow := queryBool(r, "follow") && !previous
 	tailLines := int64(queryInt(r, "tail", 200))
 	if tailLines < 1 || tailLines > 10000 {
 		tailLines = 200
 	}
 
-	stream, err := s.cluster.AppLogs(r.Context(), env.Namespace, app.Slug, tailLines, follow)
+	stream, err := s.cluster.AppLogs(r.Context(), env.Namespace, app.Slug, LogOptions{
+		TailLines: tailLines, Follow: follow, Previous: previous,
+	})
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -175,7 +181,9 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 		for scanner.Scan() {
 			lines = append(lines, logging.Scrub(scanner.Text()))
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"app_id": app.ID, "lines": lines})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"app_id": app.ID, "lines": lines, "previous": previous,
+		})
 		return
 	}
 

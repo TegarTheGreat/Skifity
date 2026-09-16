@@ -477,8 +477,23 @@ func summarisePhase(deployment *appsv1.Deployment, status AppStatus) (string, st
 	}
 }
 
+// LogOptions is what to read, and from where.
+type LogOptions struct {
+	// TailLines bounds how far back to read. Zero means everything the node
+	// still has.
+	TailLines int64
+	// Follow keeps the stream open.
+	Follow bool
+	// Previous reads the container that ran before the current one.
+	//
+	// This is the only copy of why a crash-looping app crashed: the container
+	// that printed the reason has already been replaced, and its log is gone
+	// from the live stream the moment the new one starts.
+	Previous bool
+}
+
 // AppLogs streams the logs of an app's instances.
-func (c *Client) AppLogs(ctx context.Context, namespace, appSlug string, tailLines int64, follow bool) (io.ReadCloser, error) {
+func (c *Client) AppLogs(ctx context.Context, namespace, appSlug string, opts LogOptions) (io.ReadCloser, error) {
 	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{"app.kubernetes.io/name": appSlug}).String(),
 	})
@@ -489,30 +504,63 @@ func (c *Client) AppLogs(ctx context.Context, namespace, appSlug string, tailLin
 		return io.NopCloser(strings.NewReader("")), nil
 	}
 
-	// Prefer a ready pod: the logs of a pod that is crash-looping are what the
-	// user wants when nothing is ready, but noise when something is serving.
-	target := pods.Items[0]
-	for _, pod := range pods.Items {
+	target := pickLogPod(pods.Items, opts.Previous)
+
+	options := &corev1.PodLogOptions{
+		Follow:     opts.Follow && !opts.Previous,
+		Previous:   opts.Previous,
+		Timestamps: false,
+	}
+	if opts.TailLines > 0 {
+		options.TailLines = &opts.TailLines
+	}
+	stream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(target.Name, options).Stream(ctx)
+	if err != nil {
+		if opts.Previous {
+			// The API server answers 400 when there is no earlier container,
+			// which is the ordinary case for an app that has not crashed.
+			return nil, fmt.Errorf("%s has not restarted, so there is no earlier log to read", target.Name)
+		}
+		return nil, fmt.Errorf("read logs from %s: %w", target.Name, err)
+	}
+	return stream, nil
+}
+
+// pickLogPod chooses the instance whose log is worth reading.
+//
+// Normally that is a ready one: a crash-looping pod's output is what somebody
+// wants when nothing is serving, and noise when something is. Asking for the
+// earlier container inverts it — the pod that restarted is the whole point.
+func pickLogPod(pods []corev1.Pod, previous bool) corev1.Pod {
+	target := pods[0]
+	if previous {
+		mostRestarts := restartCount(target)
+		for _, pod := range pods {
+			if n := restartCount(pod); n > mostRestarts {
+				target, mostRestarts = pod, n
+			}
+		}
+		return target
+	}
+	for _, pod := range pods {
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
 		for _, cond := range pod.Status.Conditions {
 			if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
-				target = pod
-				break
+				return pod
 			}
 		}
 	}
+	return target
+}
 
-	options := &corev1.PodLogOptions{Follow: follow, Timestamps: false}
-	if tailLines > 0 {
-		options.TailLines = &tailLines
+func restartCount(pod corev1.Pod) int32 {
+	var n int32
+	for _, cs := range pod.Status.ContainerStatuses {
+		n += cs.RestartCount
 	}
-	stream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(target.Name, options).Stream(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("read logs from %s: %w", target.Name, err)
-	}
-	return stream, nil
+	return n
 }
 
 // RestartApp triggers a rolling restart without changing anything else.

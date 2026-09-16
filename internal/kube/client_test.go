@@ -421,3 +421,57 @@ func TestUsageIsUnknownWithoutMetrics(t *testing.T) {
 		t.Fatal("a cluster with no metrics-server did not answer at all")
 	}
 }
+
+// TestThePreviousContainersLogIsReadable: an app that crash-loops printed the
+// reason in a container that has already been replaced. The live stream no
+// longer has it, so it was the one thing worth reading and the one thing the
+// panel could not read.
+func TestThePreviousContainersLogIsReadable(t *testing.T) {
+	labelSet := map[string]string{"app.kubernetes.io/name": "web"}
+	calm := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-calm", Namespace: "ns", Labels: labelSet},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			Conditions:        []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+			ContainerStatuses: []corev1.ContainerStatus{{RestartCount: 0}},
+		},
+	}
+	crashing := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-crashing", Namespace: "ns", Labels: labelSet},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{RestartCount: 7}},
+		},
+	}
+
+	// Asking for the live log picks the pod that is serving: a crash-looping
+	// pod's output is noise while something is up.
+	if got := pickLogPod([]corev1.Pod{*crashing, *calm}, false); got.Name != "web-calm" {
+		t.Errorf("the live log came from %s, want the ready instance", got.Name)
+	}
+	// Asking for the earlier container inverts it: the pod that restarted is
+	// the whole point.
+	if got := pickLogPod([]corev1.Pod{*calm, *crashing}, true); got.Name != "web-crashing" {
+		t.Errorf("the earlier log came from %s, want the instance that restarted", got.Name)
+	}
+}
+
+// TestFollowingAnEarlierContainerIsNotAThing: it has already exited, so a
+// stream that stays open would hang rather than end.
+func TestFollowingAnEarlierContainerIsNotAThing(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "web-1", Namespace: "ns",
+			Labels: map[string]string{"app.kubernetes.io/name": "web"},
+		},
+	}
+	c := &Client{clientset: fake.NewSimpleClientset(pod), systemNamespace: "skifity-system"}
+
+	// The fake clientset serves a canned log body, so this exercises the
+	// option-building rather than the transport.
+	stream, err := c.AppLogs(t.Context(), "ns", "web", LogOptions{Previous: true, Follow: true})
+	if err != nil {
+		t.Fatalf("AppLogs: %v", err)
+	}
+	defer stream.Close()
+}

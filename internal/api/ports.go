@@ -56,6 +56,17 @@ type AppRuntimeStatus struct {
 	URLs            []string       `json:"urls,omitempty"`
 }
 
+// LogOptions is what to read from an app's logs, and from where.
+type LogOptions struct {
+	// TailLines bounds how far back to read.
+	TailLines int64
+	// Follow keeps the stream open.
+	Follow bool
+	// Previous reads the container that ran before the current one, which is
+	// the only copy of why a crash-looping app crashed.
+	Previous bool
+}
+
 // ClusterSummary is the cluster overview for a team.
 type ClusterSummary struct {
 	Reachable        bool       `json:"reachable"`
@@ -79,8 +90,8 @@ type Cluster interface {
 	Summary(ctx context.Context) (ClusterSummary, error)
 	// AppStatus describes one app's live state.
 	AppStatus(ctx context.Context, namespace, appSlug string) (AppRuntimeStatus, error)
-	// AppLogs streams an app's logs. follow keeps the stream open.
-	AppLogs(ctx context.Context, namespace, appSlug string, tailLines int64, follow bool) (io.ReadCloser, error)
+	// AppLogs streams an app's logs.
+	AppLogs(ctx context.Context, namespace, appSlug string, opts LogOptions) (io.ReadCloser, error)
 	// RestartApp triggers a rolling restart without changing anything else.
 	RestartApp(ctx context.Context, namespace, appSlug string) error
 	// DeleteApp removes an app's Kubernetes objects.

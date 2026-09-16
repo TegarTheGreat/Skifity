@@ -407,3 +407,23 @@ export type DatabaseLink = {
   var_name: string
   created_at: string
 }
+
+export type GitSource = {
+  id: string
+  team_id: string
+  kind: "github_app" | "github_pat" | "gitlab" | "gitea" | "generic"
+  name: string
+  base_url: string
+  account: string
+  created_at: string
+}
+
+export type NotificationChannel = {
+  id: string
+  team_id: string
+  kind: "telegram" | "discord" | "webhook" | "email"
+  name: string
+  events: string
+  enabled: boolean
+  created_at: string
+}

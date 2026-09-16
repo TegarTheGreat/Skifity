@@ -189,10 +189,6 @@ echo "$AUDIT" | grep -q 'app.created' || fail "the audit log has no record of th
 echo "$AUDIT" | grep -q 'verysecret' && fail "a secret's value reached the audit log"
 pass "actions are audited, without secret values"
 
-# Nothing sensitive may reach the panel's own log.
-grep -q 'verysecret' "$WORKDIR/server.log" && fail "a secret reached the panel's log"
-grep -q "$PASSWORD" "$WORKDIR/server.log" && fail "the password reached the panel's log"
-pass "no secrets reached the panel's log"
 
 # A CI job, a container or an AI assistant never runs `skifity login`, so the
 # CLI has to work from the environment alone, with no stored configuration and
@@ -215,6 +211,38 @@ echo "$NO_AUTH" | grep -q 'SKIFITY_URL' ||
   fail "signing in with nothing set should mention SKIFITY_URL, got: $NO_AUTH"
 pass "an unauthenticated CLI says how to authenticate"
 
+# Connecting a Git account: the token must be stored and never come back, and
+# the webhook address the user has to paste in must be returned once.
+GIT_SOURCE=$(curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/teams/$TEAM_ID/git-sources" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"kind":"gitea","name":"Self-hosted","token":"verysecrettoken","base_url":"https://git.example.test"}')
+echo "$GIT_SOURCE" | grep -q '"webhook_url"' || fail "connecting a Git account returned no webhook address"
+pass "a Git account can be connected"
+
+SOURCES=$(curl -fsS -b "$WORKDIR/cookies" "$BASE/api/teams/$TEAM_ID/git-sources")
+echo "$SOURCES" | grep -q 'verysecrettoken' && fail "a Git token was returned by the API"
+echo "$SOURCES" | grep -q 'Self-hosted' || fail "the connected Git account was not listed"
+pass "a Git token is stored but never returned"
+
+# A notification channel with a bad address must be refused before it is stored,
+# while the person is still looking at the form.
+code=$(curl -sS -b "$WORKDIR/cookies" -o "$WORKDIR/channel.json" -w '%{http_code}' \
+  -X POST "$BASE/api/teams/$TEAM_ID/notifications" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"kind":"discord","name":"Bad","config":{"webhook_url":"https://example.com/nope"},"events":[]}')
+[ "$code" = "400" ] || fail "a bad Discord webhook was accepted, answered $code"
+grep -q 'does not look like a Discord webhook' "$WORKDIR/channel.json" ||
+  fail "the rejection did not say what was wrong"
+pass "a notification channel is validated before it is stored"
+
+curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/teams/$TEAM_ID/notifications" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"kind":"discord","name":"Ops","config":{"webhook_url":"https://discord.com/api/webhooks/1/verysecrethook"},"events":["deploy.failed"]}' >/dev/null ||
+  fail "a valid notification channel was refused"
+CHANNELS=$(curl -fsS -b "$WORKDIR/cookies" "$BASE/api/teams/$TEAM_ID/notifications")
+echo "$CHANNELS" | grep -q 'verysecrethook' && fail "a channel's webhook URL was returned by the API"
+pass "a notification channel is stored without its address coming back"
+
 # Nobody can sign in is the one situation the API cannot fix, so the recovery
 # path has to work: it reads the database directly, on the server.
 "$BINARY" admin list-users --database "$WORKDIR/panel.db" | grep -q 'owner@example.test' ||
@@ -235,6 +263,13 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/auth/login" \
   -d '{"email":"owner@example.test","password":"an entirely different passphrase"}')
 [ "$code" = "200" ] || fail "the new password did not work after a reset, answered $code"
 pass "a password can be reset from the server, and the old one stops working"
+
+# Nothing sensitive may reach the panel's own log. This runs last on purpose:
+# every secret above starts with "verysecret", and a leak check that runs
+# before the secrets are sent proves nothing.
+grep -q 'verysecret' "$WORKDIR/server.log" && fail "a secret reached the panel's log"
+grep -q "$PASSWORD" "$WORKDIR/server.log" && fail "the password reached the panel's log"
+pass "no secrets reached the panel's log"
 
 # Logging out must end the session.
 "$BINARY" logout >/dev/null

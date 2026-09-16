@@ -491,5 +491,50 @@
     "seconds": "{{count}} 秒",
     "minutes": "{{count}} 分",
     "hours": "{{count}} 小时"
+  },
+  "git": {
+    "title": "Git",
+    "help": "连接一个账户，Skifity 就能读取你的私有仓库，并在你推送时部署。公开仓库不需要这一步。",
+    "empty": "尚未连接 Git 账户",
+    "connect": "连接账户",
+    "provider": "代码在哪里",
+    "sourceName": "名称",
+    "sourceNameHelp": "一个你能认出的名字，例如“工作用 GitHub”。",
+    "token": "访问令牌",
+    "tokenHelp": "需要读取仓库和创建 webhook 的权限。加密保存，且不会再次显示。",
+    "baseURL": "服务器地址",
+    "baseURLHelp": "用于自建的 GitLab 或 Gitea。使用官方服务时留空。",
+    "account": "用户或组织",
+    "disconnect": "断开连接",
+    "disconnectWarning": "从该账户部署的应用将不再在推送时部署，但会继续运行。",
+    "webhookURL": "Webhook 地址",
+    "webhookURLHelp": "如果令牌权限足够，Skifity 会自行把它加入你的仓库。如果没能加上，请在仓库的 webhook 设置中手动添加。"
+  },
+  "notifications": {
+    "title": "通知",
+    "help": "发生事情时通知你的去处。在你添加之前不会发送任何内容。",
+    "empty": "还没有通知去处",
+    "add": "添加去处",
+    "channelKind": "发送到",
+    "channelName": "名称",
+    "events": "通知我关于",
+    "eventsHelp": "尽量少选。没人看的通知比没有通知更糟。",
+    "test": "发送测试",
+    "testSent": "已发送。如果没有收到，说明填写的信息不对。",
+    "kind": {
+      "telegram": "Telegram",
+      "discord": "Discord",
+      "webhook": "Webhook",
+      "email": "电子邮件"
+    },
+    "event": {
+      "deploy.succeeded": "部署成功",
+      "deploy.failed": "部署失败",
+      "app.unhealthy": "应用停止响应",
+      "server.added": "有服务器加入",
+      "server.lost": "服务器停止响应",
+      "backup.failed": "备份失败",
+      "certificate.failed": "证书签发失败"
+    }
   }
 }

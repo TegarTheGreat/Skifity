@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { ContainerIcon, GitBranchIcon } from "lucide-react"
 import { cn } from "cn"
 
@@ -18,9 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { api } from "@/lib/api"
+import { useSession } from "@/hooks/use-session"
+import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { App, Deployment } from "@/lib/types"
+import type { App, Deployment, GitSource } from "@/lib/types"
 
 type SourceType = "git" | "image"
 
@@ -49,6 +50,17 @@ export function NewAppPage() {
   const [startCommand, setStartCommand] = useState("")
   const [deployNow, setDeployNow] = useState(true)
   const [advanced, setAdvanced] = useState(false)
+  const [gitSourceID, setGitSourceID] = useState("")
+
+  // A public repository needs no account. This picker only appears once one is
+  // connected, so the common case stays a single field.
+  const { team } = useSession()
+  const gitSources = useQuery({
+    queryKey: ["git-sources", team?.id],
+    queryFn: () => api.get<List<GitSource>>(`/api/teams/${team!.id}/git-sources`),
+    enabled: Boolean(team),
+  })
+  const sources = gitSources.data?.items ?? []
 
   // "github.com/you/blog" becomes "blog", which is almost always the name the
   // user would have typed anyway.
@@ -69,6 +81,7 @@ export function NewAppPage() {
         name: (name.trim() || suggestedName).trim(),
         source_type: sourceType,
         repo_url: sourceType === "git" ? repoURL.trim() : "",
+        git_source_id: sourceType === "git" ? gitSourceID : "",
         branch: branch.trim(),
         root_dir: rootDir.trim(),
         image: sourceType === "image" ? image.trim() : "",
@@ -135,6 +148,27 @@ export function NewAppPage() {
                     required
                   />
                 </div>
+                {sources.length > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="git-source">
+                      {t("git.title")}{" "}
+                      <span className="text-muted-foreground">({t("common.optional")})</span>
+                    </Label>
+                    <Select value={gitSourceID} onValueChange={setGitSourceID}>
+                      <SelectTrigger id="git-source">
+                        <SelectValue placeholder={t("common.none")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sources.map((source) => (
+                          <SelectItem key={source.id} value={source.id}>
+                            {source.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{t("git.help")}</p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="branch">
                     {t("apps.branch")}{" "}

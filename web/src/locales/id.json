@@ -491,5 +491,50 @@
     "seconds": "{{count}} dtk",
     "minutes": "{{count}} mnt",
     "hours": "{{count}} jam"
+  },
+  "git": {
+    "title": "Git",
+    "help": "Hubungkan akun agar Skifity bisa membaca repositori privat Anda dan men-deploy setiap kali Anda push. Repositori publik tidak memerlukan ini.",
+    "empty": "Belum ada akun Git yang terhubung",
+    "connect": "Hubungkan akun",
+    "provider": "Lokasi kode",
+    "sourceName": "Nama",
+    "sourceNameHelp": "Sesuatu yang Anda kenali, misalnya \"GitHub kantor\".",
+    "token": "Token akses",
+    "tokenHelp": "Perlu izin untuk membaca repositori dan membuat webhook. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
+    "baseURL": "Alamat server",
+    "baseURLHelp": "Untuk GitLab atau Gitea yang Anda hosting sendiri. Kosongkan untuk layanan resmi.",
+    "account": "Pengguna atau organisasi",
+    "disconnect": "Putuskan",
+    "disconnectWarning": "Aplikasi yang di-deploy dari akun ini berhenti men-deploy saat push. Aplikasi tetap berjalan.",
+    "webhookURL": "Alamat webhook",
+    "webhookURLHelp": "Skifity menambahkan ini ke repositori Anda sendiri jika token mengizinkannya. Jika tidak bisa, tambahkan secara manual di pengaturan webhook repositori."
+  },
+  "notifications": {
+    "title": "Notifikasi",
+    "help": "Ke mana Skifity mengabari Anda saat terjadi sesuatu. Tidak ada yang dikirim sampai Anda menambahkan tujuan.",
+    "empty": "Belum ada tujuan notifikasi",
+    "add": "Tambahkan tujuan",
+    "channelKind": "Kirim ke",
+    "channelName": "Nama",
+    "events": "Beri tahu saya tentang",
+    "eventsHelp": "Pilih sesedikit mungkin. Saluran yang tidak dibaca siapa pun lebih buruk daripada tidak ada.",
+    "test": "Kirim uji coba",
+    "testSent": "Terkirim. Jika tidak ada yang sampai, detailnya salah.",
+    "kind": {
+      "telegram": "Telegram",
+      "discord": "Discord",
+      "webhook": "Webhook",
+      "email": "Email"
+    },
+    "event": {
+      "deploy.succeeded": "Deployment berhasil",
+      "deploy.failed": "Deployment gagal",
+      "app.unhealthy": "Aplikasi berhenti merespons",
+      "server.added": "Server bergabung",
+      "server.lost": "Server berhenti merespons",
+      "backup.failed": "Pencadangan gagal",
+      "certificate.failed": "Sertifikat gagal diterbitkan"
+    }
   }
 }

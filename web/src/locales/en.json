@@ -498,5 +498,50 @@
     "seconds": "{{count}}s",
     "minutes": "{{count}}m",
     "hours": "{{count}}h"
+  },
+  "git": {
+    "title": "Git",
+    "help": "Connect an account so Skifity can read your private repositories and deploy when you push. A public repository needs none of this.",
+    "empty": "No Git account connected",
+    "connect": "Connect an account",
+    "provider": "Where the code is",
+    "sourceName": "Name",
+    "sourceNameHelp": "Something you will recognise, such as \"Work GitHub\".",
+    "token": "Access token",
+    "tokenHelp": "Needs permission to read the repository and to create a webhook. Stored encrypted and never shown again.",
+    "baseURL": "Server address",
+    "baseURLHelp": "For a self-hosted GitLab or Gitea. Leave empty for the hosted service.",
+    "account": "User or organisation",
+    "disconnect": "Disconnect",
+    "disconnectWarning": "Apps deployed from this account stop deploying on push. They keep running.",
+    "webhookURL": "Webhook address",
+    "webhookURLHelp": "Skifity adds this to your repositories by itself when the token allows it. If it could not, add it by hand in the repository's webhook settings."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "help": "Where to tell you when something happens. Nothing is sent until you add somewhere.",
+    "empty": "Nowhere to notify yet",
+    "add": "Add somewhere",
+    "channelKind": "Send it to",
+    "channelName": "Name",
+    "events": "Tell me about",
+    "eventsHelp": "Choose as few as you can live with. A channel nobody reads is worse than none.",
+    "test": "Send a test",
+    "testSent": "Sent. If nothing arrives, the details are wrong.",
+    "kind": {
+      "telegram": "Telegram",
+      "discord": "Discord",
+      "webhook": "A webhook",
+      "email": "Email"
+    },
+    "event": {
+      "deploy.succeeded": "A deployment succeeded",
+      "deploy.failed": "A deployment failed",
+      "app.unhealthy": "An app stopped answering",
+      "server.added": "A server joined",
+      "server.lost": "A server stopped responding",
+      "backup.failed": "A backup failed",
+      "certificate.failed": "A certificate could not be issued"
+    }
   }
 }

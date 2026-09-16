@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { GitSources } from "@/components/settings/git-sources"
+import { NotificationChannels } from "@/components/settings/notification-channels"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -64,6 +66,8 @@ export function SettingsPage() {
       <Tabs defaultValue="panel">
         <TabsList className="flex-wrap">
           <TabsTrigger value="panel">{t("settings.general")}</TabsTrigger>
+          <TabsTrigger value="git">{t("settings.git")}</TabsTrigger>
+          <TabsTrigger value="notifications">{t("settings.notifications")}</TabsTrigger>
           <TabsTrigger value="components">{t("settings.components")}</TabsTrigger>
           <TabsTrigger value="members">{t("settings.members")}</TabsTrigger>
           <TabsTrigger value="security">{t("settings.security")}</TabsTrigger>
@@ -73,6 +77,12 @@ export function SettingsPage() {
         <TabsContent value="panel" className="space-y-6 pt-4">
           <SettingGroups />
           <VersionCard />
+        </TabsContent>
+        <TabsContent value="git" className="pt-4">
+          <GitSources />
+        </TabsContent>
+        <TabsContent value="notifications" className="pt-4">
+          <NotificationChannels />
         </TabsContent>
         <TabsContent value="components" className="pt-4">
           <ComponentsPanel />

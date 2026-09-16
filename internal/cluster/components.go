@@ -467,15 +467,23 @@ func (c *Cluster) EnsureComponent(ctx context.Context, name string) error {
 	return c.InstallComponent(ctx, name)
 }
 
-// UpgradePanel changes the panel's own image and lets Kubernetes roll it out.
-func (c *Cluster) UpgradePanel(ctx context.Context, target string) error {
+// UpgradePanel changes the panel's own image and lets Kubernetes roll it out,
+// returning the image it replaced.
+//
+// The caller needs that image. The panel's Deployment uses the Recreate
+// strategy — one copy at a time, because the database is a file on one node's
+// disk — so Kubernetes stops the running panel before it starts the new one.
+// If the new image does not come up, there is no panel left to notice, and
+// Kubernetes does not roll anything back by itself. The way out is a command
+// on the server, and somebody has to be told it before they need it.
+func (c *Cluster) UpgradePanel(ctx context.Context, target string) (string, error) {
 	namespace := c.client.SystemNamespace()
 	deployment, err := c.client.Clientset().AppsV1().Deployments(namespace).Get(ctx, "skifity-panel", metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("find the panel's own Deployment: %w", err)
+		return "", fmt.Errorf("find the panel's own Deployment: %w", err)
 	}
 	if len(deployment.Spec.Template.Spec.Containers) == 0 {
-		return fmt.Errorf("the panel's Deployment has no containers")
+		return "", fmt.Errorf("the panel's Deployment has no containers")
 	}
 
 	current := deployment.Spec.Template.Spec.Containers[0].Image
@@ -486,10 +494,10 @@ func (c *Cluster) UpgradePanel(ctx context.Context, target string) error {
 	deployment.Spec.Template.Spec.Containers[0].Image = repository + ":" + target
 
 	if _, err := c.client.Clientset().AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
-		return fmt.Errorf("start the upgrade: %w", err)
+		return "", fmt.Errorf("start the upgrade: %w", err)
 	}
 	c.log.Info("panel upgrade started", "from", current, "to", repository+":"+target)
-	return nil
+	return current, nil
 }
 
 func lastIndexByte(s string, b byte) int {

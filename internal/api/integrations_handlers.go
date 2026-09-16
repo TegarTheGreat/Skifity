@@ -397,13 +397,19 @@ func (s *Server) handleUpgrade(w http.ResponseWriter, r *http.Request) {
 	// Upgrading the panel means changing the image of the Deployment the panel
 	// itself runs in, which Kubernetes then rolls out. The panel is restarted
 	// by that rollout, which is why the response is sent first.
-	if err := s.upgradePanel(r, strings.TrimSpace(req.Version)); err != nil {
+	previous, err := s.upgradePanel(r, strings.TrimSpace(req.Version))
+	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 	s.audit(r, "", "panel.upgrade_started", "panel", version.Version, req.Version)
+
+	// The undo command goes out with the response, before the panel stops. If
+	// the new version does not start there is nothing left here to ask.
 	writeJSON(w, http.StatusAccepted, map[string]string{
-		"status": "started",
-		"note":   "The panel will restart. Your apps keep running while it does.",
+		"status":           "started",
+		"previous_image":   previous,
+		"note":             "The panel will restart. Your apps keep running while it does.",
+		"if_it_goes_wrong": "The panel stops before the new version starts, and nothing rolls it back automatically. On the server: kubectl -n " + s.cfg.Namespace + " rollout undo deploy/skifity-panel",
 	})
 }

@@ -1,7 +1,12 @@
 # Backups
 
-Skifity backs up managed databases. Your applications' own files, if they write
-any, are on volumes and are backed up with the volume.
+Skifity backs up managed databases: PostgreSQL, MariaDB and Redis.
+
+**Volumes are not backed up yet.** An app that writes files to a volume keeps
+them as long as the volume exists, and the panel will refuse a backup of one
+rather than pretend. If those files matter, either keep the data in a managed
+database, which is backed up, or take the volume's snapshot with whatever your
+storage provides. This page will say otherwise when that changes.
 
 Nothing is backed up until you say where to put it.
 

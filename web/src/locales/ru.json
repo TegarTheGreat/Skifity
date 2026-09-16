@@ -490,6 +490,7 @@
   "settings": {
     "title": "Настройки",
     "general": "Общие",
+    "cluster": "Кластер",
     "domains": "Домены и HTTPS",
     "git": "Git",
     "storage": "Хранилище копий",

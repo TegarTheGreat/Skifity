@@ -773,7 +773,7 @@ func (p *Provisioner) rememberToken(ctx context.Context, token string) error {
 
 // k3sVersion reads the pinned version, or empty for the stable channel.
 func (p *Provisioner) k3sVersion(ctx context.Context) string {
-	value, _, err := p.db.GetSetting(ctx, "cluster.k3s_version")
+	value, _, err := p.db.GetSetting(ctx, settings.KeyK3sVersion)
 	if err != nil {
 		return ""
 	}

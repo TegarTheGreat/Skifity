@@ -463,6 +463,7 @@
   "settings": {
     "title": "设置",
     "general": "通用",
+    "cluster": "集群",
     "domains": "域名与 HTTPS",
     "git": "Git",
     "storage": "备份存储",

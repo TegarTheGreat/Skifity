@@ -205,27 +205,38 @@ echo "firewall_configured=${HAS_UFW}"
 `, rules.String())
 }
 
-// InstallServerScript installs the first control plane node.
-func InstallServerScript(version, token, publicIP string, extraArgs []string) string {
-	args := []string{
-		"--cluster-init",
+// serverArgs are the flags every control plane node has to agree on.
+//
+// Not a matter of taste. --flannel-backend chooses how nodes reach each other,
+// and a node that joins without it defaults to vxlan while the first node is
+// on WireGuard: the two never exchange a packet, and the symptom is pods that
+// cannot reach pods on the other machine rather than anything saying "these do
+// not match". --secrets-encryption is the same shape of problem: a member that
+// disagrees writes Secrets the others cannot read.
+//
+// installer/install.sh starts the first node with exactly these, and a test
+// checks that the two lists have not drifted apart.
+func serverArgs(publicIP string) []string {
+	return []string{
 		"--flannel-backend=wireguard-native",
-		"--write-kubeconfig-mode=0644",
+		"--secrets-encryption",
+		"--write-kubeconfig-mode=0600",
 		fmt.Sprintf("--tls-san=%s", publicIP),
 		fmt.Sprintf("--node-external-ip=%s", publicIP),
 		"--node-label=skifity.io/managed=true",
 	}
+}
+
+// InstallServerScript installs the first control plane node.
+func InstallServerScript(version, token, publicIP string, extraArgs []string) string {
+	args := append([]string{"--cluster-init"}, serverArgs(publicIP)...)
 	args = append(args, extraArgs...)
 	return installScript(version, token, "", strings.Join(args, " "), true)
 }
 
 // JoinServerScript joins another control plane node for high availability.
 func JoinServerScript(version, token, serverURL, publicIP string) string {
-	args := []string{
-		"--server", serverURL,
-		fmt.Sprintf("--node-external-ip=%s", publicIP),
-		"--node-label=skifity.io/managed=true",
-	}
+	args := append([]string{"--server", serverURL}, serverArgs(publicIP)...)
 	return installScript(version, token, "", strings.Join(args, " "), true)
 }
 

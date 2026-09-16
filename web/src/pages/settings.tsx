@@ -57,6 +57,7 @@ import type { AuditEvent, Component, Role, Setting, User } from "@/lib/types"
 
 const GROUPS: { key: string; label: string }[] = [
   { key: "general", label: "settings.general" },
+  { key: "cluster", label: "settings.cluster" },
   { key: "domains", label: "settings.domains" },
   { key: "git", label: "settings.git" },
   { key: "storage", label: "settings.storage" },

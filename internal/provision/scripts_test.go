@@ -1,7 +1,9 @@
 package provision
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -165,5 +167,54 @@ func TestAgentLabelsAreStable(t *testing.T) {
 	}
 	if !strings.Contains(first, "--node-label=a=1 --node-label=b=2 --node-label=c=3") {
 		t.Fatalf("labels are not in a stable order:\n%s", first)
+	}
+}
+
+// TestEveryServerAgreesOnHowNodesTalk: a control plane node that joins without
+// --flannel-backend defaults to vxlan while the first node is on WireGuard.
+// The two never exchange a packet, and nothing says the flags disagree: the
+// symptom is pods that cannot reach pods on the other machine.
+func TestEveryServerAgreesOnHowNodesTalk(t *testing.T) {
+	first := InstallServerScript("", "tok", "203.0.113.10", nil)
+	joined := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.20")
+
+	for _, flag := range []string{
+		"--flannel-backend=wireguard-native",
+		"--secrets-encryption",
+		"--write-kubeconfig-mode=0600",
+	} {
+		if !strings.Contains(first, flag) {
+			t.Errorf("the first server is installed without %s", flag)
+		}
+		if !strings.Contains(joined, flag) {
+			t.Errorf("a joining control plane node is installed without %s, so it disagrees with the first", flag)
+		}
+	}
+}
+
+// TestTheInstallerAndThePanelStartTheSameKindOfCluster: install.sh creates the
+// first node on most installs and the panel creates it on the rest. A cluster
+// whose shape depends on which one made it is a cluster that breaks when the
+// other one adds to it.
+func TestTheInstallerAndThePanelStartTheSameKindOfCluster(t *testing.T) {
+	script, err := os.ReadFile(filepath.Join("..", "..", "installer", "install.sh"))
+	if err != nil {
+		t.Fatalf("read install.sh: %v", err)
+	}
+	installer := string(script)
+	panel := InstallServerScript("", "tok", "203.0.113.10", nil)
+
+	for _, flag := range []string{
+		"--cluster-init",
+		"--flannel-backend=wireguard-native",
+		"--secrets-encryption",
+		"--write-kubeconfig-mode=0600",
+	} {
+		if !strings.Contains(installer, flag) {
+			t.Errorf("install.sh no longer passes %s", flag)
+		}
+		if !strings.Contains(panel, flag) {
+			t.Errorf("the panel no longer passes %s", flag)
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -84,12 +85,14 @@ const (
 	GroupEmail         = "email"
 	GroupNotifications = "notifications"
 	GroupRegistry      = "registry"
+	GroupCluster       = "cluster"
 )
 
 // Keys used elsewhere in the panel. Referring to a constant rather than a string
 // literal means a rename is a compile error rather than a silent misconfiguration.
 const (
 	KeyPanelURL          = "general.panel_url"
+	KeyK3sVersion        = "cluster.k3s_version"
 	KeyWildcardDomain    = "domains.wildcard"
 	KeyClusterIP         = "domains.cluster_ip"
 	KeyACMEEmail         = "domains.acme_email"
@@ -141,6 +144,13 @@ var Definitions = []Definition{
 		Key: KeyTelemetryDisabled, Label: "Disable usage reporting", Group: GroupGeneral,
 		Help: "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed.",
 		Kind: KindBool, Validate: validateBool,
+	},
+	{
+		Key: KeyK3sVersion, Label: "Kubernetes version", Group: GroupCluster,
+		Help: "The k3s version a server added from here is installed with. Leave empty to follow the stable channel, which is what a new cluster gets. Pin it to keep a server you add next month on the same version as the ones you have.",
+		// A k3s release, which is a Kubernetes version with a k3s suffix.
+		Placeholder: "v1.34.1+k3s1",
+		Validate:    validateK3sVersion,
 	},
 	{
 		Key: KeyWildcardDomain, Label: "Wildcard domain", Group: GroupDomains,
@@ -312,6 +322,24 @@ func LookupComponent(name string) (Component, bool) {
 //
 // Every validator treats an empty value as valid, because clearing a setting is
 // how an integration is disconnected.
+
+// k3sVersionPattern is a k3s release tag: a Kubernetes version and a k3s build.
+var k3sVersionPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+\+k3s\d+$`)
+
+// validateK3sVersion refuses anything the k3s installer would not recognise.
+//
+// A wrong version here is not a validation error later: it is a server that
+// downloads nothing and fails halfway through being added, which looks like a
+// network problem.
+func validateK3sVersion(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !k3sVersionPattern.MatchString(value) {
+		return fmt.Errorf("that is not a k3s release; they look like v1.34.1+k3s1")
+	}
+	return nil
+}
 
 func validateURL(value string) error {
 	if value == "" {

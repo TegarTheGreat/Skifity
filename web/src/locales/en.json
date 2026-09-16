@@ -472,6 +472,7 @@
   "settings": {
     "title": "Settings",
     "general": "General",
+    "cluster": "Cluster",
     "domains": "Domains and HTTPS",
     "git": "Git",
     "storage": "Backup storage",

@@ -472,6 +472,7 @@
   "settings": {
     "title": "सेटिंग्स",
     "general": "सामान्य",
+    "cluster": "क्लस्टर",
     "domains": "डोमेन और HTTPS",
     "git": "Git",
     "storage": "बैकअप स्टोरेज",

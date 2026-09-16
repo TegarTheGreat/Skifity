@@ -84,3 +84,26 @@ func TestKindsAreCoherent(t *testing.T) {
 		}
 	}
 }
+
+// TestK3sVersionPinAcceptsOnlyReleasesThatExist: a wrong version here is not a
+// validation error later, it is a server that downloads nothing and fails
+// halfway through being added, which looks like a network problem.
+func TestK3sVersionPinAcceptsOnlyReleasesThatExist(t *testing.T) {
+	for _, good := range []string{"", "v1.34.1+k3s1", "v1.28.10+k3s2"} {
+		if err := validateK3sVersion(good); err != nil {
+			t.Errorf("validateK3sVersion(%q): %v", good, err)
+		}
+	}
+	for _, bad := range []string{
+		"1.34.1+k3s1", // no leading v
+		"v1.34.1",     // a Kubernetes version, not a k3s release
+		"v1.34+k3s1",  // not three parts
+		"stable",      // a channel, which the installer takes differently
+		"latest",
+		"v1.34.1+k3s1 ; rm -rf /",
+	} {
+		if err := validateK3sVersion(bad); err == nil {
+			t.Errorf("validateK3sVersion(%q) was accepted", bad)
+		}
+	}
+}

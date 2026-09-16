@@ -295,6 +295,29 @@ CHANNELS=$(curl -fsS -b "$WORKDIR/cookies" "$BASE/api/teams/$TEAM_ID/notificatio
 echo "$CHANNELS" | grep -q 'verysecrethook' && fail "a channel's webhook URL was returned by the API"
 pass "a notification channel is stored without its address coming back"
 
+# The MCP server is how an assistant uses the panel. Every tool that does
+# anything needs a team, and a token set up the documented way — SKIFITY_URL
+# and SKIFITY_TOKEN, nothing else — used to have none, so every one of them
+# answered "this token is not tied to a team".
+MCP_OUT="$WORKDIR/mcp.jsonl"
+# The subshell holds the pipe open after writing: the server answers over the
+# same stream, and an immediate EOF ends it before it has said anything.
+(
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_projects","arguments":{}}}'
+  sleep 5
+) | env -u SKIFITY_CONFIG SKIFITY_URL="$BASE" SKIFITY_TOKEN="$API_TOKEN" \
+  "$BINARY" mcp >"$MCP_OUT" 2>"$WORKDIR/mcp.err" || true
+
+grep -q '"name":"create_app"' "$MCP_OUT" || fail "the MCP server offers no way to create an app"
+pass "the MCP server can create an app, not only change one"
+
+grep -q 'not tied to a team' "$MCP_OUT" && fail "the MCP server could not work out which team to act on"
+grep -q 'prj_' "$MCP_OUT" || fail "the MCP server listed no projects"
+pass "the MCP server finds the team from the token alone"
+
 # Two-factor recovery codes are the only way back in on a panel with no email
 # reset by design, so they have to be handed out and then actually remembered.
 TOTP=$(curl -fsS -b "$WORKDIR/cookies" -H "X-Skifity-CSRF: $CSRF" -X POST "$BASE/api/me/totp")

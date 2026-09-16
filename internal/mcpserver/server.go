@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -25,6 +26,12 @@ type Server struct {
 	client *cli.Client
 	config cli.Config
 	mcp    *mcp.Server
+
+	// The team is worked out on first use and kept, because every tool that
+	// does anything needs it and the answer does not change.
+	teamOnce sync.Once
+	team     string
+	teamErr  error
 }
 
 // New builds an MCP server for a panel.
@@ -60,6 +67,41 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 // --- tool inputs and outputs ---
+
+type listProjectsOutput struct {
+	Projects []projectSummary `json:"projects"`
+}
+
+type projectSummary struct {
+	ID           string               `json:"id"`
+	Name         string               `json:"name"`
+	Environments []environmentSummary `json:"environments"`
+}
+
+type environmentSummary struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	Kind string `json:"kind"`
+}
+
+type createAppInput struct {
+	Name          string `json:"name" jsonschema:"what to call the app"`
+	EnvironmentID string `json:"environment_id,omitempty" jsonschema:"where to create it; omitted means the default environment"`
+	RepoURL       string `json:"repo_url,omitempty" jsonschema:"an https git repository to build from"`
+	Branch        string `json:"branch,omitempty" jsonschema:"the branch to deploy; defaults to the repository's own default"`
+	Image         string `json:"image,omitempty" jsonschema:"a prebuilt container image to run instead of building from a repository"`
+	Port          int    `json:"port,omitempty" jsonschema:"the port the app listens on; defaults to 8080, which is also what PORT is set to"`
+	Deploy        bool   `json:"deploy,omitempty" jsonschema:"start the first deployment straight away"`
+}
+
+type createAppOutput struct {
+	AppID        string `json:"app_id"`
+	Name         string `json:"name"`
+	URL          string `json:"url,omitempty"`
+	DeploymentID string `json:"deployment_id,omitempty"`
+	Note         string `json:"note"`
+}
 
 type listAppsInput struct {
 	EnvironmentID string `json:"environment_id,omitempty" jsonschema:"the environment to list; omitted means the default one"`
@@ -213,6 +255,16 @@ type readinessOutput struct {
 // register wires up the tools.
 func (s *Server) register() {
 	mcp.AddTool(s.mcp, &mcp.Tool{
+		Name:        "list_projects",
+		Description: "List the projects in this team and the environments inside them. Use this to find an environment id before creating an app.",
+	}, s.listProjects)
+
+	mcp.AddTool(s.mcp, &mcp.Tool{
+		Name:        "create_app",
+		Description: "Create an application from a git repository or a prebuilt image, and optionally deploy it. This is how a new app gets onto the cluster.",
+	}, s.createApp)
+
+	mcp.AddTool(s.mcp, &mcp.Tool{
 		Name:        "list_apps",
 		Description: "List the applications in an environment, with their ids and current state. Call this first: every other tool takes an app id.",
 	}, s.listApps)
@@ -269,6 +321,96 @@ func (s *Server) register() {
 }
 
 // --- handlers ---
+
+func (s *Server) listProjects(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listProjectsOutput, error) {
+	teamID, err := s.teamID(ctx)
+	if err != nil {
+		return errorResult(err), listProjectsOutput{}, nil
+	}
+	var projects struct {
+		Items []store.Project `json:"items"`
+	}
+	if err := s.client.Do(ctx, "GET", "/api/teams/"+teamID+"/projects", nil, &projects); err != nil {
+		return errorResult(err), listProjectsOutput{}, nil
+	}
+
+	out := listProjectsOutput{Projects: make([]projectSummary, 0, len(projects.Items))}
+	for _, project := range projects.Items {
+		summary := projectSummary{ID: project.ID, Name: project.Name}
+		var environments struct {
+			Items []store.Environment `json:"items"`
+		}
+		if err := s.client.Do(ctx, "GET",
+			"/api/projects/"+project.ID+"/environments", nil, &environments); err != nil {
+			return errorResult(err), listProjectsOutput{}, nil
+		}
+		for _, env := range environments.Items {
+			summary.Environments = append(summary.Environments, environmentSummary{
+				ID: env.ID, Name: env.Name, Slug: env.Slug, Kind: string(env.Kind),
+			})
+		}
+		out.Projects = append(out.Projects, summary)
+	}
+	return textResult(fmt.Sprintf("%d project(s).", len(out.Projects))), out, nil
+}
+
+func (s *Server) createApp(ctx context.Context, _ *mcp.CallToolRequest, in createAppInput) (*mcp.CallToolResult, createAppOutput, error) {
+	environment := in.EnvironmentID
+	if environment == "" {
+		resolved, err := s.defaultEnvironment(ctx)
+		if err != nil {
+			return errorResult(err), createAppOutput{}, nil
+		}
+		environment = resolved
+	}
+
+	body := map[string]any{"name": in.Name, "deploy": in.Deploy}
+	switch {
+	case in.Image != "":
+		body["source_type"] = "image"
+		body["image"] = in.Image
+	case in.RepoURL != "":
+		body["source_type"] = "git"
+		body["repo_url"] = in.RepoURL
+		if in.Branch != "" {
+			body["branch"] = in.Branch
+		}
+	default:
+		return errorResult(errdoc.BadRequest(
+			"An app needs either a repository to build from or an image to run.")), createAppOutput{}, nil
+	}
+	if in.Port > 0 {
+		body["port"] = in.Port
+	}
+
+	// The panel answers with the app alone, or — when a deployment was asked
+	// for and started — with the app nested next to it. Both shapes are read
+	// from one struct rather than guessing which arrived.
+	var response struct {
+		ID         string            `json:"id"`
+		Name       string            `json:"name"`
+		App        *store.App        `json:"app"`
+		Deployment *store.Deployment `json:"deployment"`
+	}
+	if err := s.client.Do(ctx, "POST", "/api/environments/"+environment+"/apps", body, &response); err != nil {
+		return errorResult(err), createAppOutput{}, nil
+	}
+	out := createAppOutput{AppID: response.ID, Name: response.Name}
+	if response.App != nil {
+		out.AppID, out.Name = response.App.ID, response.App.Name
+	}
+	if response.Deployment != nil {
+		out.DeploymentID = response.Deployment.ID
+	}
+	switch {
+	case out.DeploymentID != "":
+		out.Note = "The first deployment has started. The build takes a few minutes; " +
+			"call get_app_status or get_deployment_history to see the outcome."
+	default:
+		out.Note = "The app exists but has never been deployed. Call deploy_app to start it."
+	}
+	return textResult(fmt.Sprintf("Created %s (%s). %s", out.Name, out.AppID, out.Note)), out, nil
+}
 
 func (s *Server) listApps(ctx context.Context, _ *mcp.CallToolRequest, in listAppsInput) (*mcp.CallToolResult, listAppsOutput, error) {
 	environment := in.EnvironmentID
@@ -499,8 +641,9 @@ func (s *Server) getHistory(ctx context.Context, _ *mcp.CallToolRequest, in appI
 }
 
 func (s *Server) getCluster(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, clusterOutput, error) {
-	if s.config.TeamID == "" {
-		return errorResult(errdoc.BadRequest("This token is not tied to a team.")), clusterOutput{}, nil
+	teamID, err := s.teamID(ctx)
+	if err != nil {
+		return errorResult(err), clusterOutput{}, nil
 	}
 	var summary struct {
 		Reachable        bool            `json:"reachable"`
@@ -513,7 +656,7 @@ func (s *Server) getCluster(ctx context.Context, _ *mcp.CallToolRequest, _ struc
 		HighAvailability bool            `json:"high_availability"`
 		Nodes            []serverSummary `json:"nodes"`
 	}
-	if err := s.client.Do(ctx, "GET", "/api/teams/"+s.config.TeamID+"/cluster", nil, &summary); err != nil {
+	if err := s.client.Do(ctx, "GET", "/api/teams/"+teamID+"/cluster", nil, &summary); err != nil {
 		return errorResult(err), clusterOutput{}, nil
 	}
 
@@ -562,14 +705,28 @@ func (s *Server) checkReadiness(ctx context.Context, _ *mcp.CallToolRequest, in 
 
 // --- helpers ---
 
+// teamID works out which team to act on, once.
+//
+// A token created for the CLI or an assistant usually has no team stored
+// alongside it — SKIFITY_URL and SKIFITY_TOKEN are the whole setup — and
+// without this every tool that needs a team answered "this token is not tied
+// to a team", which is every tool that does anything.
+func (s *Server) teamID(ctx context.Context) (string, error) {
+	s.teamOnce.Do(func() {
+		s.team, s.teamErr = cli.ResolveTeam(ctx, s.client, s.config)
+	})
+	return s.team, s.teamErr
+}
+
 func (s *Server) defaultEnvironment(ctx context.Context) (string, error) {
-	if s.config.TeamID == "" {
-		return "", errdoc.BadRequest("This token is not tied to a team.")
+	teamID, err := s.teamID(ctx)
+	if err != nil {
+		return "", err
 	}
 	var projects struct {
 		Items []store.Project `json:"items"`
 	}
-	if err := s.client.Do(ctx, "GET", "/api/teams/"+s.config.TeamID+"/projects", nil, &projects); err != nil {
+	if err := s.client.Do(ctx, "GET", "/api/teams/"+teamID+"/projects", nil, &projects); err != nil {
 		return "", err
 	}
 	if len(projects.Items) == 0 {

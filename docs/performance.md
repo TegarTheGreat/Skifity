@@ -11,7 +11,7 @@ Numbers that were measured, and numbers that were not. Anything not marked
 |---|---|
 | Resident memory, idle | **34 MiB** |
 | Resident memory, after 400 requests | **36 MiB** |
-| Binary, stripped | 37 MiB |
+| Binary, stripped | 39 MiB |
 | Frontend, gzipped over the wire | 278 KiB across five files |
 | Cold start to answering `/api/health` | under a second |
 
@@ -19,9 +19,11 @@ The memory figure does not drift: 400 requests against the interface and the
 API moved it by 1.5 MiB, and it did not come back down because Go's allocator
 keeps the arena, not because anything leaked.
 
-The binary is large because the whole user interface, in five languages, is
-inside it, along with the Kubernetes client. That is the trade for having one
-file to copy and nothing to install alongside it.
+The binary is large because the whole user interface, in five languages, and the
+whole documentation set with its screenshots, are inside it, along with the
+Kubernetes client. That is the trade for having one file to copy, nothing to
+install alongside it, and a troubleshooting page that works on a server with no
+route to the internet.
 
 ## The rest of a fresh install
 

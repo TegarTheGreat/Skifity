@@ -1,0 +1,363 @@
+// Package settings is the catalogue of everything an operator configures at
+// runtime through the panel.
+//
+// This is the list that makes the product's promise true: a user never edits
+// code or a file on the server to configure Skifity. Adding a feature that needs
+// configuration means adding it here, not adding an environment variable.
+package settings
+
+import (
+	"errors"
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+)
+
+// Definition describes one setting.
+type Definition struct {
+	// Key is the stable identifier stored in the database.
+	Key string
+	// Label is the English name shown in the UI; the UI translates it by key.
+	Label string
+	// Group puts related settings on the same settings page.
+	Group string
+	// Help explains what the setting does and where to find the value.
+	Help string
+	// Placeholder is an example value.
+	Placeholder string
+	// Secret means the value is encrypted and never shown again.
+	Secret bool
+	// Validate rejects values that would fail later in a confusing way. An
+	// empty value always passes, because clearing a setting is allowed.
+	Validate func(string) error
+}
+
+// Groups, in the order the UI shows them.
+const (
+	GroupGeneral       = "general"
+	GroupDomains       = "domains"
+	GroupGit           = "git"
+	GroupStorage       = "storage"
+	GroupDNS           = "dns"
+	GroupEmail         = "email"
+	GroupNotifications = "notifications"
+	GroupRegistry      = "registry"
+)
+
+// Keys used elsewhere in the panel. Referring to a constant rather than a string
+// literal means a rename is a compile error rather than a silent misconfiguration.
+const (
+	KeyPanelURL          = "general.panel_url"
+	KeyWildcardDomain    = "domains.wildcard"
+	KeyClusterIP         = "domains.cluster_ip"
+	KeyACMEEmail         = "domains.acme_email"
+	KeyACMEServer        = "domains.acme_server"
+	KeyGitHubAppID       = "git.github_app_id"
+	KeyGitHubAppSlug     = "git.github_app_slug"
+	KeyGitHubClientID    = "git.github_client_id"
+	KeyGitHubSecret      = "git.github_client_secret"
+	KeyGitHubPrivateKey  = "git.github_private_key"
+	KeyGitHubWebhookSec  = "git.github_webhook_secret"
+	KeyS3Endpoint        = "storage.s3_endpoint"
+	KeyS3Region          = "storage.s3_region"
+	KeyS3Bucket          = "storage.s3_bucket"
+	KeyS3AccessKey       = "storage.s3_access_key"
+	KeyS3SecretKey       = "storage.s3_secret_key"
+	KeyS3PathStyle       = "storage.s3_path_style"
+	KeyDNSProvider       = "dns.provider"
+	KeyDNSAPIToken       = "dns.api_token"
+	KeyDNSZone           = "dns.zone"
+	KeySMTPHost          = "email.smtp_host"
+	KeySMTPPort          = "email.smtp_port"
+	KeySMTPUser          = "email.smtp_user"
+	KeySMTPPassword      = "email.smtp_password"
+	KeySMTPFrom          = "email.smtp_from"
+	KeySMTPTLS           = "email.smtp_tls"
+	KeyRegistryURL       = "registry.url"
+	KeyRegistryUser      = "registry.username"
+	KeyRegistryPassword  = "registry.password"
+	KeyBuilderDefault    = "general.default_builder"
+	KeyTelemetryDisabled = "general.telemetry_disabled"
+)
+
+// Definitions is the whole catalogue, in display order.
+var Definitions = []Definition{
+	{
+		Key: KeyPanelURL, Label: "Panel URL", Group: GroupGeneral,
+		Help:        "The address people use to reach this panel. Used in links inside notifications and in webhook URLs.",
+		Placeholder: "https://panel.example.com",
+		Validate:    validateURL,
+	},
+	{
+		Key: KeyBuilderDefault, Label: "Default builder", Group: GroupGeneral,
+		Help:        "Which builder to use when a repository has no Dockerfile. Railpack produces smaller images; Nixpacks is older and more widely tested.",
+		Placeholder: "railpack",
+		Validate:    validateOneOf("railpack", "nixpacks"),
+	},
+	{
+		Key: KeyTelemetryDisabled, Label: "Disable usage reporting", Group: GroupGeneral,
+		Help:     "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed.",
+		Validate: validateBool,
+	},
+	{
+		Key: KeyWildcardDomain, Label: "Wildcard domain", Group: GroupDomains,
+		Help:        "A domain with a wildcard DNS record pointing at this cluster. Every app gets a free subdomain under it. Leave empty to use sslip.io addresses instead.",
+		Placeholder: "apps.example.com",
+		Validate:    validateDomain,
+	},
+	{
+		Key: KeyClusterIP, Label: "Cluster public IP", Group: GroupDomains,
+		Help:        "The address your domains should point at. Detected automatically; override it if your cluster sits behind a load balancer.",
+		Placeholder: "203.0.113.10",
+		Validate:    validateIPOrHost,
+	},
+	{
+		Key: KeyACMEEmail, Label: "Let's Encrypt email", Group: GroupDomains,
+		Help:        "Where Let's Encrypt sends certificate expiry warnings. Required before HTTPS certificates can be issued.",
+		Placeholder: "you@example.com",
+		Validate:    validateEmail,
+	},
+	{
+		Key: KeyACMEServer, Label: "ACME directory URL", Group: GroupDomains,
+		Help:        "Leave empty for Let's Encrypt production. Point it at the staging directory while you are testing, so you do not hit the rate limit.",
+		Placeholder: "https://acme-staging-v02.api.letsencrypt.org/directory",
+		Validate:    validateURL,
+	},
+	{
+		Key: KeyGitHubAppID, Label: "GitHub App ID", Group: GroupGit,
+		Help:        "From the GitHub App you created for this panel. See the setup guide for the exact settings to use.",
+		Placeholder: "123456", Validate: validateInt,
+	},
+	{Key: KeyGitHubAppSlug, Label: "GitHub App slug", Group: GroupGit,
+		Help: "The name in the App's URL, used to build the installation link.", Placeholder: "my-skifity"},
+	{Key: KeyGitHubClientID, Label: "GitHub client ID", Group: GroupGit,
+		Help: "Used to sign in with GitHub and to list the repositories you can deploy."},
+	{Key: KeyGitHubSecret, Label: "GitHub client secret", Group: GroupGit, Secret: true,
+		Help: "Shown once by GitHub when you generate it."},
+	{Key: KeyGitHubPrivateKey, Label: "GitHub App private key", Group: GroupGit, Secret: true,
+		Help:     "The PEM file GitHub downloads when you generate a key. Paste the whole thing, including the BEGIN and END lines.",
+		Validate: validatePEM},
+	{Key: KeyGitHubWebhookSec, Label: "GitHub webhook secret", Group: GroupGit, Secret: true,
+		Help: "The secret you set on the App's webhook. Skifity rejects any push it cannot verify with this."},
+	{
+		Key: KeyS3Endpoint, Label: "S3 endpoint", Group: GroupStorage,
+		Help:        "Any S3-compatible service works: AWS, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself.",
+		Placeholder: "https://s3.eu-central-1.amazonaws.com",
+		Validate:    validateURL,
+	},
+	{Key: KeyS3Region, Label: "S3 region", Group: GroupStorage, Placeholder: "eu-central-1",
+		Help: "Some providers ignore this; AWS does not."},
+	{Key: KeyS3Bucket, Label: "S3 bucket", Group: GroupStorage, Placeholder: "skifity-backups",
+		Help: "The bucket backups are written to. Skifity does not create it for you."},
+	{Key: KeyS3AccessKey, Label: "S3 access key", Group: GroupStorage, Secret: true,
+		Help: "Use a key that can only write to this bucket."},
+	{Key: KeyS3SecretKey, Label: "S3 secret key", Group: GroupStorage, Secret: true,
+		Help: "Stored encrypted and never shown again."},
+	{Key: KeyS3PathStyle, Label: "Use path-style URLs", Group: GroupStorage, Validate: validateBool,
+		Help: "Turn this on for MinIO and most self-hosted S3 services."},
+	{
+		Key: KeyDNSProvider, Label: "DNS provider", Group: GroupDNS,
+		Help:        "Lets Skifity create DNS records for you when you add a domain. Leave empty to create them yourself.",
+		Placeholder: "cloudflare",
+		Validate:    validateOneOf("cloudflare", "route53", "digitalocean", "hetzner"),
+	},
+	{Key: KeyDNSAPIToken, Label: "DNS API token", Group: GroupDNS, Secret: true,
+		Help: "A token scoped to edit records in one zone. Do not use a global account key."},
+	{Key: KeyDNSZone, Label: "DNS zone", Group: GroupDNS, Placeholder: "example.com", Validate: validateDomain,
+		Help: "The zone records are created in."},
+	{Key: KeySMTPHost, Label: "SMTP host", Group: GroupEmail, Placeholder: "smtp.example.com",
+		Help: "Needed for email notifications and for password reset emails."},
+	{Key: KeySMTPPort, Label: "SMTP port", Group: GroupEmail, Placeholder: "587", Validate: validatePort},
+	{Key: KeySMTPUser, Label: "SMTP username", Group: GroupEmail},
+	{Key: KeySMTPPassword, Label: "SMTP password", Group: GroupEmail, Secret: true},
+	{Key: KeySMTPFrom, Label: "Send email from", Group: GroupEmail, Placeholder: "skifity@example.com",
+		Validate: validateEmail},
+	{Key: KeySMTPTLS, Label: "Use STARTTLS", Group: GroupEmail, Validate: validateBool,
+		Help: "Leave on unless your mail server only accepts plain connections."},
+	{Key: KeyRegistryURL, Label: "External registry", Group: GroupRegistry,
+		Help:        "Where built images are pushed. Leave empty to use the registry inside the cluster, which is the simplest option.",
+		Placeholder: "registry.example.com/skifity",
+	},
+	{Key: KeyRegistryUser, Label: "Registry username", Group: GroupRegistry},
+	{Key: KeyRegistryPassword, Label: "Registry password", Group: GroupRegistry, Secret: true},
+}
+
+var index = func() map[string]Definition {
+	m := make(map[string]Definition, len(Definitions))
+	for i, d := range Definitions {
+		if d.Validate == nil {
+			// Filling this in once here means every caller can call
+			// Validate without a nil check.
+			Definitions[i].Validate = noValidation
+			d.Validate = noValidation
+		}
+		m[d.Key] = d
+	}
+	return m
+}()
+
+// Lookup finds a setting definition by key.
+func Lookup(key string) (Definition, bool) {
+	d, ok := index[key]
+	return d, ok
+}
+
+// noValidation accepts anything, used by free-text settings.
+func noValidation(string) error { return nil }
+
+// Context returns the encryption context for a setting's value, so a sealed
+// setting cannot be moved to a different key.
+func Context(key string) string { return "setting:" + key }
+
+// Component describes an optional cluster add-on.
+type Component struct {
+	Name        string
+	Title       string
+	Description string
+	// Optional components are installed on first use rather than at install time.
+	Optional bool
+	// Beta marks a component that is pre-1.0 upstream.
+	Beta bool
+	// MemoryMB is roughly what it costs to run, so the UI can warn honestly.
+	MemoryMB int
+}
+
+// Components is what the panel can install into the cluster.
+var Components = []Component{
+	{Name: "cert-manager", Title: "HTTPS certificates",
+		Description: "Issues and renews Let's Encrypt certificates for your domains.", MemoryMB: 120},
+	{Name: "registry", Title: "Image registry", Optional: true,
+		Description: "Stores the images Skifity builds, inside the cluster.", MemoryMB: 60},
+	{Name: "buildkit", Title: "Builder", Optional: true,
+		Description: "Builds your apps into images, without needing Docker on the host.", MemoryMB: 200},
+	{Name: "cloudnative-pg", Title: "PostgreSQL", Optional: true,
+		Description: "Runs and looks after PostgreSQL databases, including backups and failover.", MemoryMB: 150},
+	{Name: "keda", Title: "Scale to zero", Optional: true, Beta: true,
+		Description: "Stops idle apps and starts them again on the first request. The HTTP add-on is beta upstream.", MemoryMB: 180},
+	{Name: "longhorn", Title: "Cross-node storage", Optional: true,
+		Description: "Replicates volumes between servers so an app with storage survives a node failure. Uses a noticeable amount of memory on every node.", MemoryMB: 700},
+	{Name: "monitoring", Title: "Full monitoring", Optional: true,
+		Description: "Prometheus and Grafana. Skifity shows basic CPU and memory without this.", MemoryMB: 900},
+}
+
+var componentIndex = func() map[string]Component {
+	m := make(map[string]Component, len(Components))
+	for _, c := range Components {
+		m[c.Name] = c
+	}
+	return m
+}()
+
+// LookupComponent finds a component definition by name.
+func LookupComponent(name string) (Component, bool) {
+	c, ok := componentIndex[name]
+	return c, ok
+}
+
+// --- validators ---
+//
+// Every validator treats an empty value as valid, because clearing a setting is
+// how an integration is disconnected.
+
+func validateURL(value string) error {
+	if value == "" {
+		return nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return errors.New("enter a full URL, starting with https://")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("the URL must start with http:// or https://")
+	}
+	return nil
+}
+
+func validateDomain(value string) error {
+	if value == "" {
+		return nil
+	}
+	value = strings.TrimPrefix(value, "*.")
+	if strings.Contains(value, "/") || strings.Contains(value, " ") {
+		return errors.New("enter just the domain, without a scheme or a path")
+	}
+	if !strings.Contains(value, ".") {
+		return errors.New("that does not look like a domain name")
+	}
+	return nil
+}
+
+func validateIPOrHost(value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.ContainsAny(value, " /:") {
+		return errors.New("enter just an IP address or hostname")
+	}
+	return nil
+}
+
+func validateEmail(value string) error {
+	if value == "" {
+		return nil
+	}
+	at := strings.LastIndex(value, "@")
+	if at <= 0 || at == len(value)-1 || !strings.Contains(value[at+1:], ".") {
+		return errors.New("that does not look like an email address")
+	}
+	return nil
+}
+
+func validateInt(value string) error {
+	if value == "" {
+		return nil
+	}
+	if _, err := strconv.Atoi(value); err != nil {
+		return errors.New("enter a number")
+	}
+	return nil
+}
+
+func validatePort(value string) error {
+	if value == "" {
+		return nil
+	}
+	port, err := strconv.Atoi(value)
+	if err != nil || port < 1 || port > 65535 {
+		return errors.New("enter a port between 1 and 65535")
+	}
+	return nil
+}
+
+func validateBool(value string) error {
+	switch strings.ToLower(value) {
+	case "", "true", "false", "1", "0", "yes", "no":
+		return nil
+	}
+	return errors.New("this setting is on or off")
+}
+
+func validatePEM(value string) error {
+	if value == "" {
+		return nil
+	}
+	if !strings.Contains(value, "-----BEGIN") || !strings.Contains(value, "-----END") {
+		return errors.New("paste the whole PEM file, including the BEGIN and END lines")
+	}
+	return nil
+}
+
+func validateOneOf(allowed ...string) func(string) error {
+	return func(value string) error {
+		if value == "" {
+			return nil
+		}
+		for _, a := range allowed {
+			if value == a {
+				return nil
+			}
+		}
+		return fmt.Errorf("must be one of: %s", strings.Join(allowed, ", "))
+	}
+}

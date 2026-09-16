@@ -1,0 +1,434 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"skifity/internal/auth"
+	"skifity/internal/config"
+	"skifity/internal/crypto"
+	"skifity/internal/errdoc"
+	"skifity/internal/events"
+	"skifity/internal/store"
+)
+
+// Server is the panel's HTTP API.
+type Server struct {
+	cfg     config.Config
+	db      *store.DB
+	keyring *crypto.Keyring
+	auth    *auth.Service
+	hub     *events.Hub
+	log     *slog.Logger
+
+	// setup guards first-run: it holds the one-time token until an admin exists.
+	setup *setupState
+
+	// cluster is the Kubernetes-facing side of the panel. It is an interface so
+	// the API can be tested, and started, without a cluster.
+	cluster Cluster
+
+	// orchestrators are injected by the server command. They are interfaces for
+	// the same reason.
+	provisioner Provisioner
+	deployer    Deployer
+	databases   DatabaseManager
+	backups     BackupManager
+
+	// frontend serves the embedded UI.
+	frontend http.Handler
+
+	router chi.Router
+}
+
+// Options carries the Server's dependencies.
+type Options struct {
+	Config      config.Config
+	DB          *store.DB
+	Keyring     *crypto.Keyring
+	Auth        *auth.Service
+	Hub         *events.Hub
+	Logger      *slog.Logger
+	Cluster     Cluster
+	Provisioner Provisioner
+	Deployer    Deployer
+	Databases   DatabaseManager
+	Backups     BackupManager
+	Frontend    http.Handler
+	SetupToken  string
+}
+
+// New builds the API server and its routes.
+func New(opts Options) *Server {
+	s := &Server{
+		cfg:         opts.Config,
+		db:          opts.DB,
+		keyring:     opts.Keyring,
+		auth:        opts.Auth,
+		hub:         opts.Hub,
+		log:         opts.Logger,
+		cluster:     opts.Cluster,
+		provisioner: opts.Provisioner,
+		deployer:    opts.Deployer,
+		databases:   opts.Databases,
+		backups:     opts.Backups,
+		frontend:    opts.Frontend,
+		setup:       newSetupState(opts.SetupToken),
+	}
+	if s.log == nil {
+		s.log = slog.Default()
+	}
+	s.router = s.routes()
+	return s
+}
+
+// ServeHTTP implements http.Handler.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.ServeHTTP(w, r) }
+
+func (s *Server) routes() chi.Router {
+	r := chi.NewRouter()
+	r.Use(s.requestContext)
+	r.Use(s.recoverer)
+	r.Use(s.accessLog)
+	r.Use(s.securityHeaders)
+
+	r.Route("/api", func(api chi.Router) {
+		api.Use(noCache)
+		api.Use(s.authenticate)
+		api.Use(s.csrf)
+
+		// Unauthenticated: liveness, readiness and the first-run handshake.
+		api.Get("/health", s.handleHealth)
+		api.Get("/ready", s.handleReady)
+		api.Get("/meta", s.handleMeta)
+		api.Get("/setup/status", s.handleSetupStatus)
+		api.Post("/setup", s.handleSetupComplete)
+
+		api.Post("/auth/login", s.handleLogin)
+		api.Post("/auth/logout", s.handleLogout)
+
+		// Webhooks authenticate with their own per-source signature.
+		api.Post("/webhooks/git/{sourceID}", s.handleGitWebhook)
+
+		api.Group(func(authed chi.Router) {
+			authed.Use(s.requireAuth)
+
+			authed.Get("/me", s.handleMe)
+			authed.Patch("/me", s.handleUpdateMe)
+			authed.Post("/me/password", s.handleChangePassword)
+			authed.Get("/me/sessions", s.handleListSessions)
+			authed.Delete("/me/sessions/{sessionID}", s.handleRevokeSession)
+			authed.Post("/me/totp", s.handleStartTOTP)
+			authed.Post("/me/totp/confirm", s.handleConfirmTOTP)
+			authed.Delete("/me/totp", s.handleDisableTOTP)
+			authed.Get("/me/tokens", s.handleListTokens)
+			authed.Post("/me/tokens", s.handleCreateToken)
+			authed.Delete("/me/tokens/{tokenID}", s.handleRevokeToken)
+
+			authed.Get("/teams", s.handleListTeams)
+			authed.Post("/teams", s.handleCreateTeam)
+
+			authed.Route("/teams/{teamID}", func(team chi.Router) {
+				team.Get("/", s.handleGetTeam)
+				team.Patch("/", s.handleUpdateTeam)
+				team.Get("/members", s.handleListMembers)
+				team.Post("/members", s.handleAddMember)
+				team.Delete("/members/{userID}", s.handleRemoveMember)
+				team.Get("/audit", s.handleListAudit)
+
+				team.Get("/projects", s.handleListProjects)
+				team.Post("/projects", s.handleCreateProject)
+
+				team.Get("/servers", s.handleListServers)
+				team.Post("/servers", s.handleAddServer)
+				team.Get("/cluster", s.handleClusterSummary)
+
+				team.Get("/git-sources", s.handleListGitSources)
+				team.Post("/git-sources", s.handleCreateGitSource)
+				team.Delete("/git-sources/{sourceID}", s.handleDeleteGitSource)
+
+				team.Get("/notifications", s.handleListNotificationChannels)
+				team.Post("/notifications", s.handleCreateNotificationChannel)
+				team.Delete("/notifications/{channelID}", s.handleDeleteNotificationChannel)
+				team.Post("/notifications/{channelID}/test", s.handleTestNotificationChannel)
+			})
+
+			authed.Route("/servers/{serverID}", func(server chi.Router) {
+				server.Get("/", s.handleGetServer)
+				server.Patch("/", s.handleUpdateServer)
+				server.Delete("/", s.handleRemoveServer)
+				server.Post("/retry", s.handleRetryServer)
+				server.Post("/promote", s.handlePromoteServer)
+				server.Get("/metrics", s.handleServerMetrics)
+			})
+
+			authed.Route("/projects/{projectID}", func(project chi.Router) {
+				project.Get("/", s.handleGetProject)
+				project.Patch("/", s.handleUpdateProject)
+				project.Delete("/", s.handleDeleteProject)
+				project.Get("/environments", s.handleListEnvironments)
+				project.Post("/environments", s.handleCreateEnvironment)
+				project.Get("/variables", s.handleListSharedVariables)
+				project.Put("/variables", s.handleSetSharedVariable)
+				project.Delete("/variables/{key}", s.handleDeleteSharedVariable)
+				project.Get("/canvas", s.handleProjectCanvas)
+			})
+
+			authed.Route("/environments/{envID}", func(env chi.Router) {
+				env.Get("/", s.handleGetEnvironment)
+				env.Delete("/", s.handleDeleteEnvironment)
+				env.Get("/apps", s.handleListApps)
+				env.Post("/apps", s.handleCreateApp)
+				env.Get("/databases", s.handleListDatabases)
+				env.Post("/databases", s.handleCreateDatabase)
+			})
+
+			authed.Route("/apps/{appID}", func(app chi.Router) {
+				app.Get("/", s.handleGetApp)
+				app.Patch("/", s.handleUpdateApp)
+				app.Delete("/", s.handleDeleteApp)
+				app.Get("/status", s.handleAppStatus)
+				app.Post("/deploy", s.handleDeployApp)
+				app.Get("/deployments", s.handleListDeployments)
+				app.Get("/deployments/{deploymentID}", s.handleGetDeployment)
+				app.Get("/deployments/{deploymentID}/logs", s.handleDeploymentLogs)
+				app.Post("/deployments/{deploymentID}/cancel", s.handleCancelDeployment)
+				app.Post("/rollback/{deploymentID}", s.handleRollback)
+				app.Get("/logs", s.handleAppLogs)
+				app.Post("/restart", s.handleRestartApp)
+				app.Get("/variables", s.handleListVariables)
+				app.Put("/variables", s.handleSetVariable)
+				app.Delete("/variables/{key}", s.handleDeleteVariable)
+				app.Get("/domains", s.handleListDomains)
+				app.Post("/domains", s.handleAddDomain)
+				app.Delete("/domains/{domainID}", s.handleDeleteDomain)
+				app.Get("/scaling", s.handleGetScaling)
+				app.Put("/scaling", s.handleSetScaling)
+				app.Get("/scaling/readiness", s.handleScalingReadiness)
+				app.Get("/volumes", s.handleListVolumes)
+				app.Post("/volumes", s.handleCreateVolume)
+				app.Delete("/volumes/{volumeID}", s.handleDeleteVolume)
+				app.Get("/advanced", s.handleAppAdvanced)
+			})
+
+			authed.Route("/databases/{databaseID}", func(dbr chi.Router) {
+				dbr.Get("/", s.handleGetDatabase)
+				dbr.Delete("/", s.handleDeleteDatabase)
+				dbr.Get("/credentials", s.handleDatabaseCredentials)
+				dbr.Post("/link", s.handleLinkDatabase)
+				dbr.Delete("/link/{appID}", s.handleUnlinkDatabase)
+				dbr.Get("/backups", s.handleListBackups)
+				dbr.Post("/backups", s.handleCreateBackup)
+				dbr.Get("/backup-policy", s.handleGetBackupPolicy)
+				dbr.Put("/backup-policy", s.handleSetBackupPolicy)
+				dbr.Post("/restore/{backupID}", s.handleRestoreBackup)
+			})
+
+			authed.Get("/operations/{operationID}", s.handleGetOperation)
+			authed.Post("/operations/{operationID}/cancel", s.handleCancelOperation)
+
+			authed.Get("/templates", s.handleListTemplates)
+			authed.Post("/templates/{templateID}/install", s.handleInstallTemplate)
+
+			authed.Get("/events", s.handleEventStream)
+
+			authed.Group(func(admin chi.Router) {
+				admin.Use(s.requireAdmin)
+				admin.Get("/settings", s.handleListSettings)
+				admin.Put("/settings", s.handleUpdateSettings)
+				admin.Get("/components", s.handleListComponents)
+				admin.Post("/components/{name}/install", s.handleInstallComponent)
+				admin.Post("/security/rotate-key", s.handleRotateMasterKey)
+				admin.Get("/security/recovery-key", s.handleRecoveryKey)
+				admin.Post("/security/recovery-key/saved", s.handleRecoveryKeySaved)
+				admin.Get("/upgrade", s.handleUpgradeStatus)
+				admin.Post("/upgrade", s.handleUpgrade)
+			})
+		})
+
+		// Anything under /api that did not match is a 404 in JSON, not HTML.
+		api.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, r, errdoc.NotFound("endpoint", r.URL.Path))
+		})
+		api.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, r, errdoc.BadRequest("That method is not allowed on this endpoint.").
+				WithStatus(http.StatusMethodNotAllowed))
+		})
+	})
+
+	// Everything else is the single-page app.
+	if s.frontend != nil {
+		r.Handle("/*", s.frontend)
+	}
+	return r
+}
+
+// --- authorization ---
+//
+// Every team-scoped handler goes through one of these. Authorization lives in a
+// single place on purpose: a missing check in a handler is the most common way
+// this class of product leaks data between tenants.
+
+// authorizeTeam checks that the caller has at least the given role in a team.
+func (s *Server) authorizeTeam(r *http.Request, teamID string, required store.Role) (store.User, error) {
+	user, ok := UserFrom(r.Context())
+	if !ok {
+		return store.User{}, errdoc.Unauthorized()
+	}
+	membership, err := s.db.GetMembership(r.Context(), teamID, user.ID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			// Not a member: answer exactly as for a team that does not exist,
+			// so membership cannot be probed.
+			return store.User{}, errdoc.NotFound("team", teamID)
+		}
+		return store.User{}, err
+	}
+	if !membership.Role.AtLeast(required) {
+		return store.User{}, errdoc.Forbidden("this action")
+	}
+	return user, nil
+}
+
+// authorizeApp resolves an app's team and checks the caller's role in it.
+func (s *Server) authorizeApp(r *http.Request, appID string, required store.Role) (store.App, store.User, error) {
+	teamID, err := s.db.TeamIDForApp(r.Context(), appID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return store.App{}, store.User{}, errdoc.NotFound("app", appID)
+		}
+		return store.App{}, store.User{}, err
+	}
+	user, err := s.authorizeTeam(r, teamID, required)
+	if err != nil {
+		return store.App{}, store.User{}, err
+	}
+	app, err := s.db.GetApp(r.Context(), appID)
+	if err != nil {
+		return store.App{}, store.User{}, errdoc.NotFound("app", appID)
+	}
+	return app, user, nil
+}
+
+// authorizeEnvironment resolves an environment's team and checks the role.
+func (s *Server) authorizeEnvironment(r *http.Request, envID string, required store.Role) (store.Environment, store.User, error) {
+	teamID, err := s.db.TeamIDForEnvironment(r.Context(), envID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return store.Environment{}, store.User{}, errdoc.NotFound("environment", envID)
+		}
+		return store.Environment{}, store.User{}, err
+	}
+	user, err := s.authorizeTeam(r, teamID, required)
+	if err != nil {
+		return store.Environment{}, store.User{}, err
+	}
+	env, err := s.db.GetEnvironment(r.Context(), envID)
+	if err != nil {
+		return store.Environment{}, store.User{}, errdoc.NotFound("environment", envID)
+	}
+	return env, user, nil
+}
+
+// authorizeProject resolves a project's team and checks the role.
+func (s *Server) authorizeProject(r *http.Request, projectID string, required store.Role) (store.Project, store.User, error) {
+	project, err := s.db.GetProject(r.Context(), projectID)
+	if err != nil {
+		return store.Project{}, store.User{}, errdoc.NotFound("project", projectID)
+	}
+	user, err := s.authorizeTeam(r, project.TeamID, required)
+	if err != nil {
+		return store.Project{}, store.User{}, err
+	}
+	return project, user, nil
+}
+
+// authorizeServer resolves a server's team and checks the role.
+func (s *Server) authorizeServer(r *http.Request, serverID string, required store.Role) (store.Server, store.User, error) {
+	server, err := s.db.GetServer(r.Context(), serverID)
+	if err != nil {
+		return store.Server{}, store.User{}, errdoc.NotFound("server", serverID)
+	}
+	user, err := s.authorizeTeam(r, server.TeamID, required)
+	if err != nil {
+		return store.Server{}, store.User{}, err
+	}
+	return server, user, nil
+}
+
+// authorizeDatabase resolves a database's team and checks the role.
+func (s *Server) authorizeDatabase(r *http.Request, databaseID string, required store.Role) (store.Database, store.User, error) {
+	teamID, err := s.db.TeamIDForDatabase(r.Context(), databaseID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return store.Database{}, store.User{}, errdoc.NotFound("database", databaseID)
+		}
+		return store.Database{}, store.User{}, err
+	}
+	user, err := s.authorizeTeam(r, teamID, required)
+	if err != nil {
+		return store.Database{}, store.User{}, err
+	}
+	record, err := s.db.GetDatabase(r.Context(), databaseID)
+	if err != nil {
+		return store.Database{}, store.User{}, errdoc.NotFound("database", databaseID)
+	}
+	return record, user, nil
+}
+
+// audit records an action. Audit failures never fail the request they describe,
+// because refusing to do work because the log is full helps nobody.
+func (s *Server) audit(r *http.Request, teamID, action, targetType, targetID, targetLabel string) {
+	user, _ := UserFrom(r.Context())
+	event := store.AuditEvent{
+		TeamID:      teamID,
+		ActorID:     user.ID,
+		ActorLabel:  user.Email,
+		Action:      action,
+		TargetType:  targetType,
+		TargetID:    targetID,
+		TargetLabel: targetLabel,
+		IP:          clientIPFrom(r.Context()),
+		UserAgent:   truncate(r.UserAgent(), 255),
+	}
+	if err := s.db.RecordAudit(r.Context(), &event); err != nil {
+		s.log.Warn("could not record audit event", "action", action, "error", err)
+	}
+	if teamID != "" {
+		s.hub.Publish(events.TeamTopic(teamID), "audit", event)
+	}
+}
+
+// Background starts the panel's periodic housekeeping. It returns when ctx ends.
+func (s *Server) Background(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if _, err := s.db.PurgeExpiredSessions(ctx); err != nil {
+				s.log.Warn("purge expired sessions", "error", err)
+			}
+			if err := s.db.PurgeOldLoginAttempts(ctx, time.Now().Add(-24*time.Hour)); err != nil {
+				s.log.Warn("purge login attempts", "error", err)
+			}
+			if err := s.db.PurgeOldAudit(ctx, time.Now().Add(-90*24*time.Hour)); err != nil {
+				s.log.Warn("purge audit events", "error", err)
+			}
+		}
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}

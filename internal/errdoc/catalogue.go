@@ -1,0 +1,370 @@
+package errdoc
+
+import "net/http"
+
+// This file is the catalogue of failures the panel knows how to explain.
+//
+// A code that appears here gets a translated message in the UI and a specific
+// fix. Anything not here falls back to the generic "internal" problem, which is
+// a signal that the catalogue needs a new entry, not that the message is fine.
+
+// --- request and authorization ---
+
+// BadRequest is a malformed or invalid request from the client.
+func BadRequest(cause string) *Problem {
+	return New("request.invalid", "That request was not valid").
+		WithCause("%s", cause).
+		WithImpact("Nothing was changed.").
+		WithFix("Correct the highlighted field and try again.").
+		WithStatus(http.StatusBadRequest)
+}
+
+// Unauthorized means no valid credentials were presented.
+func Unauthorized() *Problem {
+	return New("auth.required", "You need to sign in").
+		WithCause("This request had no valid session or API token.").
+		WithImpact("The action was not performed.").
+		WithFix("Sign in again. If you are using the CLI, run `skifity login`.").
+		WithStatus(http.StatusUnauthorized)
+}
+
+// Forbidden means the caller is known but not allowed.
+func Forbidden(action string) *Problem {
+	return New("auth.forbidden", "You do not have permission for this").
+		WithCause("Your role in this team does not allow %s.", action).
+		WithImpact("The action was not performed.").
+		WithFix("Ask a team owner or admin to do this, or to raise your role.").
+		WithStatus(http.StatusForbidden)
+}
+
+// NotFound means the resource does not exist, or the caller may not see it.
+func NotFound(kind, id string) *Problem {
+	return New("resource.not_found", "That "+kind+" does not exist").
+		WithCause("No %s with the id %s is visible to you.", kind, id).
+		WithImpact("Nothing was changed.").
+		WithFix("Check the id, or go back to the list and pick it again.").
+		WithStatus(http.StatusNotFound).
+		With("kind", kind).With("id", id)
+}
+
+// Conflict means a uniqueness rule or a state rule rejected the write.
+func Conflict(cause, fix string) *Problem {
+	return New("resource.conflict", "That name is already taken").
+		WithCause("%s", cause).
+		WithImpact("Nothing was changed.").
+		WithFix("%s", fix).
+		WithStatus(http.StatusConflict)
+}
+
+// RateLimited means too many attempts in too short a time.
+func RateLimited(retryAfter string) *Problem {
+	return New("auth.rate_limited", "Too many attempts").
+		WithCause("There have been too many failed sign-in attempts for this account or from this address.").
+		WithImpact("Sign-in is paused so that passwords cannot be guessed.").
+		WithFix("Wait %s and try again. If this was not you, change your password once you can sign in.", retryAfter).
+		WithStatus(http.StatusTooManyRequests).
+		With("retry_after", retryAfter)
+}
+
+// --- SSH and provisioning ---
+
+// SSHUnreachable means the TCP connection to the SSH port failed.
+func SSHUnreachable(host string, port int, err error) *Problem {
+	return New("ssh.unreachable", "Could not reach the server over SSH").
+		WithCause("Nothing answered on %s port %d.", host, port).
+		WithImpact("The server was not added. Nothing was changed on it.").
+		WithFix("Check that the IP address and port are right, that the server is running, and that your provider's firewall allows inbound TCP on port %d. Many providers block everything by default in their control panel, which SSH cannot open from here.", port).
+		WithDocs("/docs/troubleshooting#ssh-unreachable").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("host", host).
+		Wrap(err)
+}
+
+// SSHAuthFailed means the credentials were rejected.
+func SSHAuthFailed(host, user string, usedKey bool) *Problem {
+	method := "password"
+	fix := "Check the username and password. If the server only allows key-based login, switch to the private key option."
+	if usedKey {
+		method = "private key"
+		fix = "Check that this key is in ~/.ssh/authorized_keys for " + user + " on the server, and that the key has no passphrase (or supply it)."
+	}
+	return New("ssh.auth_failed", "The server refused those credentials").
+		WithCause("Signing in as %s on %s with a %s was rejected.", user, host, method).
+		WithImpact("The server was not added. Nothing was changed on it.").
+		WithFix("%s", fix).
+		WithDocs("/docs/servers/adding#credentials").
+		WithStatus(http.StatusBadRequest).
+		With("host", host).With("user", user).With("auth_method", method)
+}
+
+// SSHHostKeyChanged means the server's identity does not match what we stored.
+// This is deliberately not retryable: it can mean an interception attempt.
+func SSHHostKeyChanged(host, expected, got string) *Problem {
+	return New("ssh.host_key_changed", "This server's identity has changed").
+		WithCause("%s presented a different SSH host key than the one recorded when it was added.", host).
+		WithImpact("The connection was refused. Skifity will not run commands on a server it cannot recognise.").
+		WithFix("If you rebuilt or reinstalled this server, remove it from Skifity and add it again. If you did not, stop and investigate: something may be intercepting the connection.").
+		WithDocs("/docs/troubleshooting#host-key-changed").
+		WithStatus(http.StatusConflict).
+		WithSeverity(SeverityError).
+		With("host", host).
+		With("expected_fingerprint", expected).
+		With("presented_fingerprint", got)
+}
+
+// PreflightFailed reports a server that does not meet requirements.
+func PreflightFailed(check, detail, fix string) *Problem {
+	return New("preflight."+check, "This server is not ready to join").
+		WithCause("%s", detail).
+		WithImpact("The server was not added. Nothing was changed on it.").
+		WithFix("%s", fix).
+		WithDocs("/docs/servers/requirements").
+		WithStatus(http.StatusBadRequest).
+		Retry().
+		With("check", check)
+}
+
+// PortBlocked reports a cluster port that could not be reached between nodes.
+func PortBlocked(host string, port int, proto string) *Problem {
+	return New("network.port_blocked", "A cluster port is blocked").
+		WithCause("Cluster members could not reach %s on %s/%d.", host, proto, port).
+		WithImpact("The node cannot join the cluster, or pods on it cannot talk to pods elsewhere.").
+		WithFix("Open %s/%d between your servers. Skifity configures UFW and iptables on the server itself, but a firewall in your provider's control panel has to be opened there. Check the security group or firewall rules for this machine.", proto, port).
+		WithDocs("/docs/servers/firewall").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("host", host).With("port", itoa(port)).With("protocol", proto)
+}
+
+// K3sInstallFailed reports a failed k3s installation on a node.
+func K3sInstallFailed(host string, exitCode int, output string) *Problem {
+	return New("k3s.install_failed", "Kubernetes could not be installed on this server").
+		WithCause("The k3s installer exited with code %d on %s.", exitCode, host).
+		WithImpact("The server is registered but is not part of the cluster. No workloads are running on it.").
+		WithFix("Open the step output below. The most common causes are no outbound internet access, an old kernel without the required modules, and a conflicting container runtime. Fix the cause and press Retry; the step is safe to run again.").
+		WithDocs("/docs/troubleshooting#k3s-install").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("host", host).With("exit_code", itoa(exitCode)).With("output_tail", tail(output, 2000))
+}
+
+// --- builds and deploys ---
+
+// BuildFailed reports a build that did not produce an image.
+func BuildFailed(app, stage, logTail string) *Problem {
+	return New("build.failed", "The build failed").
+		WithCause("Building %s failed during the %s stage.", app, stage).
+		WithImpact("The new version was not deployed. The previous version is still running and still serving traffic.").
+		WithFix("Read the build log below. Then fix it in your repository and push again, or press Retry if you believe it was a transient failure.").
+		WithDocs("/docs/apps/builds#failures").
+		WithStatus(http.StatusBadRequest).
+		Retry().
+		With("app", app).With("stage", stage).With("log_tail", tail(logTail, 4000))
+}
+
+// NoBuilderDetected reports a repository we cannot work out how to build.
+func NoBuilderDetected(repo string) *Problem {
+	return New("build.no_builder", "Skifity could not work out how to build this repository").
+		WithCause("No Dockerfile was found in %s, and the files present do not match any language Skifity recognises.", repo).
+		WithImpact("No build was started.").
+		WithFix("Add a Dockerfile to the repository, or set the root directory if your app lives in a subfolder of a monorepo, or choose a prebuilt image instead.").
+		WithDocs("/docs/apps/builds#detection").
+		WithStatus(http.StatusBadRequest).
+		With("repository", repo)
+}
+
+// RolloutTimedOut reports a deploy whose pods never became ready.
+func RolloutTimedOut(app string, ready, want int, reason string) *Problem {
+	return New("deploy.rollout_timeout", "The new version did not start").
+		WithCause("%d of %d instances of %s became ready before the timeout. %s", ready, want, app, reason).
+		WithImpact("Kubernetes kept the previous version running, so your app is still up. The new version was not rolled out.").
+		WithFix("Check the app logs for a crash on startup. The usual causes are a missing environment variable, a health check path that does not exist yet, and a port mismatch between the app and the configured port.").
+		WithDocs("/docs/apps/deploys#rollout-failed").
+		WithStatus(http.StatusGatewayTimeout).
+		Retry().
+		With("app", app).With("ready_instances", itoa(ready)).With("wanted_instances", itoa(want))
+}
+
+// ImagePullFailed reports a node that could not pull the image.
+func ImagePullFailed(image, reason string) *Problem {
+	return New("deploy.image_pull_failed", "The image could not be pulled").
+		WithCause("Pulling %s failed: %s", image, reason).
+		WithImpact("The new instances cannot start. The previous version is still running.").
+		WithFix("If this is a private image, add the registry credentials in Settings. If it is an internal build, the in-cluster registry may not be reachable from this node: check that the node joined the cluster network.").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("image", image)
+}
+
+// CrashLoop reports an app whose container keeps exiting.
+func CrashLoop(app string, restarts int, logTail string) *Problem {
+	return New("app.crash_loop", "This app keeps restarting").
+		WithCause("%s has restarted %d times in a row. Kubernetes is backing off between restarts.", app, restarts).
+		WithImpact("The app is not serving traffic reliably.").
+		WithFix("Read the last log lines below: the cause is almost always in them. Missing environment variables, a database that is not reachable, and a port the app does not actually listen on are the usual three.").
+		WithDocs("/docs/apps/troubleshooting#crash-loop").
+		WithStatus(http.StatusBadGateway).
+		With("app", app).With("restarts", itoa(restarts)).With("log_tail", tail(logTail, 4000))
+}
+
+// --- domains and TLS ---
+
+// DNSNotPointing reports a custom domain whose DNS does not resolve to us.
+func DNSNotPointing(hostname, want, got string) *Problem {
+	return New("domain.dns_mismatch", "This domain does not point here yet").
+		WithCause("%s currently resolves to %s, but it needs to resolve to %s.", hostname, orNone(got), want).
+		WithImpact("The certificate cannot be issued and the domain will not serve your app.").
+		WithFix("Create an A record for %s pointing to %s, then wait for it to propagate. Skifity checks again every minute.", hostname, want).
+		WithDocs("/docs/domains#dns").
+		WithStatus(http.StatusBadRequest).
+		WithSeverity(SeverityWarning).
+		Retry().
+		With("hostname", hostname).With("expected", want).With("actual", orNone(got))
+}
+
+// CertificateFailed reports a failed Let's Encrypt issuance.
+func CertificateFailed(hostname, reason string) *Problem {
+	return New("domain.certificate_failed", "The HTTPS certificate could not be issued").
+		WithCause("Let's Encrypt refused to issue a certificate for %s: %s", hostname, reason).
+		WithImpact("The domain works over HTTP but not HTTPS.").
+		WithFix("Check that the domain resolves to this cluster and that port 80 is reachable from the internet, which is how the challenge is verified. If you have hit a rate limit, wait an hour before retrying.").
+		WithDocs("/docs/domains#certificates").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("hostname", hostname).With("reason", reason)
+}
+
+// --- cluster and capacity ---
+
+// InsufficientCapacity reports a workload that cannot be scheduled.
+func InsufficientCapacity(what, detail string) *Problem {
+	return New("cluster.insufficient_capacity", "There is not enough room in the cluster").
+		WithCause("%s could not be scheduled: %s", what, detail).
+		WithImpact("The instances are pending and not serving traffic.").
+		WithFix("Add another server in Servers, lower this app's CPU or memory request, or reduce the number of instances.").
+		WithDocs("/docs/servers/capacity").
+		WithStatus(http.StatusConflict).
+		Retry().
+		With("workload", what)
+}
+
+// ClusterUnreachable reports a Kubernetes API that is not answering.
+func ClusterUnreachable(err error) *Problem {
+	return New("cluster.unreachable", "The cluster is not responding").
+		WithCause("The Kubernetes API did not answer.").
+		WithImpact("Your apps keep running, but Skifity cannot make changes or read live status right now.").
+		WithFix("This usually clears up on its own within a minute. If it does not, check that the control plane server is up and that port 6443 is reachable between your servers.").
+		WithDocs("/docs/troubleshooting#cluster-unreachable").
+		WithStatus(http.StatusServiceUnavailable).
+		Retry().
+		Wrap(err)
+}
+
+// QuorumRisk reports a removal that would break etcd quorum.
+func QuorumRisk(remaining int) *Problem {
+	return New("cluster.quorum_risk", "Removing this server would break the cluster").
+		WithCause("This is a control plane server, and removing it would leave %d of them. Embedded etcd needs an odd number of at least three to survive a failure.", remaining).
+		WithImpact("Nothing was changed. The server is still part of the cluster.").
+		WithFix("Promote another server to control plane first, then remove this one. With one control plane server you can remove it only by removing the whole cluster.").
+		WithDocs("/docs/servers/high-availability").
+		WithStatus(http.StatusConflict).
+		With("remaining_control_planes", itoa(remaining))
+}
+
+// --- storage and backups ---
+
+// StorageNotConfigured reports a backup with nowhere to go.
+func StorageNotConfigured() *Problem {
+	return New("backup.storage_not_configured", "No backup storage is configured").
+		WithCause("This team has no S3-compatible storage set up yet.").
+		WithImpact("Backups cannot run, so nothing is being kept safe.").
+		WithFix("Open Settings, then Storage, and add an S3-compatible bucket. Any provider works: AWS S3, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself.").
+		WithDocs("/docs/backups#storage").
+		WithStatus(http.StatusBadRequest)
+}
+
+// BackupFailed reports a failed backup run.
+func BackupFailed(target, reason string) *Problem {
+	return New("backup.failed", "The backup failed").
+		WithCause("Backing up %s failed: %s", target, reason).
+		WithImpact("There is no new backup from this run. Earlier backups are untouched.").
+		WithFix("Check the storage credentials in Settings and that the bucket exists and is writable. Then run the backup again from the database page.").
+		WithDocs("/docs/backups#failures").
+		WithStatus(http.StatusBadGateway).
+		Retry().
+		With("target", target).With("reason", reason)
+}
+
+// RestoreRefused reports a restore that would overwrite live data.
+func RestoreRefused(target string) *Problem {
+	return New("backup.restore_refused", "This restore would overwrite live data").
+		WithCause("%s is in use and the restore would replace its current contents.", target).
+		WithImpact("Nothing was changed.").
+		WithFix("Restore into a new database instead, check it, then point your app at it. If you really do mean to overwrite, confirm it explicitly on the restore dialog.").
+		WithDocs("/docs/backups#restoring").
+		WithStatus(http.StatusConflict).
+		With("target", target)
+}
+
+// --- configuration ---
+
+// NotConfigured reports a feature used before its settings were filled in.
+func NotConfigured(feature, where string) *Problem {
+	return New("config.missing", feature+" is not set up yet").
+		WithCause("%s needs configuration that has not been provided.", feature).
+		WithImpact("The action was not performed.").
+		WithFix("Open %s and fill it in. Nothing needs to be changed in code or on the server.", where).
+		WithDocs("/docs/configuration").
+		WithStatus(http.StatusBadRequest).
+		With("feature", feature)
+}
+
+// ScalingRisk warns about an app that will misbehave when scaled.
+// This is a warning, not an error: the user is allowed to proceed.
+func ScalingRisk(reason, fix string) *Problem {
+	return New("scaling.risk", "This app may not work correctly with more than one instance").
+		WithCause("%s", reason).
+		WithImpact("With several instances running, some requests will behave differently from others.").
+		WithFix("%s", fix).
+		WithDocs("/docs/scaling#readiness").
+		WithSeverity(SeverityWarning).
+		WithStatus(http.StatusOK)
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+// tail keeps the end of a long output, which is where the actual failure is.
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return "...(truncated)...\n" + s[len(s)-n:]
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "nothing"
+	}
+	return s
+}

@@ -1,0 +1,215 @@
+// Package events is the panel's realtime fan-out: install progress, build logs,
+// app logs and cluster status all reach the browser through it as Server-Sent
+// Events (ADR-0005).
+package events
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// Event is one message sent to subscribers of a topic.
+type Event struct {
+	// Topic routes the event, for example "operation:op_123" or "app:app_9/logs".
+	Topic string `json:"topic"`
+	// Type is the SSE event name the browser listens for.
+	Type string `json:"type"`
+	// Seq lets a reconnecting client skip what it already saw.
+	Seq int64 `json:"seq"`
+	// Data is the JSON payload.
+	Data any `json:"data"`
+	// At is when the event was published.
+	At time.Time `json:"at"`
+}
+
+// Encode renders an event in the SSE wire format.
+func (e Event) Encode() ([]byte, error) {
+	payload, err := json.Marshal(e.Data)
+	if err != nil {
+		return nil, fmt.Errorf("encode event data: %w", err)
+	}
+	// SSE frames cannot contain a bare newline in a data field, and json.Marshal
+	// never emits one, so a single data line is always correct here.
+	return fmt.Appendf(nil, "id: %d\nevent: %s\ndata: %s\n\n", e.Seq, e.Type, payload), nil
+}
+
+// subscriber is one connected client.
+type subscriber struct {
+	ch     chan Event
+	topics map[string]bool
+	// dropped counts events this subscriber missed because it was too slow.
+	// The UI uses it to decide it must reload rather than trust its state.
+	dropped atomic.Int64
+}
+
+// Hub fans events out to subscribers.
+//
+// Publishing never blocks: a subscriber that is not keeping up loses events and
+// is told so, rather than stalling a deploy because someone's laptop went to
+// sleep with a log window open.
+type Hub struct {
+	mu          sync.RWMutex
+	subscribers map[*subscriber]struct{}
+	seq         atomic.Int64
+	// buffer is how many events a slow subscriber may fall behind by.
+	buffer int
+	// history keeps recent events per topic so a reconnecting client can catch
+	// up without refetching the whole resource.
+	history      map[string][]Event
+	historyLimit int
+}
+
+// NewHub creates a hub. buffer is the per-subscriber queue depth.
+func NewHub(buffer int) *Hub {
+	if buffer <= 0 {
+		buffer = 64
+	}
+	return &Hub{
+		subscribers:  map[*subscriber]struct{}{},
+		buffer:       buffer,
+		history:      map[string][]Event{},
+		historyLimit: 200,
+	}
+}
+
+// Publish sends an event to everyone subscribed to its topic.
+func (h *Hub) Publish(topic, eventType string, data any) Event {
+	ev := Event{
+		Topic: topic,
+		Type:  eventType,
+		Seq:   h.seq.Add(1),
+		Data:  data,
+		At:    time.Now().UTC(),
+	}
+
+	h.mu.Lock()
+	hist := append(h.history[topic], ev)
+	if len(hist) > h.historyLimit {
+		hist = hist[len(hist)-h.historyLimit:]
+	}
+	h.history[topic] = hist
+	targets := make([]*subscriber, 0, len(h.subscribers))
+	for s := range h.subscribers {
+		if s.topics[topic] {
+			targets = append(targets, s)
+		}
+	}
+	h.mu.Unlock()
+
+	for _, s := range targets {
+		select {
+		case s.ch <- ev:
+		default:
+			// The client is too far behind. Dropping is the right trade: the
+			// alternative is holding up the operation that produced the event.
+			s.dropped.Add(1)
+		}
+	}
+	return ev
+}
+
+// Subscription is a live connection to the hub.
+type Subscription struct {
+	hub *Hub
+	sub *subscriber
+}
+
+// Events is the channel to read from. It is closed when the subscription ends.
+func (s *Subscription) Events() <-chan Event { return s.sub.ch }
+
+// Dropped reports how many events this subscriber missed.
+func (s *Subscription) Dropped() int64 { return s.sub.dropped.Load() }
+
+// Close ends the subscription and releases its resources.
+func (s *Subscription) Close() {
+	s.hub.mu.Lock()
+	if _, ok := s.hub.subscribers[s.sub]; ok {
+		delete(s.hub.subscribers, s.sub)
+		close(s.sub.ch)
+	}
+	s.hub.mu.Unlock()
+}
+
+// Subscribe registers interest in one or more topics. Events published since
+// lastSeq are replayed first, so a reconnect does not lose the middle of a build
+// log.
+func (h *Hub) Subscribe(ctx context.Context, lastSeq int64, topics ...string) *Subscription {
+	sub := &subscriber{
+		ch:     make(chan Event, h.buffer),
+		topics: make(map[string]bool, len(topics)),
+	}
+	for _, t := range topics {
+		sub.topics[t] = true
+	}
+
+	h.mu.Lock()
+	// Collect the replay under the same lock that registers the subscriber, so
+	// an event published concurrently is either replayed or delivered live,
+	// never both and never neither.
+	var replay []Event
+	if lastSeq > 0 {
+		for _, t := range topics {
+			for _, ev := range h.history[t] {
+				if ev.Seq > lastSeq {
+					replay = append(replay, ev)
+				}
+			}
+		}
+	}
+	h.subscribers[sub] = struct{}{}
+	h.mu.Unlock()
+
+	for _, ev := range replay {
+		select {
+		case sub.ch <- ev:
+		default:
+			sub.dropped.Add(1)
+		}
+	}
+
+	// Tie the subscription's life to the request context.
+	go func() {
+		<-ctx.Done()
+		h.mu.Lock()
+		if _, ok := h.subscribers[sub]; ok {
+			delete(h.subscribers, sub)
+			close(sub.ch)
+		}
+		h.mu.Unlock()
+	}()
+
+	return &Subscription{hub: h, sub: sub}
+}
+
+// SubscriberCount reports how many clients are connected, for /api/health.
+func (h *Hub) SubscriberCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.subscribers)
+}
+
+// ForgetTopic drops a topic's history once whatever produced it is finished, so
+// a long-lived panel does not keep every build log in memory.
+func (h *Hub) ForgetTopic(topic string) {
+	h.mu.Lock()
+	delete(h.history, topic)
+	h.mu.Unlock()
+}
+
+// Topic helpers keep topic strings in one place rather than spread as literals.
+
+// OperationTopic is the topic for one long-running operation's progress.
+func OperationTopic(id string) string { return "operation:" + id }
+
+// DeploymentTopic is the topic for one deployment's build log and status.
+func DeploymentTopic(id string) string { return "deployment:" + id }
+
+// AppLogTopic is the topic for one app's runtime logs.
+func AppLogTopic(id string) string { return "app-logs:" + id }
+
+// TeamTopic is the topic for team-wide changes, which is what keeps lists fresh.
+func TeamTopic(id string) string { return "team:" + id }

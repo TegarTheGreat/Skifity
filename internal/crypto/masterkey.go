@@ -292,3 +292,21 @@ func RandomToken(n int) (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
+
+// RandomName returns n random lowercase base32 characters.
+//
+// Not RandomToken: that is base64url, which contains "_" and uppercase, and a
+// Kubernetes object name may hold neither. A name built from one is refused by
+// the API server, which is a failure a long way from its cause.
+func RandomName(n int) (string, error) {
+	if n < 4 || n > 32 {
+		return "", fmt.Errorf("a random name of %d characters is not useful", n)
+	}
+	// Five base32 characters per four bytes, rounded up.
+	buf := make([]byte, (n*5+7)/8+1)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("read random bytes: %w", err)
+	}
+	encoded := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(buf))
+	return encoded[:n], nil
+}

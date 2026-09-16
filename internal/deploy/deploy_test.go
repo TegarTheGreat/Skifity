@@ -9,6 +9,7 @@ import (
 
 	"skifity/internal/api"
 	"skifity/internal/crypto"
+	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/store"
 )
@@ -518,5 +519,24 @@ func TestAFinishedDeploymentNeverMovesAgain(t *testing.T) {
 	}
 	if reloaded.Status != settled {
 		t.Fatalf("a finished deployment moved from %s to %s", settled, reloaded.Status)
+	}
+}
+
+// TestAOneOffCommandIsRefusedWithoutACluster keeps the error the one people
+// will actually hit first.
+func TestAOneOffCommandIsRefusedWithoutACluster(t *testing.T) {
+	d, _, app, _ := testDeployer(t)
+
+	if _, err := d.RunOnce(t.Context(), app.ID, "  "); err == nil {
+		t.Error("an empty command was accepted")
+	}
+	_, err := d.RunOnce(t.Context(), app.ID, "npm run migrate")
+	if err == nil {
+		t.Fatal("a command was started with no cluster to start it on")
+	}
+	// It has to say the cluster is the problem, not something about names or
+	// images, or the person reads it and starts debugging their command.
+	if code := errdoc.From(err).Code; code != "cluster.unreachable" {
+		t.Fatalf("error code is %q, want cluster.unreachable", code)
 	}
 }

@@ -37,11 +37,13 @@ func (d *Deployer) RunOnce(ctx context.Context, appID, command string) (api.RunH
 		return api.RunHandle{}, err
 	}
 
-	id, err := crypto.RandomToken(6)
+	// A name, not a token: a Kubernetes object name may not hold the "_" and
+	// the uppercase that base64url produces.
+	id, err := crypto.RandomName(8)
 	if err != nil {
 		return api.RunHandle{}, err
 	}
-	name := kube.RunJobName(spec.Name, kube.RunKindOneOff, strings.ToLower(id))
+	name := kube.RunJobName(spec.Name, kube.RunKindOneOff, id)
 
 	job, err := kube.BuildRunJob(kube.RunSpec{
 		App: spec, Name: name, Command: command, Kind: kube.RunKindOneOff,
@@ -69,9 +71,14 @@ func (d *Deployer) RunLogs(ctx context.Context, appID, name string, follow bool)
 	if err != nil {
 		return nil, err
 	}
-	// The name is checked against the app rather than trusted, so one app's id
-	// cannot be used to read another app's run.
-	if !strings.HasPrefix(name, app.Slug+"-run-") && !strings.HasPrefix(name, app.Slug+"-release-") {
+	// Which app a run belongs to is read off the Job rather than guessed from
+	// its name: the name is derived from the app's slug and can be shortened
+	// when that slug is long, so a prefix check would refuse a run it made
+	// itself. Without this, an id from one app could read another app's output.
+	job, err := d.cluster.Client().Clientset().BatchV1().Jobs(env.Namespace).
+		Get(ctx, name, metav1.GetOptions{})
+	if err != nil || job.Labels["app.kubernetes.io/name"] != app.Slug ||
+		job.Labels["app.kubernetes.io/component"] != "run" {
 		return nil, errdoc.NotFound("run", name)
 	}
 

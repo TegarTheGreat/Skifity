@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from "lucide-react"
 
 import { ErrorDisplay } from "@/components/error-display"
 import { Logo } from "@/components/logo"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -152,12 +153,14 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
                       {submitting ? t("auth.signingIn") : t("auth.signIn")}
                     </Button>
                     <FieldDescription className="text-center">
-                      <details>
-                        <summary className="cursor-pointer hover:text-foreground">
+                      <Collapsible>
+                        <CollapsibleTrigger className="hover:text-foreground">
                           {t("auth.forgotPassword")}
-                        </summary>
-                        <p className="pt-2 text-left">{t("auth.forgotPasswordHelp")}</p>
-                      </details>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <p className="pt-2 text-left">{t("auth.forgotPasswordHelp")}</p>
+                        </CollapsibleContent>
+                      </Collapsible>
                     </FieldDescription>
                   </Field>
                 </>

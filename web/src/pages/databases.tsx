@@ -2,22 +2,24 @@ import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useQueries, useQuery } from "@tanstack/react-query"
-import { DatabaseIcon, PlusIcon } from "lucide-react"
+import { ChevronDownIcon, DatabaseIcon, PlusIcon, SearchIcon } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { NewDatabaseDialog } from "@/pages/project-detail"
 import { StatusBadge } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
@@ -43,6 +45,7 @@ export function DatabasesPage() {
   const { t } = useTranslation()
   const { team } = useSession()
   const [creating, setCreating] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
 
   const projects = useQuery({
     queryKey: ["projects", team?.id],
@@ -91,6 +94,55 @@ export function DatabasesPage() {
     environmentQueries.some((query) => query.isLoading) ||
     databaseQueries.some((query) => query.isLoading)
 
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return rows
+    return rows.filter(
+      ({ database, environment, project }) =>
+        database.name.toLowerCase().includes(needle) ||
+        database.engine.toLowerCase().includes(needle) ||
+        project.name.toLowerCase().includes(needle) ||
+        environment.name.toLowerCase().includes(needle),
+    )
+  }, [rows, search])
+
+  /**
+   * A database belongs to an environment, so creating one is a choice of
+   * where. With one environment there is nothing to choose and the button
+   * just opens the dialog; with several it opens a menu that says which
+   * project each belongs to.
+   */
+  const newDatabaseButton =
+    environments.length === 1 ? (
+      <Button onClick={() => setCreating(environments[0].environment.id)}>
+        <PlusIcon />
+        {t("databases.newDatabase")}
+      </Button>
+    ) : (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>
+            <PlusIcon />
+            {t("databases.newDatabase")}
+            <ChevronDownIcon className="opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel>{t("projects.environments")}</DropdownMenuLabel>
+          {environments.map(({ environment, project }) => (
+            <DropdownMenuItem
+              key={environment.id}
+              onSelect={() => setCreating(environment.id)}
+              className="flex-col items-start gap-0"
+            >
+              <span>{environment.name}</span>
+              <span className="text-xs text-muted-foreground">{project.name}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+
   if (projects.error) {
     return <ErrorDisplay error={projects.error} onRetry={() => void projects.refetch()} />
   }
@@ -100,22 +152,7 @@ export function DatabasesPage() {
       <PageHeader
         title={t("databases.title")}
         description={t("databases.emptyHelp")}
-        actions={
-          environments.length > 0 && (
-            <Select value={creating ?? ""} onValueChange={setCreating}>
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder={t("databases.newDatabase")} />
-              </SelectTrigger>
-              <SelectContent>
-                {environments.map(({ environment, project }) => (
-                  <SelectItem key={environment.id} value={environment.id}>
-                    {project.name} · {environment.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )
-        }
+        actions={environments.length > 0 && newDatabaseButton}
       />
 
       {loading ? (
@@ -144,53 +181,91 @@ export function DatabasesPage() {
           }
         />
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("common.name")}</TableHead>
-                  <TableHead>{t("databases.engine")}</TableHead>
-                  <TableHead className="hidden sm:table-cell">{t("nav.projects")}</TableHead>
-                  <TableHead>{t("common.status")}</TableHead>
-                  <TableHead className="hidden md:table-cell">{t("databases.storage")}</TableHead>
-                  <TableHead className="hidden lg:table-cell">{t("common.created")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map(({ database, environment, project }) => (
-                  <TableRow key={database.id}>
-                    <TableCell className="font-medium">
-                      <Link to={`/databases/${database.id}`} className="hover:text-primary">
-                        {database.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {database.engine} {database.engine_version}
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
-                      {project.name} · {environment.name}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        status={database.status}
-                        label={t(`databases.status.${database.status}`, {
-                          defaultValue: database.status,
-                        })}
-                      />
-                    </TableCell>
-                    <TableCell className="hidden tabular-nums md:table-cell">
-                      {database.storage_gb} GB
-                    </TableCell>
-                    <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
-                      {formatRelative(database.created_at)}
-                    </TableCell>
+        <>
+          {rows.length > 6 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <InputGroup className="max-w-xs">
+                <InputGroupAddon>
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("common.search")}
+                />
+              </InputGroup>
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                {shown.length} / {rows.length}
+              </span>
+            </div>
+          )}
+
+          <Card className="overflow-hidden py-0">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("common.name")}</TableHead>
+                    <TableHead>{t("databases.engine")}</TableHead>
+                    <TableHead className="hidden sm:table-cell">{t("nav.projects")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead className="hidden md:table-cell">{t("databases.storage")}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t("common.created")}</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {shown.length === 0 ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={6} className="p-0">
+                        <EmptyState
+                          bordered={false}
+                          icon={SearchIcon}
+                          title={t("common.noMatches")}
+                          description={t("common.noMatchesHelp")}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    shown.map(({ database, environment, project }) => (
+                      <TableRow key={database.id} className="group">
+                        <TableCell>
+                          <Link
+                            to={`/databases/${database.id}`}
+                            className="block font-medium group-hover:text-primary"
+                          >
+                            {database.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {database.engine} {database.engine_version}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
+                          {project.name} · {environment.name}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            status={database.status}
+                            label={t(`databases.status.${database.status}`, {
+                              defaultValue: database.status,
+                            })}
+                          />
+                        </TableCell>
+                        <TableCell className="hidden tabular-nums md:table-cell">
+                          {database.storage_gb} GB
+                        </TableCell>
+                        <TableCell className="hidden text-xs text-muted-foreground lg:table-cell">
+                          {formatRelative(database.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {creating && (

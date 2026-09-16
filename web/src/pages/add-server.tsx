@@ -2,16 +2,24 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ArrowLeftIcon, InfoIcon, KeyRoundIcon, LockIcon } from "lucide-react"
+import { ArrowLeftIcon, ChevronRightIcon, InfoIcon, KeyRoundIcon, LockIcon } from "lucide-react"
 
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { OperationProgress } from "@/components/operation-progress"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -169,20 +177,22 @@ export function AddServerPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="password" className="space-y-2 pt-4">
-                <Label htmlFor="password">{t("servers.authPassword")}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="off"
-                  required={authMethod === "password"}
-                />
-                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
-                  {t("servers.passwordNotStored", { product: "Skifity" })}
-                </p>
+              <TabsContent value="password" className="pt-4">
+                <Field>
+                  <FieldLabel htmlFor="password">{t("servers.authPassword")}</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="off"
+                    required={authMethod === "password"}
+                  />
+                  <FieldDescription className="flex items-start gap-1.5">
+                    <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+                    {t("servers.passwordNotStored", { product: "Skifity" })}
+                  </FieldDescription>
+                </Field>
               </TabsContent>
 
               <TabsContent value="key" className="space-y-4 pt-4">
@@ -214,41 +224,43 @@ export function AddServerPage() {
               </TabsContent>
             </Tabs>
 
-            <details className="rounded-md border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
+            <Collapsible className="rounded-md border">
+              <CollapsibleTrigger className="group/advanced flex w-full items-center gap-2 p-3 text-sm font-medium">
+                <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]/advanced:rotate-90" />
                 {t("common.showAdvanced")}
-              </summary>
-              <div className="mt-4 space-y-4">
-                <Field>
-                  <FieldLabel htmlFor="location">{t("servers.location")}</FieldLabel>
-                  <Input
-                    id="location"
-                    value={location}
-                    onChange={(event) => setLocation(event.target.value)}
-                    placeholder="Frankfurt"
-                  />
-                  <FieldDescription>{t("servers.locationHelp")}</FieldDescription>
-                </Field>
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <Label htmlFor="control-plane">{t("servers.controlPlane")}</Label>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("servers.controlPlaneHelp")}
-                    </p>
-                  </div>
-                  <Switch
-                    id="control-plane"
-                    checked={controlPlane}
-                    onCheckedChange={setControlPlane}
-                  />
-                </div>
-              </div>
-            </details>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <FieldGroup className="gap-4 border-t p-4">
+                  <Field>
+                    <FieldLabel htmlFor="location">{t("servers.location")}</FieldLabel>
+                    <Input
+                      id="location"
+                      value={location}
+                      onChange={(event) => setLocation(event.target.value)}
+                      placeholder="Frankfurt"
+                    />
+                    <FieldDescription>{t("servers.locationHelp")}</FieldDescription>
+                  </Field>
+                  <Field orientation="horizontal">
+                    <FieldContent>
+                      <FieldTitle>{t("servers.controlPlane")}</FieldTitle>
+                      <FieldDescription>{t("servers.controlPlaneHelp")}</FieldDescription>
+                    </FieldContent>
+                    <Switch
+                      id="control-plane"
+                      checked={controlPlane}
+                      onCheckedChange={setControlPlane}
+                    />
+                  </Field>
+                </FieldGroup>
+              </CollapsibleContent>
+            </Collapsible>
 
-            <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-              <div className="mb-1 font-medium text-foreground">{t("servers.requirements")}</div>
-              {t("servers.requirementsList")}
-            </div>
+            <Alert>
+              <InfoIcon />
+              <AlertTitle>{t("servers.requirements")}</AlertTitle>
+              <AlertDescription>{t("servers.requirementsList")}</AlertDescription>
+            </Alert>
 
             <Button type="submit" className="w-full" disabled={add.isPending}>
               {add.isPending && <Spinner />}

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   AlertTriangleIcon,
   CheckIcon,
+  ChevronRightIcon,
   ClipboardIcon,
   ExternalLinkIcon,
   RefreshCwIcon,
@@ -12,6 +13,7 @@ import { cn } from "cn"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ApiError, type Problem } from "@/lib/api"
 
 /**
@@ -73,19 +75,22 @@ export function ErrorDisplay({
         {problem.fix && <Field label={t("errors.howToFix")} value={problem.fix} />}
 
         {!compact && problem.context && Object.keys(problem.context).length > 0 && (
-          <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+          <Collapsible className="text-xs">
+            <CollapsibleTrigger className="group/details flex items-center gap-1 text-muted-foreground hover:text-foreground">
+              <ChevronRightIcon className="size-3.5 transition-transform group-data-[state=open]/details:rotate-90" />
               {t("errors.details")}
-            </summary>
-            <dl className="log-output mt-2 max-h-64 overflow-auto rounded-md bg-muted/50 p-3">
-              {Object.entries(problem.context).map(([key, value]) => (
-                <div key={key} className="flex gap-2">
-                  <dt className="shrink-0 text-muted-foreground">{key}:</dt>
-                  <dd className="min-w-0 break-all">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <dl className="log-output mt-2 max-h-64 overflow-auto rounded-md bg-muted/50 p-3">
+                {Object.entries(problem.context).map(([key, value]) => (
+                  <div key={key} className="flex gap-2">
+                    <dt className="shrink-0 text-muted-foreground">{key}:</dt>
+                    <dd className="min-w-0 break-all">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CollapsibleContent>
+          </Collapsible>
         )}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">

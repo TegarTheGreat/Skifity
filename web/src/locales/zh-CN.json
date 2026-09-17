@@ -500,6 +500,7 @@
       "creating": "创建中",
       "starting": "启动中",
       "running": "运行中",
+      "degraded": "已降级",
       "failed": "失败",
       "missing": "已不存在",
       "unknown": "未知"

@@ -257,23 +257,37 @@ func (m *Manager) postgresStatus(ctx context.Context, spec Spec) (string, string
 		}
 		return "unknown", err.Error(), nil
 	}
-	return interpretCNPGStatus(object), "", nil
+	status, detail := interpretCNPGStatus(object)
+	return status, detail, nil
 }
 
 // interpretCNPGStatus turns a CloudNativePG Cluster's status into ours.
-func interpretCNPGStatus(object *unstructured.Unstructured) string {
+//
+// The reason for a "degraded" at all: a three-instance cluster that has lost
+// two of them still answers every query, because the primary is one of the
+// three. Reporting that as "running" is reporting the state the operator asked
+// for rather than the one they have — and the next failure is the outage they
+// paid two extra instances to avoid. It has to be visibly different from
+// healthy, and it is not "failed", because the database is up.
+func interpretCNPGStatus(object *unstructured.Unstructured) (string, string) {
 	phase, _, _ := unstructured.NestedString(object.Object, "status", "phase")
 	ready, _, _ := unstructured.NestedInt64(object.Object, "status", "readyInstances")
+	wanted, found, _ := unstructured.NestedInt64(object.Object, "spec", "instances")
+	if !found || wanted < 1 {
+		wanted = 1
+	}
 
 	switch {
-	case ready > 0 && strings.Contains(strings.ToLower(phase), "healthy"):
-		return "running"
+	case ready > 0 && ready < wanted:
+		return "degraded", fmt.Sprintf(
+			"%d of %d instances are ready. The database is answering, but a failure of the one that is left is an outage.",
+			ready, wanted)
 	case ready > 0:
-		return "running"
+		return "running", ""
 	case strings.Contains(strings.ToLower(phase), "fail"):
-		return "failed"
+		return "failed", phase
 	default:
-		return "starting"
+		return "starting", ""
 	}
 }
 
@@ -286,10 +300,19 @@ func (m *Manager) statefulSetStatus(ctx context.Context, spec Spec) (string, str
 		}
 		return "unknown", err.Error(), nil
 	}
-	if statefulSet.Status.ReadyReplicas > 0 {
-		return "running", "", nil
+	wanted := int32(1)
+	if statefulSet.Spec.Replicas != nil && *statefulSet.Spec.Replicas > 0 {
+		wanted = *statefulSet.Spec.Replicas
 	}
-	return "starting", "Waiting for the database to accept connections.", nil
+	switch {
+	case statefulSet.Status.ReadyReplicas >= wanted:
+		return "running", "", nil
+	case statefulSet.Status.ReadyReplicas > 0:
+		return "degraded", fmt.Sprintf("%d of %d instances are ready.",
+			statefulSet.Status.ReadyReplicas, wanted), nil
+	default:
+		return "starting", "Waiting for the database to accept connections.", nil
+	}
 }
 
 // Credentials returns the connection details, decrypted.

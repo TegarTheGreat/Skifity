@@ -511,6 +511,7 @@
       "creating": "बन रहा है",
       "starting": "शुरू हो रहा है",
       "running": "चल रहा है",
+      "degraded": "कमज़ोर",
       "failed": "विफल",
       "missing": "मौजूद नहीं",
       "unknown": "अज्ञात"

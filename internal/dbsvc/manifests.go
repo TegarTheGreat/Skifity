@@ -107,6 +107,19 @@ func (s Spec) Validate() error {
 		// the odd number below it and wastes a replica.
 		return fmt.Errorf("use an odd number of PostgreSQL instances so a failover always has a majority")
 	}
+	// Replication is CloudNativePG's, not ours.
+	//
+	// BuildRedis and BuildMySQL render one replica and only one, because a
+	// StatefulSet with three gives three separate disks and three separate
+	// databases behind one Service — not a replica set, a silent split brain.
+	// Accepting the number and rendering one anyway is worse than refusing it:
+	// the panel's own record would say three while one was running, and nothing
+	// would ever say which was true.
+	if s.Engine != EnginePostgres && s.Instances > 1 {
+		return fmt.Errorf(
+			"Skifity runs one instance of %s; only PostgreSQL is replicated, because CloudNativePG does the replication and there is no operator here for the others",
+			s.Engine)
+	}
 	return nil
 }
 

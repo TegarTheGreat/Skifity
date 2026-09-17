@@ -500,6 +500,7 @@
       "creating": "Membuat",
       "starting": "Menyala",
       "running": "Berjalan",
+      "degraded": "Berkurang",
       "failed": "Gagal",
       "missing": "Hilang",
       "unknown": "Tidak diketahui"

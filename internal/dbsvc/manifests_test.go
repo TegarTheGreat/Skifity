@@ -224,7 +224,7 @@ func TestInterpretCNPGStatus(t *testing.T) {
 		object := &unstructured.Unstructured{Object: map[string]any{
 			"status": map[string]any{"phase": tc.phase, "readyInstances": tc.ready},
 		}}
-		if got := interpretCNPGStatus(object); got != tc.want {
+		if got, _ := interpretCNPGStatus(object); got != tc.want {
 			t.Errorf("phase %q with %d ready = %q, want %q", tc.phase, tc.ready, got, tc.want)
 		}
 	}
@@ -276,5 +276,72 @@ func TestDatabasePodsSatisfyRestrictedPodSecurity(t *testing.T) {
 				t.Errorf("%s: %s does not drop every capability", engine, container.Name)
 			}
 		}
+	}
+}
+
+// Asking for three Redis instances must be refused, not quietly turned into
+// one. BuildRedis and BuildMySQL render a single replica on purpose — three
+// StatefulSet replicas are three separate disks behind one Service, which is a
+// split brain and not a replica set. The danger is the silence: the panel's own
+// record would say three while one ran.
+func TestOnlyPostgresIsReplicated(t *testing.T) {
+	for _, engine := range []string{EngineRedis, EngineMySQL} {
+		t.Run(engine, func(t *testing.T) {
+			spec := Spec{
+				Name: "cache", Namespace: "acme-shop-production", Engine: engine,
+				Password: "not-a-real-password", Instances: 3,
+			}
+			spec.Defaults()
+			if err := spec.Validate(); err == nil {
+				t.Fatal("three instances were accepted for an engine that runs one")
+			}
+
+			spec.Instances = 1
+			if err := spec.Validate(); err != nil {
+				t.Fatalf("one instance was refused: %v", err)
+			}
+		})
+	}
+
+	// PostgreSQL is replicated, by CloudNativePG, so an odd count above one is
+	// the shape that works and an even one is the waste it refuses.
+	postgres := Spec{
+		Name: "db", Namespace: "acme-shop-production", Engine: EnginePostgres,
+		Password: "not-a-real-password", Instances: 3,
+	}
+	postgres.Defaults()
+	if err := postgres.Validate(); err != nil {
+		t.Fatalf("three PostgreSQL instances were refused: %v", err)
+	}
+	postgres.Instances = 2
+	if err := postgres.Validate(); err == nil {
+		t.Fatal("an even number of PostgreSQL instances was accepted")
+	}
+}
+
+// A three-instance PostgreSQL cluster with one instance left is up, and is one
+// failure from an outage. Reporting that as "running" reports what was asked
+// for rather than what is there.
+func TestADatabaseMissingItsReplicasIsNotSimplyRunning(t *testing.T) {
+	cluster := func(wanted, ready int64) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"spec":   map[string]any{"instances": wanted},
+			"status": map[string]any{"phase": "Cluster in healthy state", "readyInstances": ready},
+		}}
+	}
+
+	if status, detail := interpretCNPGStatus(cluster(3, 1)); status != "degraded" {
+		t.Errorf("one of three ready reported %q (%q), want degraded", status, detail)
+	} else if detail == "" {
+		t.Error("a degraded database says nothing about what is missing")
+	}
+	if status, _ := interpretCNPGStatus(cluster(3, 3)); status != "running" {
+		t.Errorf("a whole cluster reported %q, want running", status)
+	}
+	if status, _ := interpretCNPGStatus(cluster(1, 1)); status != "running" {
+		t.Errorf("a single healthy instance reported %q, want running", status)
+	}
+	if status, _ := interpretCNPGStatus(cluster(3, 0)); status == "running" {
+		t.Error("a cluster with nothing ready reported running")
 	}
 }

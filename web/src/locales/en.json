@@ -509,6 +509,7 @@
       "creating": "Creating",
       "starting": "Starting",
       "running": "Running",
+      "degraded": "Degraded",
       "failed": "Failed",
       "missing": "Missing",
       "unknown": "Unknown"

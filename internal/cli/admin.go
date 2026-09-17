@@ -79,6 +79,7 @@ func adminResetPassword(ctx context.Context, args []string, out io.Writer) error
 	flags.SetOutput(out)
 	databasePath := flags.String("database", "", "the panel database to use")
 	password := flags.String("password", "", "the new password; read from the terminal when not given")
+	asJSON := flags.Bool("json", false, "print the result as JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -129,9 +130,20 @@ func adminResetPassword(ctx context.Context, args []string, out io.Writer) error
 	// Anyone already signed in as this account is signed out. If the reason for
 	// the reset is that somebody else has the old password, leaving their
 	// session alive would make the reset pointless.
+	sessionsEnded := true
 	if err := db.DeleteUserSessions(ctx, user.ID); err != nil {
-		fmt.Fprintf(out, "\nThe password was changed, but existing sessions could not be ended: %s\n", err)
-		return nil
+		sessionsEnded = false
+		if !*asJSON {
+			fmt.Fprintf(out, "\nThe password was changed, but existing sessions could not be ended: %s\n", err)
+			return nil
+		}
+	}
+
+	if *asJSON {
+		return writeJSON(out, map[string]any{
+			"email": user.Email, "password_changed": true,
+			"sessions_ended": sessionsEnded, "totp_still_enabled": user.TOTPEnabled,
+		})
 	}
 
 	fmt.Fprintf(out, "\nThe password for %s has been changed, and every signed-in device was signed out.\n", user.Email)
@@ -193,6 +205,7 @@ func adminBackupDatabase(ctx context.Context, args []string, out io.Writer) erro
 	flags := flag.NewFlagSet("backup-db", flag.ContinueOnError)
 	flags.SetOutput(out)
 	databasePath := flags.String("database", "", "the panel database to copy")
+	asJSON := flags.Bool("json", false, "print the result as JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -218,8 +231,16 @@ func adminBackupDatabase(ctx context.Context, args []string, out io.Writer) erro
 
 	info, statErr := os.Stat(target)
 	size := ""
+	var bytes int64
 	if statErr == nil {
-		size = fmt.Sprintf(" (%d bytes)", info.Size())
+		bytes = info.Size()
+		size = fmt.Sprintf(" (%d bytes)", bytes)
+	}
+	if *asJSON {
+		return writeJSON(out, map[string]any{
+			"path": target, "bytes": bytes,
+			"master_key_path": masterKeyPathFor(*databasePath),
+		})
 	}
 	fmt.Fprintf(out, "\nWrote %s%s.\n", target, size)
 	fmt.Fprintf(out, "This is the whole panel except its master key. Copy %s too, and keep\n"+

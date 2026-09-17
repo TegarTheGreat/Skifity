@@ -518,3 +518,86 @@ func TestInterruptedOperationsAreMarkedFailed(t *testing.T) {
 		}
 	}
 }
+
+// TestPromotingATooSmallServerChangesNothing: promotion drains the node,
+// removes it from the cluster and uninstalls k3s before reinstalling it as a
+// control plane member. Until the check below ran first, the only thing that
+// noticed a machine too small to hold etcd was the install at the very end — by
+// which time the apps had been moved off and a working worker had been turned
+// into a machine with nothing on it.
+//
+// The panel refuses to add a control plane server below these requirements. It
+// has to refuse to make one the same way.
+func TestPromotingATooSmallServerChangesNothing(t *testing.T) {
+	p, db, keyring, teamID := testHarness(t)
+
+	// A server the panel already manages has the panel's own key on it, which
+	// is what a promotion connects with: there is no password to re-enter.
+	pair, err := sshx.GenerateKeyPair("skifity-test")
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	sshServer, err := sshx.NewTestServer(sshx.TestServerOptions{AuthorizedKey: pair.PublicKey})
+	if err != nil {
+		t.Fatalf("NewTestServer: %v", err)
+	}
+	defer sshServer.Close()
+	// Large enough for a worker, too small for a control plane: the panel asks
+	// a worker for 900 MB and 8 GB, and a control plane for 1800 MB and 20 GB.
+	sshServer.Respond("/etc/os-release", `os_id=ubuntu
+os_name=Ubuntu
+os_version=24.04
+arch=x86_64
+has_systemd=yes
+cpu_cores=1
+memory_mb=1024
+disk_gb=10
+public_ip=203.0.113.40
+has_wireguard=yes
+`, 0)
+	host, port := sshServer.Addr()
+
+	worker := store.Server{
+		TeamID: teamID, Name: "small", Host: host, SSHPort: port, SSHUser: "root",
+		Role: "worker", Status: store.ServerReady,
+	}
+	if err := db.CreateServer(t.Context(), &worker); err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	sealed, err := keyring.Seal([]byte(pair.PrivateKey), serverKeyContext(worker.ID))
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	worker.SSHKeyEnc = sealed
+	if err := db.UpdateServer(t.Context(), &worker); err != nil {
+		t.Fatalf("UpdateServer: %v", err)
+	}
+
+	op, err := p.PromoteServer(t.Context(), worker.ID)
+	if err != nil {
+		t.Fatalf("PromoteServer: %v", err)
+	}
+
+	finished := waitForOperation(t, db, op.ID)
+	if finished.Status != store.OpFailed {
+		t.Fatalf("a 1 GB server was promoted to a control plane: %s", finished.Status)
+	}
+	if !strings.HasPrefix(finished.ErrorCode, "preflight.") {
+		t.Fatalf("the failure code is %q, want a preflight code", finished.ErrorCode)
+	}
+
+	// And nothing was done to the machine: no uninstall, no reinstall. A
+	// refusal that has already wiped the node is not a refusal.
+	if sshServer.Ran("k3s-uninstall") || sshServer.Ran("get.k3s.io") {
+		t.Fatal("the server was changed before the check refused it")
+	}
+
+	// The row still says worker, so the panel and the cluster still agree.
+	current, err := db.GetServer(t.Context(), worker.ID)
+	if err != nil {
+		t.Fatalf("GetServer: %v", err)
+	}
+	if current.Role != "worker" {
+		t.Fatalf("the server is recorded as %q after a refused promotion", current.Role)
+	}
+}

@@ -151,7 +151,15 @@ database. Others join it.
 
 With one control plane server, a reboot means a few minutes of downtime for the
 cluster's control — your apps keep running. With three, losing one changes
-nothing. Any server can be promoted.
+nothing.
+
+A worker can be promoted to a control plane server, if it is big enough for one:
+2 GB of memory and 20 GB of disk, against the 1 GB and 8 GB a worker needs,
+because etcd and the API server live there too. The check runs before anything
+is touched. It did not always: promotion drains the node, removes it from the
+cluster and uninstalls Kubernetes before reinstalling it, so a machine that
+turned out to be too small used to be discovered at the end, with the apps
+already moved off and nothing left running on it.
 
 ## Secrets
 

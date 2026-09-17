@@ -34,7 +34,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "login":
 		err = cmdLogin(ctx, rest, stdout)
 	case "logout":
-		err = cmdLogout(stdout)
+		err = cmdLogout(rest, stdout)
 	case "whoami":
 		err = cmdWhoami(ctx, rest, stdout)
 	case "init":
@@ -191,13 +191,27 @@ func cmdLogin(ctx context.Context, args []string, out io.Writer) error {
 	return nil
 }
 
-func cmdLogout(out io.Writer) error {
+func cmdLogout(args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("logout", flag.ContinueOnError)
+	flags.SetOutput(out)
+	asJSON := flags.Bool("json", false, "print the result as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
 	path, err := ConfigPath()
 	if err != nil {
 		return err
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	if *asJSON {
+		// The token is deliberately reported as still valid: signing out here
+		// removes a file, and a script that assumes otherwise would leave a
+		// live token behind believing it had revoked one.
+		return writeJSON(out, map[string]any{
+			"signed_out": true, "config_removed": path, "token_revoked": false,
+		})
 	}
 	fmt.Fprintln(out, "Signed out. The token on the panel is still valid; revoke it there if you need to.")
 	return nil
@@ -365,6 +379,7 @@ func cmdOpen(ctx context.Context, args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("open", flag.ContinueOnError)
 	flags.SetOutput(out)
 	appID := flags.String("app", "", "the app id")
+	asJSON := flags.Bool("json", false, "print the result as JSON")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -383,16 +398,23 @@ func cmdOpen(ctx context.Context, args []string, out io.Writer) error {
 	if err := client.Do(ctx, "GET", "/api/apps/"+app+"/domains", nil, &response); err != nil {
 		return err
 	}
-	if len(response.Items) == 0 {
-		fmt.Fprintln(out, "This app has no domains yet.")
-		return nil
-	}
+	urls := make([]string, 0, len(response.Items))
 	for _, domain := range response.Items {
 		scheme := "http://"
 		if domain.TLS {
 			scheme = "https://"
 		}
-		fmt.Fprintf(out, "%s%s\n", scheme, domain.Hostname)
+		urls = append(urls, scheme+domain.Hostname)
+	}
+	if *asJSON {
+		return writeJSON(out, map[string]any{"app": app, "urls": urls})
+	}
+	if len(urls) == 0 {
+		fmt.Fprintln(out, "This app has no domains yet.")
+		return nil
+	}
+	for _, url := range urls {
+		fmt.Fprintln(out, url)
 	}
 	return nil
 }

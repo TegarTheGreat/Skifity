@@ -109,6 +109,12 @@ complete: the build fails if any string is missing from any of them.
 
 ## How do I update it?
 
-Settings shows the version you are running. Skifity does not check for updates —
-it does not contact any server at all — so watch the releases page. Updating
+Settings shows the version you are running. Skifity does not check for updates
+and has nothing of ours to check with, so watch the releases page. Updating
 changes the panel's own image and Kubernetes rolls it out.
+
+It does reach the internet for things you ask for — a certificate from Let's
+Encrypt, a component's manifest from GitHub, your Git provider, your backup
+bucket — and the preflight asks a public-IP service for the address of a server
+being added, because a server behind NAT cannot tell you its own. None of that
+is a call to us, and none of it carries anything about you.

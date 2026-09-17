@@ -497,6 +497,46 @@ a page that had drifted.
   struct and fails when any of them is missing from `docs/configuration.md` —
   which two of them already were.
 
+### The claims, read back one by one
+
+Every checkable claim in `README.md`, `llms.txt` and the documentation was put
+against the code. Most held — the seven provisioning steps, the password that is
+never stored and the test that scans every column for it, all fourteen MCP
+tools, all thirty-two documented API routes, the three scaling risks named by
+name, the copy-for-AI button, the placeholder check in the i18n script. These
+did not:
+
+* **"It does not contact any server but yours"**, and in the FAQ, "it does not
+  contact any server at all". Skifity reaches Let's Encrypt, GitHub for the
+  component manifests, the user's Git provider and S3 bucket — and the preflight
+  asks a public-IP service for the address of a server being added, which is the
+  one call a privacy-minded reader would actually want named. "It never phones
+  home" is true and stays; the absolute around it is gone.
+* **"Every command takes `--json`."** `open`, `logout`, `admin reset-password`
+  and `admin backup-db` did not. That claim is aimed at assistants, who read it
+  literally and get "flag provided but not defined". All four have it now, and a
+  test reads the package and fails when a command is added without it.
+* **The measured figures had drifted.** Idle memory is 35 MiB, not 34. The
+  frontend is 314 KiB gzipped across nine files, not 278 across five — the chunk
+  split in Phase 15 changed both numbers and neither was re-measured.
+* **"Any server can be promoted."** True of the code, and that was the bug — see
+  below.
+* **Every published install path points at nothing.** See the open issues.
+
+The API route table is now checked against the router itself: llms.txt is what
+an assistant reads before calling anything, and a route that moved does not read
+as a documentation mistake, it reads as the product being broken.
+
+### Promotion wiped the node before checking it
+
+The panel refuses to add a control plane server below 2 GB and 20 GB. It would
+promote one without looking. Promotion drains the node, removes it from the
+cluster and uninstalls Kubernetes before reinstalling it as a control plane
+member, so the first thing to notice a machine too small for etcd was the
+install at the very end — with the apps already moved off and a working worker
+turned into a machine with nothing on it. The check runs first now, before
+anything is touched.
+
 ### One panic used to end the panel
 
 The HTTP handlers have recovered from a panic since the beginning. Nothing else
@@ -579,9 +619,16 @@ that do not collide, since the UI picks a translation by code.
   largest single gap in this repository, it is a consequence of ADR-0010, and
   writing scripts that could not be run here would have widened it rather than
   closed it.
-* The installer references `ghcr.io/skifity/skifity`, which is not published
-  until the first tag. Until then an install needs `SKIFITY_IMAGE` pointed at an
-  image built locally with `make image`.
+* **None of the published install path exists.** `get.skifity.io` does not
+  resolve. There is no `skifity/skifity` repository on GitHub — this one is
+  `TegarTheGreat/Skifity` — so the installer's manifest fetch
+  (`raw.githubusercontent.com/skifity/skifity/main/deploy`) and its CLI download
+  (`github.com/skifity/skifity/releases`) both point at nothing, and
+  `ghcr.io/skifity/skifity` has never been pushed. This entry used to admit only
+  the image. The working path is to clone the repository, `make image`, and run
+  `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
+  makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
+  start now say so where the one-line command is.
 * The interface test needs a Chromium. It uses one already on the machine when
   `CHROMIUM_PATH` is set, and CI installs its own.
 * k3s's memory footprint is not measured; the panel's is, in

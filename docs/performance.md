@@ -9,14 +9,14 @@ Numbers that were measured, and numbers that were not. Anything not marked
 
 | | |
 |---|---|
-| Resident memory, idle | **34 MiB** |
+| Resident memory, idle | **35 MiB** |
 | Resident memory, after 400 requests | **38 MiB** |
 | Binary, stripped | 39 MiB |
-| Frontend, gzipped over the wire | 278 KiB across five files |
+| Frontend, gzipped over the wire | 314 KiB across nine files, of which 145 KiB is the panel itself |
 | Cold start to answering `/api/health` | under a second |
 
 The memory figure does not drift: 400 requests against the interface, the API
-and the documentation moved it by 4 MiB, most of which is the documentation
+and the documentation moved it by 3 MiB, most of which is the documentation
 pages being touched in the binary's read-only data for the first time. It does
 not come back down because Go's allocator keeps the arena, not because anything
 leaked.

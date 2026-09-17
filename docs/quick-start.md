@@ -11,6 +11,25 @@ waiting for things to download.
 
 ## 1. Install
 
+> **Not published yet.** `get.skifity.io` does not resolve, there is no
+> `skifity/skifity` repository on GitHub, and no image has been pushed to
+> `ghcr.io/skifity/skifity`. The command below is what the install *will* be. To
+> try it today, clone the repository and run the installer from inside it, which
+> reads the manifests from disk instead of fetching them:
+>
+> ```sh
+> git clone https://github.com/TegarTheGreat/Skifity && cd Skifity
+> make image                        # builds ghcr.io/skifity/skifity:<version>
+> sudo SKIFITY_IMAGE=ghcr.io/skifity/skifity:$(git describe --tags --always --dirty) \
+>   sh installer/install.sh
+> ```
+>
+> The image tag is local; nothing is pushed anywhere. Running the installer from
+> inside the clone is what makes it read `deploy/*.yaml` from disk rather than
+> fetching them from a repository that is not there.
+>
+> Do that on a VPS you can throw away. See the Status section of the README.
+
 SSH into the server and run:
 
 ```sh

@@ -257,7 +257,16 @@ func (p *Provisioner) PromoteServer(ctx context.Context, serverID string) (store
 		TeamID: server.TeamID, Kind: "server.promote",
 		TargetType: "server", TargetID: serverID,
 	}
-	steps := []string{"drain", "leave", StepInstallK3s, StepWaitReady}
+	// The check comes first, and it is not a formality.
+	//
+	// Promotion drains the node, removes it from the cluster and uninstalls
+	// k3s before reinstalling it as a control plane member. Without this step
+	// the first thing to notice that the machine is too small for etcd was the
+	// install at the end — by which time the apps had been moved off and a
+	// working worker had been turned into nothing at all. The panel refuses to
+	// *add* a control plane server below these requirements; it used to promote
+	// one without looking.
+	steps := []string{StepPreflight, "drain", "leave", StepInstallK3s, StepWaitReady}
 	if err := p.db.CreateOperation(ctx, &op, steps); err != nil {
 		return store.Operation{}, err
 	}
@@ -273,6 +282,27 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 
 	_ = p.db.SetOperationStatus(ctx, op.ID, store.OpRunning, "", "")
 	p.publishOperation(ctx, op.ID)
+
+	// Everything below this point changes the machine, so the check is above it.
+	check := &addState{
+		operationID: op.ID,
+		serverID:    server.ID,
+		request:     requestFromServer(server),
+	}
+	check.request.ControlPlane = true
+
+	p.setStep(ctx, op, StepPreflight, store.StepRunning, "", "")
+	if err := p.stepConnect(ctx, check); err != nil {
+		p.failStep(ctx, op, server.ID, StepPreflight, err)
+		return
+	}
+	if err := p.stepPreflight(ctx, check); err != nil {
+		check.client.Close()
+		p.failStep(ctx, op, server.ID, StepPreflight, err)
+		return
+	}
+	check.client.Close()
+	p.setStep(ctx, op, StepPreflight, store.StepSucceeded, check.lastMessage, check.lastDetail)
 
 	p.setStep(ctx, op, "drain", store.StepRunning, "", "")
 	if err := p.cordon(ctx, server, true); err != nil {

@@ -252,3 +252,52 @@ func TestLoadConfigFromEnvironment(t *testing.T) {
 		}
 	})
 }
+
+// TestEveryCommandTakesJSON: llms.txt tells an AI assistant "every command takes
+// --json", and this package's own help text says the same. An assistant reads
+// that literally and passes the flag; a command that does not define it exits
+// with "flag provided but not defined", which reads as the tool being broken
+// rather than as the document being wrong.
+//
+// `open`, `logout`, `admin reset-password` and `admin backup-db` did not have
+// it. The flag is checked by reading the source, because a command's flags are
+// defined inside the function that runs it and there is no registry to ask.
+func TestEveryCommandTakesJSON(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+
+	var source strings.Builder
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		source.Write(body)
+	}
+
+	// cmdAdmin only prints help and dispatches; its subcommands are checked.
+	exempt := map[string]bool{"cmdAdmin": true}
+
+	checked := 0
+	for _, function := range strings.Split(source.String(), "\nfunc ") {
+		name, _, found := strings.Cut(function, "(")
+		if !found || (!strings.HasPrefix(name, "cmd") && !strings.HasPrefix(name, "admin")) {
+			continue
+		}
+		if exempt[name] {
+			continue
+		}
+		checked++
+		if !strings.Contains(function, `flags.Bool("json"`) {
+			t.Errorf("%s does not define --json, and every command is documented as taking it", name)
+		}
+	}
+	if checked < 10 {
+		t.Fatalf("only %d commands were found; this test is not reading the package", checked)
+	}
+}

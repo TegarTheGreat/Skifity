@@ -244,6 +244,70 @@ Three things the audit named repeatedly as gaps rather than defects, now built:
 * **Honest components.** "Full monitoring" had an Install button that always
   failed. It says how to install it instead.
 
+### A second pass over the cluster, the backend and the frontend
+
+The first audit asked "what does this claim that it never does". This one asked
+a narrower question of the same three layers: what do the pieces do to each
+other. Everything below was found by reading the rendered objects and the
+selectors against one another, and each fix carries a test that was confirmed to
+fail against the old behaviour.
+
+* **Every followed log ended after thirty seconds.** `rest.Config`'s Timeout is
+  the HTTP client's, so it bounds the response body as well as the request. A
+  log stream is a request that succeeds at once and is then read for as long as
+  somebody watches it, so one deadline for both kinds of call cut it off. The
+  browser reconnected and replayed its tail, so live logs repeated themselves
+  every half minute and a build log stopped part way through a build that was
+  still running. There are two clients from one connection now.
+* **A quiet log stream was dropped by whatever sat in front of it**, because it
+  had no heartbeat and could not have written one while the handler was waiting
+  on the pod.
+* **An autoscaling app that could also sleep had two controllers.** It got an
+  HorizontalPodAutoscaler and an HTTPScaledObject, and KEDA creates an
+  HorizontalPodAutoscaler of its own for the second. Two of them pointed at one
+  Deployment do not divide the work: each overwrites the other's replica count
+  on every reconcile. KEDA owns the scaling when scale to zero is on, and the
+  scaling tab says so rather than leaving two fields on screen that no longer
+  decide anything.
+* **The disruption budget deadlocked a node drain.** `minAvailable: 1` permits
+  two of three instances to go at once and none at all when an autoscaled app is
+  sitting at its minimum of one — so `kubectl drain` waited forever for an
+  eviction that could never be allowed. `maxUnavailable: 1` is the promise that
+  was meant: one at a time, at every instance count.
+* **A migration's pod counted as an instance of the app.** It carried the app's
+  own selector labels, so it appeared on the instances tab as though it were
+  serving traffic, its CPU was averaged into the autoscaler's decision, and it
+  could be picked as the pod to read the app's logs from — which is how somebody
+  opens the logs tab during a nightly job and reads the job instead.
+* **A deleted app kept running.** Deleting it removed the Deployment, the
+  Service, the Ingress and the Secret, and left the scheduled commands: the
+  nightly job went on firing every night forever against an image nothing would
+  pull. The wake Service and the HTTPScaledObject were left too.
+* **A scheduled command's history was empty by morning**, because it inherited
+  the one-off's hour-long TTL, and the morning is exactly when somebody looks for
+  the run that failed.
+* **The nixpacks builder could never have built anything.** Its buildctl line
+  read `.nixpacks/Dockerfile` and no step ever wrote one. It is reachable from
+  the API and the CLI; the panel's own form only offers auto and Dockerfile,
+  which is why nobody had hit it.
+* **An app and a database could take each other's address.** They are unique
+  among themselves, share a namespace, and both render a Service under their
+  slug — so a Redis called "web" next to an app called "web" took the app's
+  Service over while its Ingress went on pointing at the name. Both creation
+  paths now refuse the collision and say what holds it.
+* **A render that threw blanked the whole panel.** React unmounts the tree when
+  nothing catches it, and what is left is a white page and a console message. On
+  a self-hosted panel that is the worst failure there is: the cluster is fine,
+  the apps are serving, and the operator cannot tell. There are two error
+  boundaries now, and the one inside the shell leaves the navigation working so
+  the person can simply go somewhere else.
+
+**What this pass did not find:** the store, the authorization layer and the
+event hub came out clean. Every team-scoped handler goes through `authorizeTeam`
+or `authorizeApp`, every write is serialised behind one mutex and every raw
+statement runs inside `db.Tx`, and the SSE handler already had its heartbeat,
+its replay and `X-Accel-Buffering`.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.
@@ -275,6 +339,13 @@ Three things the audit named repeatedly as gaps rather than defects, now built:
   `docs/backups.md` says so.
 * There is no shell into a running instance. A one-off command covers what
   people need it for and is safer; an interactive session is not built.
+* The nixpacks builder is written and unit-tested and has never been run: like
+  everything else that needs a cluster, it is checked against the rendered Job
+  and not against a build. Railpack is the default and the one the product is
+  designed around.
+* The frontend is one 917 kB bundle, 271 kB compressed, with settings and
+  templates already split out. It is served from the binary on the same host, so
+  it is not the problem it would be over a CDN, but it is not small.
 
 ## Idle resource usage
 

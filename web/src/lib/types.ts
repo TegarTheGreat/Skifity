@@ -70,6 +70,8 @@ export type Server = {
   cpu_cores: number
   memory_mb: number
   disk_gb: number
+  /** A node the panel found in the cluster rather than one it installed. */
+  adopted: boolean
   created_at: string
   last_seen_at?: string
 }

@@ -13,7 +13,6 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
-	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -88,27 +87,14 @@ func (s *Server) verifyWebhook(r *http.Request, source store.GitSource, body []b
 	}
 }
 
-// webhookSecretFor finds the secret for a connection: the GitHub App's shared
-// secret for app connections, or the per-source secret otherwise.
+// webhookSecretFor finds a connection's own webhook secret.
+//
+// There used to be a branch here for a GitHub App, reading a shared secret out
+// of the settings. Nothing could create such a connection from the panel, and
+// the rest of a GitHub App — the private key, the installation token it is
+// exchanged for — was never written, so the branch verified pushes for a kind
+// of connection that could not exist.
 func (s *Server) webhookSecretFor(r *http.Request, source store.GitSource) (string, error) {
-	if source.Kind == "github_app" {
-		sealed, encrypted, err := s.db.GetSetting(r.Context(), settings.KeyGitHubWebhookSec)
-		if err != nil {
-			return "", err
-		}
-		if sealed == "" {
-			return "", errors.New("no GitHub App webhook secret is configured")
-		}
-		if !encrypted {
-			return sealed, nil
-		}
-		plaintext, err := s.keyring.Open(sealed, settings.Context(settings.KeyGitHubWebhookSec))
-		if err != nil {
-			return "", err
-		}
-		return string(plaintext), nil
-	}
-
 	if source.ConfigEnc == "" {
 		return "", errors.New("this Git connection has no stored credentials")
 	}

@@ -430,14 +430,16 @@ func (f fakeCluster) ControlPlaneCount(context.Context) (int, error) {
 	return f.controlPlanes, f.err
 }
 
-// withCluster rebuilds the harness's server with a cluster attached.
+// withCluster rebuilds the harness's server with a cluster attached, and keeps
+// the new server reachable as h.api so a test can call a method on it directly.
 func (h *harness) withCluster(c Cluster) {
 	h.t.Helper()
-	h.server.Config.Handler = New(Options{
+	h.api = New(Options{
 		DB: h.db, Keyring: h.keyring, Auth: h.auth,
 		Hub: events.NewHub(16), Logger: slog.New(slog.DiscardHandler),
 		Cluster: c,
 	})
+	h.server.Config.Handler = h.api
 }
 
 // withDatabases rebuilds the harness's server with a database manager attached,

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
   ArrowUpCircleIcon,
+  InfoIcon,
   PencilIcon,
   RefreshCwIcon,
   ServerIcon,
@@ -16,6 +17,7 @@ import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { OperationProgress } from "@/components/operation-progress"
 import { StatusBadge } from "@/components/status-badge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -150,13 +152,13 @@ export function ServerDetailPage() {
         }
         actions={
           <>
-            {current.status === "failed" && (
+            {current.status === "failed" && !current.adopted && (
               <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate()}>
                 <RefreshCwIcon className="size-4" />
                 {t("common.retry")}
               </Button>
             )}
-            {current.role === "worker" && current.status === "ready" && (
+            {current.role === "worker" && current.status === "ready" && !current.adopted && (
               <Button
                 variant="outline"
                 disabled={promote.isPending}
@@ -244,6 +246,20 @@ export function ServerDetailPage() {
         </Card>
       )}
 
+      {/*
+        A server Skifity found rather than installed — normally the machine the
+        panel itself runs on. There is no key to it, so offering Remove would
+        offer an action that can only end in an SSH error.
+      */}
+      {current.adopted && (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{t("servers.adopted")}</AlertTitle>
+          <AlertDescription>{t("servers.adoptedHelp")}</AlertDescription>
+        </Alert>
+      )}
+
+      {!current.adopted && (
       <Card className="border-destructive/30">
         <CardHeader>
           <CardTitle className="text-base text-destructive">{t("servers.removeServer")}</CardTitle>
@@ -276,6 +292,7 @@ export function ServerDetailPage() {
           </Button>
         </CardContent>
       </Card>
+      )}
     </Page>
   )
 }

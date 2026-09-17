@@ -255,6 +255,20 @@ TOKEN=$(curl -fsS -b "$COOKIE" -H "X-Skifity-CSRF: $CSRF" -H 'Content-Type: appl
 [ -n "$TOKEN" ] || die "could not create an API token"
 ok "an API token was issued"
 
+# The first screen of a brand new install. Nothing recorded the machine Skifity
+# installs itself onto, so the panel used to open on "add your first server"
+# while looking at a cluster that was already running — and the only sensible
+# thing to do next was refused with a message about port 6443.
+SERVERS=$(api GET "/api/teams/$TEAM_ID/servers" | pick total 2>/dev/null || echo 0)
+if [ "${SERVERS:-0}" -ge 1 ] 2>/dev/null; then
+	ok "the machine this was installed on is already listed as a server, with nobody adding it"
+	api GET "/api/teams/$TEAM_ID/servers" | grep -q '"adopted": *true' \
+		&& ok "and it is marked as one Skifity found rather than one it installed" \
+		|| no "it is listed as a server Skifity installed, which it did not — the operations that need SSH will fail at the connection"
+else
+	no "a fresh install lists no servers at all, so the first screen asks the operator to add the machine they are already looking at"
+fi
+
 PROJECT_ID=$(api POST "/api/teams/$TEAM_ID/projects" '{"name":"Verify"}' | pick id) \
 	|| die "a project could not be created"
 ENV_ID=$(api GET "/api/projects/$PROJECT_ID/environments" | pick items.0.id)

@@ -210,6 +210,12 @@ func (s *Server) handleSetupComplete(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The machine this panel is installed on is already a node of the cluster,
+	// and until now nothing recorded it — so a brand new install opened on
+	// "add your first server" while looking at a cluster that was already
+	// running. See adopt.go.
+	s.adoptClusterNodes(r.Context(), team.ID)
+
 	s.setup.complete()
 	// The token file is the only copy left on disk; remove it now that it has
 	// been used, so it cannot be replayed.

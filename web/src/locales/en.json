@@ -465,7 +465,9 @@
       "attention": "Needs attention"
     },
     "needAttention_one": "{{count}} needs attention",
-    "needAttention_other": "{{count}} need attention"
+    "needAttention_other": "{{count}} need attention",
+    "adopted": "Skifity did not install this server",
+    "adoptedHelp": "It was already a node of the cluster when Skifity was installed — usually the machine the panel itself runs on. It is shown here so you can see what the cluster has, and it cannot be removed or promoted from the panel, because there is no key to it. Run the uninstaller on the machine itself to take it out."
   },
   "databases": {
     "title": "Databases",

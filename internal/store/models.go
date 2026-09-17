@@ -120,9 +120,14 @@ type Server struct {
 	MemoryMB     int          `json:"memory_mb"`
 	DiskGB       int          `json:"disk_gb"`
 	Labels       string       `json:"labels"`
-	CreatedAt    time.Time    `json:"created_at"`
-	UpdatedAt    time.Time    `json:"updated_at"`
-	LastSeenAt   time.Time    `json:"last_seen_at,omitzero"`
+	// Adopted marks a node the panel found in the cluster rather than one it
+	// installed. The machine Skifity itself runs on is the usual case. There is
+	// no key to it and nothing was put on it, so the operations that would need
+	// SSH are refused rather than attempted.
+	Adopted    bool      `json:"adopted"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	LastSeenAt time.Time `json:"last_seen_at,omitzero"`
 }
 
 // OperationStatus is the state of a long-running, resumable job.

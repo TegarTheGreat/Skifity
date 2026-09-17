@@ -1346,6 +1346,57 @@ what a member is refused, and the export. A field renamed in the API would
 otherwise leave the crosscheck quietly checking nothing, on the one machine
 nobody can run from CI.
 
+## Phase 36 — the first five minutes
+
+Three things a person who has never seen this would hit, found by walking the
+path rather than by reading the code that implements it.
+
+### The first screen told you to do what you had just done
+
+`CreateServer` was called from exactly one place — the SSH provisioner — so the
+machine Skifity installs itself onto was never recorded anywhere. A brand new
+install opened on
+
+> No servers yet — Add your first server
+
+while looking at a panel served by a cluster that was already running on that
+very machine. The only sensible thing to do next was to type its own address
+into the form, which the preflight refused with a message about something
+listening on port 6443. Correct, and no use at all as an answer.
+
+The cluster's nodes are now adopted into the team when it is created: listed
+like any other server and not managed like one. The row carries `adopted`,
+because the panel has no key to that machine and put nothing on it — so Remove,
+Retry and Promote refuse with a reason (`server.not_ours`) rather than failing
+at the SSH connection with what reads like a network problem, and the panel does
+not offer the buttons at all.
+
+### "New app" was a button on a page nobody was standing on
+
+Creating an app only existed inside a project's page, two lists deep. The quick
+start said *"Press New app"* in step 3, describing a button that is not on the
+screen it had just walked the reader to. It is now on the overview and in the
+command palette, pointing at the first project's first environment — the one
+setup creates.
+
+### Five settings that nothing read
+
+Settings → Git offered a GitHub App ID, a slug, a client id, a client secret and
+a private key. Nothing in the repository read any of them: there is no JWT
+signed with that key and no installation token exchanged for it. An operator
+could paste a private key and have nothing happen, and the client id's help text
+promised signing in with GitHub and a list of repositories to choose from,
+neither of which exists.
+
+They are gone, along with `github_app` as a connection kind and the webhook
+branch that verified pushes for a kind of connection the panel could not create.
+A personal access token is the path that works, for GitHub, GitLab and Gitea,
+and it is the one the panel offers. Same shape as Compose in phase 19 and the
+WireGuard fallback before it: the feature was the settings page.
+
+`verify.sh` now checks the first of these where it means something — a fresh
+install must list the machine it is running on, and must mark it adopted.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

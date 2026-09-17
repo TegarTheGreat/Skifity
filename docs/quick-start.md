@@ -67,13 +67,21 @@ you until you say you have.
 
 ## 3. Deploy something
 
-Press **New app**, paste a Git repository URL, and press Create.
+The overview has a **New app** button. Press it, paste a Git repository URL, and
+press Create.
 
 That is the whole form. Skifity works out how to build it, gives it a URL, and
 sets `PORT` for it to listen on. The deployment page shows the build as it
 happens.
 
 When it finishes, the app has a working address with HTTPS. Press it.
+
+> The button is there because setup already made you a project called **First
+> project** with a **Production** environment in it, and because the server you
+> installed on is already listed under **Servers** — it is the cluster's first
+> node, and Skifity records it during setup rather than asking you to add a
+> machine you are already looking at. `⌘K` has the same **New app** action from
+> anywhere.
 
 ## 4. Add your own domain
 
@@ -86,8 +94,9 @@ propagates.
 
 ## 5. Add a second server
 
-One server is fine to start. When you want more capacity, or you want the
-cluster to survive a failure, go to **Servers** and press **Add a server**.
+One server is fine to start — you already have one, the machine you installed
+on. When you want more capacity, or you want the cluster to survive a failure,
+go to **Servers** and press **Add a server**.
 
 Enter its IP address and how to sign in. Skifity does the rest: it checks the
 server, installs a key of its own, configures the firewall, joins the server to

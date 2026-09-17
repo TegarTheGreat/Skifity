@@ -51,13 +51,18 @@ func (s *Server) handleCreateGitSource(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// github_app was in this list and is not any more. A GitHub App needs a
+	// private key signed into a JWT and exchanged for an installation token,
+	// and none of that was ever written — so the kind was accepted, could not
+	// clone a private repository, and had five settings behind it that nothing
+	// read. A personal access token is the path that works.
 	switch req.Kind {
-	case "github_app", "github_pat", "gitlab", "gitea", "generic":
+	case "github_pat", "gitlab", "gitea", "generic":
 	default:
-		writeError(w, r, errdoc.BadRequest("Kind must be github_app, github_pat, gitlab, gitea or generic."))
+		writeError(w, r, errdoc.BadRequest("Kind must be github_pat, gitlab, gitea or generic."))
 		return
 	}
-	if req.Kind != "github_app" && req.Kind != "generic" && strings.TrimSpace(req.Token) == "" {
+	if req.Kind != "generic" && strings.TrimSpace(req.Token) == "" {
 		writeError(w, r, errdoc.BadRequest("A token is needed so Skifity can read the repository and register a webhook."))
 		return
 	}

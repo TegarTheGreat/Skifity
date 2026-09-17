@@ -153,6 +153,13 @@ func (s *Server) handleRemoveServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// A node the panel adopted rather than installed cannot be removed this
+	// way: there is no key to it, so the drain-and-uninstall the removal does
+	// would fail at the connection with a message about SSH.
+	if server.Adopted {
+		writeError(w, r, errdoc.ServerNotOurs(server.Name, "Removing the server"))
+		return
+	}
 	// Removing a control plane node can break etcd quorum, which takes the
 	// whole cluster down. Refuse before touching anything.
 	//
@@ -204,6 +211,10 @@ func (s *Server) handleRetryServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	if server.Adopted {
+		writeError(w, r, errdoc.ServerNotOurs(server.Name, "Retrying"))
+		return
+	}
 	if s.provisioner == nil {
 		writeError(w, r, errdoc.NotConfigured("Server provisioning", "the panel's cluster connection"))
 		return
@@ -221,6 +232,10 @@ func (s *Server) handlePromoteServer(w http.ResponseWriter, r *http.Request) {
 	server, _, err := s.authorizeServer(r, chi.URLParam(r, "serverID"), store.RoleAdmin)
 	if err != nil {
 		writeError(w, r, err)
+		return
+	}
+	if server.Adopted {
+		writeError(w, r, errdoc.ServerNotOurs(server.Name, "Promoting the server"))
 		return
 	}
 	if s.provisioner == nil {

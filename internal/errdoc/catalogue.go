@@ -180,6 +180,24 @@ func PortBlocked(host string, port int, proto string) *Problem {
 		With("host", host).With("port", itoa(port)).With("protocol", proto)
 }
 
+// ServerNotOurs reports an operation that would need to reach a server Skifity
+// did not install.
+//
+// The machine the panel runs on is adopted into the server list so that a fresh
+// install does not open on "add your first server" while looking at a cluster
+// that is already running. It is listed, and it is not managed: there is no key
+// to it, nothing was installed on it, and pretending otherwise would end in an
+// SSH failure that reads like a network problem.
+func ServerNotOurs(name, action string) *Problem {
+	return New("server.not_ours", "Skifity did not add this server").
+		WithCause("%s is a node this cluster already had when Skifity was installed — usually the machine the panel itself runs on. There is no key to it and nothing of ours was put on it.", name).
+		WithImpact("%s was not done.", action).
+		WithFix("Change this machine from the machine itself. To take it out of the cluster entirely, run the uninstaller on it: `sudo sh /usr/local/bin/skifity-uninstall`. To add capacity instead, add a second server, which Skifity does install and can manage.").
+		WithDocs("/docs/adding-servers#how-traffic-reaches-your-apps").
+		WithStatus(http.StatusConflict).
+		With("server", name)
+}
+
 // K3sInstallFailed reports a failed k3s installation on a node.
 func K3sInstallFailed(host string, exitCode int, output string) *Problem {
 	return New("k3s.install_failed", "Kubernetes could not be installed on this server").

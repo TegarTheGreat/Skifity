@@ -111,12 +111,6 @@ const (
 	KeyClusterIP         = "domains.cluster_ip"
 	KeyACMEEmail         = "domains.acme_email"
 	KeyACMEServer        = "domains.acme_server"
-	KeyGitHubAppID       = "git.github_app_id"
-	KeyGitHubAppSlug     = "git.github_app_slug"
-	KeyGitHubClientID    = "git.github_client_id"
-	KeyGitHubSecret      = "git.github_client_secret"
-	KeyGitHubPrivateKey  = "git.github_private_key"
-	KeyGitHubWebhookSec  = "git.github_webhook_secret"
 	KeyS3Endpoint        = "storage.s3_endpoint"
 	KeyS3Region          = "storage.s3_region"
 	KeyS3Bucket          = "storage.s3_bucket"
@@ -277,22 +271,16 @@ var Definitions = []Definition{
 		Kind:        KindURL,
 		Validate:    validateURL,
 	},
-	{
-		Key: KeyGitHubAppID, Label: "GitHub App ID", Group: GroupGit,
-		Help:        "From the GitHub App you created for this panel. See the setup guide for the exact settings to use.",
-		Placeholder: "123456", Kind: KindNumber, Validate: validateInt,
-	},
-	{Key: KeyGitHubAppSlug, Label: "GitHub App slug", Group: GroupGit,
-		Help: "The name in the App's URL, used to build the installation link.", Placeholder: "my-skifity"},
-	{Key: KeyGitHubClientID, Label: "GitHub client ID", Group: GroupGit,
-		Help: "Used to sign in with GitHub and to list the repositories you can deploy."},
-	{Key: KeyGitHubSecret, Label: "GitHub client secret", Group: GroupGit, Secret: true,
-		Help: "Shown once by GitHub when you generate it."},
-	{Key: KeyGitHubPrivateKey, Label: "GitHub App private key", Group: GroupGit, Secret: true,
-		Help:      "The PEM file GitHub downloads when you generate a key. Paste the whole thing, including the BEGIN and END lines.",
-		Multiline: true, Validate: validatePEM},
-	{Key: KeyGitHubWebhookSec, Label: "GitHub webhook secret", Group: GroupGit, Secret: true,
-		Help: "The secret you set on the App's webhook. Skifity rejects any push it cannot verify with this."},
+	// A GitHub App needs five more settings than these, and had them: an App
+	// ID, a slug, a client id, a client secret and a private key. Nothing ever
+	// read one of them. There is no JWT signed with that key and no
+	// installation token exchanged for it, so an operator could paste a private
+	// key and have nothing happen — and the client id's help text promised
+	// signing in with GitHub and a list of repositories to pick from, neither
+	// of which exists. They are gone until the code behind them exists.
+	//
+	// Connecting GitHub with a personal access token is the path that works,
+	// and it is the one the panel offers.
 	{
 		Key: KeyS3Endpoint, Label: "S3 endpoint", Group: GroupStorage,
 		Help:        "Any S3-compatible service works: AWS, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself.",
@@ -524,16 +512,6 @@ func validateBool(value string) error {
 		return nil
 	}
 	return errors.New("this setting is on or off")
-}
-
-func validatePEM(value string) error {
-	if value == "" {
-		return nil
-	}
-	if !strings.Contains(value, "-----BEGIN") || !strings.Contains(value, "-----END") {
-		return errors.New("paste the whole PEM file, including the BEGIN and END lines")
-	}
-	return nil
 }
 
 func validateOneOf(allowed ...string) func(string) error {

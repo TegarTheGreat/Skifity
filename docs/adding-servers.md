@@ -1,5 +1,14 @@
 # Adding servers
 
+You already have one. The machine you installed Skifity on is the cluster's
+first node, and it is listed under **Servers** from the moment you finish
+setup — Skifity records it rather than asking you to add a machine you are
+already looking at. It is marked as one Skifity found rather than one it
+installed, which is why it has no Remove or Promote button: there is no key to
+it. To take it out of the cluster, run the uninstaller on the machine itself.
+
+Everything below is about the *second* server.
+
 You give Skifity an IP address and a way to sign in. It does the rest.
 
 ## What it does, step by step

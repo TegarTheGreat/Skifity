@@ -456,7 +456,9 @@
       "ready": "就绪",
       "attention": "需要处理"
     },
-    "needAttention_other": "{{count}} 台需要处理"
+    "needAttention_other": "{{count}} 台需要处理",
+    "adopted": "这台服务器不是 Skifity 装的",
+    "adoptedHelp": "安装 Skifity 时它已经是集群的节点了——通常就是面板自己运行的那台机器。这里列出它是为了让你看清集群的全貌；面板无法移除或提升它，因为没有通往它的密钥。要把它移出集群，请在那台机器上运行卸载程序。"
   },
   "databases": {
     "title": "数据库",

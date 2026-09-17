@@ -41,6 +41,7 @@ import {
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useEvents } from "@/hooks/use-events"
+import { useFirstEnvironment } from "@/hooks/use-first-environment"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatCPU, formatMemory, formatRelative } from "@/lib/format"
@@ -100,6 +101,7 @@ export function DashboardPage() {
   const loading = servers.isLoading || cluster.isLoading
 
   const firstRun = !loading && serverItems.length === 0
+  const firstEnvironment = useFirstEnvironment(!firstRun)
 
   return (
     <Page>
@@ -116,12 +118,27 @@ export function DashboardPage() {
                 {t("servers.addServer")}
               </Link>
             </Button>
-            <Button asChild>
-              <Link to="/projects">
-                <PlusIcon />
-                {t("projects.newProject")}
-              </Link>
-            </Button>
+            {/*
+              Deploying is the thing people came here to do, and until now the
+              only way in was two lists deep: Projects, then the project, then
+              New app. The quick start even told them to press a button that is
+              not on this screen.
+            */}
+            {firstEnvironment ? (
+              <Button asChild>
+                <Link to={`/environments/${firstEnvironment}/apps/new`}>
+                  <PlusIcon />
+                  {t("apps.newApp")}
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild>
+                <Link to="/projects">
+                  <PlusIcon />
+                  {t("projects.newProject")}
+                </Link>
+              </Button>
+            )}
           </>
         }
       />

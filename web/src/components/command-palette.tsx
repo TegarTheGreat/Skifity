@@ -21,6 +21,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
+import { useFirstEnvironment } from "@/hooks/use-first-environment"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import type { App, Project, Server } from "@/lib/types"
@@ -74,6 +75,8 @@ export function CommandPalette({
     },
     enabled: open && Boolean(projects?.items.length),
   })
+
+  const firstEnvironment = useFirstEnvironment(open)
 
   const go = (path: string) => {
     onOpenChange(false)
@@ -175,6 +178,12 @@ export function CommandPalette({
 
         <CommandSeparator />
         <CommandGroup heading={t("common.actions")}>
+          {firstEnvironment && (
+            <CommandItem onSelect={() => go(`/environments/${firstEnvironment}/apps/new`)}>
+              <PlusIcon />
+              {t("apps.newApp")}
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => go("/servers/new")}>
             <PlusIcon className="size-4" />
             {t("servers.addServer")}

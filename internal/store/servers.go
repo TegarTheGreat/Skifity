@@ -10,7 +10,7 @@ import (
 
 const serverColumns = `id, team_id, name, host, ssh_port, ssh_user, ssh_key_enc, host_key, role,
 	status, status_detail, node_name, external_ip, internal_ip, os_info, arch,
-	cpu_cores, memory_mb, disk_gb, labels, created_at, updated_at, last_seen_at`
+	cpu_cores, memory_mb, disk_gb, labels, adopted, created_at, updated_at, last_seen_at`
 
 func scanServer(row interface{ Scan(...any) error }) (Server, error) {
 	var s Server
@@ -18,7 +18,8 @@ func scanServer(row interface{ Scan(...any) error }) (Server, error) {
 	var lastSeen sql.NullString
 	err := row.Scan(&s.ID, &s.TeamID, &s.Name, &s.Host, &s.SSHPort, &s.SSHUser, &s.SSHKeyEnc,
 		&s.HostKey, &s.Role, &s.Status, &s.StatusDetail, &s.NodeName, &s.ExternalIP, &s.InternalIP,
-		&s.OSInfo, &s.Arch, &s.CPUCores, &s.MemoryMB, &s.DiskGB, &s.Labels, &created, &updated, &lastSeen)
+		&s.OSInfo, &s.Arch, &s.CPUCores, &s.MemoryMB, &s.DiskGB, &s.Labels, &s.Adopted,
+		&created, &updated, &lastSeen)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return s, ErrNotFound
@@ -49,11 +50,12 @@ func (db *DB) CreateServer(ctx context.Context, s *Server) error {
 	now := Now()
 	_, err := db.Exec(ctx, `INSERT INTO servers
 		(id, team_id, name, host, ssh_port, ssh_user, ssh_key_enc, host_key, role, status, status_detail,
-		 node_name, external_ip, internal_ip, os_info, arch, cpu_cores, memory_mb, disk_gb, labels, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 node_name, external_ip, internal_ip, os_info, arch, cpu_cores, memory_mb, disk_gb, labels,
+		 adopted, created_at, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		s.ID, s.TeamID, s.Name, s.Host, s.SSHPort, s.SSHUser, s.SSHKeyEnc, s.HostKey,
 		defaultStr(s.Role, "worker"), s.Status, s.StatusDetail, s.NodeName, s.ExternalIP, s.InternalIP,
-		s.OSInfo, s.Arch, s.CPUCores, s.MemoryMB, s.DiskGB, s.Labels, now, now)
+		s.OSInfo, s.Arch, s.CPUCores, s.MemoryMB, s.DiskGB, s.Labels, s.Adopted, now, now)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
 			return fmt.Errorf("%w: %s is already registered as a server", ErrConflict, s.Host)

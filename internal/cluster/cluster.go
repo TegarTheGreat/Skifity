@@ -433,6 +433,16 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 		spec.Domains = append(spec.Domains, kube.DomainSpec{Hostname: d.Hostname, Path: d.Path, TLS: d.TLS})
 	}
 
+	// An app with the firewall switched on gets the guard's middleware in
+	// front of its Ingress. Read here rather than passed in, because every
+	// caller that renders an app's objects has to get this right and one that
+	// forgot would be an app whose rules quietly stopped being applied.
+	protected, err := c.db.AppHasFirewall(ctx, app.ID)
+	if err != nil {
+		return spec, err
+	}
+	spec.Protected = protected
+
 	// The issuer only exists once an ACME email has been configured, and
 	// referencing a missing issuer leaves certificates stuck forever.
 	if email, _, err := c.db.GetSetting(ctx, settings.KeyACMEEmail); err == nil && email != "" {

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -123,6 +124,10 @@ const (
 	KeyACMEEmail             = "domains.acme_email"
 	KeyACMEServer            = "domains.acme_server"
 	KeyCloudflareTunnelToken = "domains.cloudflare_tunnel_token"
+	KeyTrustedProxies        = "domains.trusted_proxies"
+	KeyGeoCountryURL         = "domains.geo_country_url"
+	KeyGeoASNURL             = "domains.geo_asn_url"
+	KeyGeoEnabled            = "domains.geo_enabled"
 	KeyS3Endpoint            = "storage.s3_endpoint"
 	KeyS3Region              = "storage.s3_region"
 	KeyS3Bucket              = "storage.s3_bucket"
@@ -292,6 +297,36 @@ var Definitions = []Definition{
 		Placeholder: "eyJhIjoi...",
 		Validate:    validateCloudflareTunnelToken,
 	},
+	{
+		Key: KeyTrustedProxies, Label: "Trusted proxies", Group: GroupDomains,
+		Help: "Address ranges in front of this cluster that may say who a visitor is. " +
+			"The pod and service networks are trusted already; add a load balancer's range here if you have one. " +
+			"Get this wrong in the other direction and a visitor can choose the address your firewall rules judge them by, " +
+			"so add only ranges you control.",
+		Placeholder: "203.0.113.0/24, 198.51.100.9",
+		Validate:    validateCIDRList,
+	},
+	{
+		Key: KeyGeoEnabled, Label: "Look up a visitor's country and network", Group: GroupDomains,
+		Help: "On by default. The firewall downloads DB-IP's free monthly databases, which need no account, so that a rule " +
+			"can name a country or a network. Turn it off on a cluster with no way out to the internet, or if you would rather " +
+			"nothing was downloaded — a rule about a country cannot then be saved, which is better than one that is quietly skipped.",
+		Kind: KindBool, Validate: validateBool,
+	},
+	{
+		Key: KeyGeoCountryURL, Label: "Country database", Group: GroupDomains,
+		Help: "Where the firewall's country data comes from, in MaxMind's .mmdb format. " +
+			"Leave empty for DB-IP's free monthly file, which needs no account. A %s in the address is replaced with the month. " +
+			"Point it at your own copy, or at a MaxMind download, if you would rather.",
+		Placeholder: "https://example.com/GeoLite2-Country.mmdb",
+		Validate:    validateGeoURL,
+	},
+	{
+		Key: KeyGeoASNURL, Label: "Network database", Group: GroupDomains,
+		Help:        "The same, for the network a visitor's address belongs to, which is what an AS number rule tests.",
+		Placeholder: "https://example.com/GeoLite2-ASN.mmdb",
+		Validate:    validateGeoURL,
+	},
 	// A GitHub App needs five more settings than these, and had them: an App
 	// ID, a slug, a client id, a client secret and a private key. Nothing ever
 	// read one of them. There is no JWT signed with that key and no
@@ -415,6 +450,8 @@ var Components = []Component{
 		Description: "Stops idle apps and starts them again on the first request. The HTTP add-on is beta upstream.", MemoryMB: 180},
 	{Name: "longhorn", Title: "Cross-node storage", Optional: true,
 		Description: "Replicates volumes between servers so an app with storage survives a node failure. Uses a noticeable amount of memory on every node.", MemoryMB: 700},
+	{Name: "firewall", Title: "Firewall", Optional: true,
+		Description: "Rules on who may reach an app: by address, by country, by network, by path or by header, combined with and and or. Needs Traefik, which k3s installs by default.", MemoryMB: 128},
 	{Name: "cloudflare-tunnel", Title: "Cloudflare tunnel", Optional: true,
 		Description: "Puts your apps on the internet with no public IP and no port open, through Cloudflare. Needs a tunnel token in Settings, under Domains and HTTPS.", MemoryMB: 64},
 	{Name: "monitoring", Title: "Full monitoring", Optional: true, External: true,
@@ -494,6 +531,48 @@ func validateCloudflareTunnelToken(value string) error {
 
 // tunnelIDPattern is a UUID, which is what the dashboard's own URL contains.
 var tunnelIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// validateCIDRList refuses a trusted-proxy list that would not do what it says.
+//
+// This setting decides whose word is taken for a visitor's address, so a typo
+// here is a rule judging the wrong person. The reader that runs on every
+// request drops what it cannot parse rather than failing a site; this is the
+// half that tells the operator, while they are looking at the box.
+func validateCIDRList(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	for _, field := range strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\n' || r == '\t'
+	}) {
+		if _, err := netip.ParsePrefix(field); err == nil {
+			continue
+		}
+		if _, err := netip.ParseAddr(field); err == nil {
+			continue
+		}
+		return fmt.Errorf("%q is not an address or an address range; they look like 203.0.113.0/24", field)
+	}
+	return nil
+}
+
+// validateGeoURL accepts a URL that may carry a %s for the month.
+//
+// url.Parse is happy with a %s and net/url's own escaping is not, so the
+// placeholder is taken out before the address is checked rather than being
+// reported as an invalid escape.
+func validateGeoURL(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if err := validateURL(strings.ReplaceAll(value, "%s", "2026-01")); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(value, ".mmdb") && !strings.HasSuffix(value, ".mmdb.gz") {
+		return errors.New("that is not a database file; it should end in .mmdb or .mmdb.gz")
+	}
+	return nil
+}
 
 func validateURL(value string) error {
 	if value == "" {

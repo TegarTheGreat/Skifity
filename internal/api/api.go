@@ -235,6 +235,8 @@ func (s *Server) routes() chi.Router {
 				app.Patch("/", s.handleUpdateApp)
 				app.Delete("/", s.handleDeleteApp)
 				app.Get("/status", s.handleAppStatus)
+				app.Get("/firewall", s.handleGetFirewall)
+				app.Put("/firewall", s.handleSetFirewall)
 				app.Post("/deploy", s.handleDeployApp)
 				app.Get("/deployments", s.handleListDeployments)
 				app.Get("/deployments/{deploymentID}", s.handleGetDeployment)

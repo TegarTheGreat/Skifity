@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"skifity/internal/kube"
 	"skifity/internal/settings"
 )
 
@@ -85,12 +86,16 @@ type Problem struct {
 	Fatal bool `json:"fatal"`
 }
 
-// The networks k3s gives pods and services, which are its defaults and which
-// Skifity does not override. The firewall has to trust them wholesale: traffic
-// between pods is not on a fixed port and cannot be enumerated.
+// The networks k3s gives pods and services.
+//
+// They live in internal/kube because two things need them and neither may
+// import the other: the server firewall here, which has to trust them wholesale
+// because traffic between pods is not on a fixed port and cannot be enumerated,
+// and the request firewall, which has to know which addresses are its own
+// proxies rather than a visitor.
 const (
-	PodCIDR     = "10.42.0.0/16"
-	ServiceCIDR = "10.43.0.0/16"
+	PodCIDR     = kube.PodCIDR
+	ServiceCIDR = kube.ServiceCIDR
 )
 
 // ClusterPorts are the ports cluster members must reach on each other.

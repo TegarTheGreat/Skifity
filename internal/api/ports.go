@@ -104,6 +104,10 @@ type Cluster interface {
 	Manifests(ctx context.Context, app store.App, env store.Environment) (string, error)
 	// InstallComponent installs an optional add-on on first use.
 	InstallComponent(ctx context.Context, name string) error
+	// RefreshFirewall writes the current rules into the cluster and puts the
+	// guard's middleware in front of every protected app. Saving a rule that
+	// never reaches the cluster is a firewall that exists only in SQLite.
+	RefreshFirewall(ctx context.Context) error
 	// RefreshCloudflareTunnel re-applies the tunnel token from Settings, so
 	// that changing it in the panel changes what the connectors are using.
 	RefreshCloudflareTunnel(ctx context.Context) error

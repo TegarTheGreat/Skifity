@@ -15,6 +15,9 @@ import (
 
 	"skifity/internal/cli"
 	"skifity/internal/config"
+	"skifity/internal/guard"
+	"skifity/internal/kube"
+	"skifity/internal/logging"
 	"skifity/internal/mcpserver"
 	"skifity/internal/serverapp"
 	"skifity/internal/version"
@@ -41,6 +44,12 @@ func main() {
 	case "mcp":
 		if err := runMCP(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "\n%s mcp: %s\n\n", version.Binary, err)
+			os.Exit(1)
+		}
+
+	case "edge-guard":
+		if err := runGuard(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "\n%s edge-guard: %s\n\n", version.Binary, err)
 			os.Exit(1)
 		}
 
@@ -98,4 +107,46 @@ func runMCP(ctx context.Context) error {
 			"or set SKIFITY_CONFIG to a config file that has one", err, version.Binary)
 	}
 	return mcpserver.New(cfg).Run(ctx)
+}
+
+// runGuard starts the request firewall.
+//
+// It is not a command anybody types: the panel puts it in a Deployment, and the
+// environment it reads is set there. It is in this binary rather than a second
+// one because there is one artifact to build, sign and ship — ADR-0011 — and
+// because a guard that could drift from the panel's own rule format would be a
+// firewall that stops matching after an upgrade.
+//
+// Nothing here talks to the panel, the database or the Kubernetes API. The
+// rules arrive as a file.
+func runGuard(ctx context.Context) error {
+	rules := os.Getenv("SKIFITY_GUARD_RULES")
+	if rules == "" {
+		return fmt.Errorf("SKIFITY_GUARD_RULES is not set, so there are no rules to enforce")
+	}
+	address := os.Getenv("SKIFITY_GUARD_ADDRESS")
+	if address == "" {
+		address = ":9000"
+	}
+	data := os.Getenv("SKIFITY_GUARD_DATA")
+	if data == "" {
+		data = os.TempDir()
+	}
+
+	g := guard.New(guard.Options{
+		ConfigPath:  rules,
+		DataDir:     data,
+		PodCIDR:     envOr("SKIFITY_POD_CIDR", kube.PodCIDR),
+		ServiceCIDR: envOr("SKIFITY_SERVICE_CIDR", kube.ServiceCIDR),
+		Log:         logging.New(os.Stdout, os.Getenv("SKIFITY_LOG_FORMAT"), os.Getenv("SKIFITY_LOG_LEVEL")),
+	})
+	defer g.Close()
+	return g.Run(ctx, address)
+}
+
+func envOr(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }

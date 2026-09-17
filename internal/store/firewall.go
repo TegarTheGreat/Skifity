@@ -96,6 +96,36 @@ func (db *DB) ProtectedHostnames(ctx context.Context) ([]ProtectedHostname, erro
 	return out, rows.Err()
 }
 
+// ProtectedNamespaces lists the namespaces holding at least one app whose
+// firewall is switched on, which is where the guard's middleware has to exist.
+//
+// Distinct namespaces rather than apps: a middleware is one object per
+// namespace however many protected apps are in it, and applying the same object
+// once per app would be the same work done four times.
+func (db *DB) ProtectedNamespaces(ctx context.Context) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT DISTINCT e.namespace
+		FROM app_firewalls f
+		JOIN apps a ON a.id = f.app_id
+		JOIN environments e ON e.id = a.environment_id
+		WHERE f.enabled = 1
+		ORDER BY e.namespace`)
+	if err != nil {
+		return nil, fmt.Errorf("list the protected namespaces: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var namespace string
+		if err := rows.Scan(&namespace); err != nil {
+			return nil, fmt.Errorf("scan a protected namespace: %w", err)
+		}
+		out = append(out, namespace)
+	}
+	return out, rows.Err()
+}
+
 // AppHasFirewall reports whether an app's Ingress needs the guard's middleware.
 func (db *DB) AppHasFirewall(ctx context.Context, appID string) (bool, error) {
 	var enabled bool

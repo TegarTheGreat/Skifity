@@ -401,3 +401,16 @@ func BuildGuardMiddleware(namespace, systemNamespace string) *unstructured.Unstr
 		},
 	}}
 }
+
+// The networks k3s gives pods and services, which are its defaults and which
+// Skifity does not override.
+//
+// They are here rather than beside either user because two packages need them
+// and neither may import the other: the server firewall, which has to trust
+// them wholesale because traffic between pods is not on a fixed port and cannot
+// be enumerated, and the request firewall, which has to know which addresses
+// are its own proxies rather than a visitor's.
+const (
+	PodCIDR     = "10.42.0.0/16"
+	ServiceCIDR = "10.43.0.0/16"
+)

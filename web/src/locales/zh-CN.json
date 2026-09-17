@@ -58,7 +58,11 @@
     "cannotBeUndone": "此操作无法撤销。",
     "keepGoing": "继续",
     "noMatches": "没有匹配项",
-    "noMatchesHelp": "试试更短的搜索词，或清除筛选。"
+    "noMatchesHelp": "试试更短的搜索词，或清除筛选。",
+    "more": "更多",
+    "toggleSidebar": "显示或隐藏侧边栏",
+    "skipToContent": "跳到主要内容",
+    "breadcrumb": "导航路径"
   },
   "nav": {
     "overview": "总览",

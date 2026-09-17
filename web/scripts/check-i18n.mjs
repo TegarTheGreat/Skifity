@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const localesDir = join(here, "..", "src", "locales")
+const srcDir = join(here, "..", "src")
 
 /** The language every other language is checked against. */
 const SOURCE = "en"
@@ -175,6 +176,52 @@ for (const code of available) {
     }
   }
 }
+
+// A string only a screen reader hears is still a user-visible string.
+//
+// These are the ones that stay English in a panel shipping five languages,
+// because nobody sighted ever sees them: the close button's label, the
+// spinner's, the sidebar toggle's. They came in with vendored components and
+// went unnoticed until somebody went looking. This is what stops them coming
+// back in with the next one.
+const SCREEN_READER = [
+  // <span className="sr-only">Close</span>
+  /className="sr-only"[^>]*>\s*[A-Za-z]/g,
+  // aria-label="Loading"
+  /aria-label="[A-Za-z]/g,
+]
+
+function checkSourceStrings() {
+  for (const file of walk(srcDir)) {
+    if (!file.endsWith(".tsx")) continue
+    const contents = readFileSync(file, "utf8")
+    for (const pattern of SCREEN_READER) {
+      for (const match of contents.matchAll(pattern)) {
+        const line = contents.slice(0, match.index).split("\n").length
+        problems.push(
+          `${file.slice(srcDir.length + 1)}:${line} has a hardcoded label a screen ` +
+            `reader reads out: ${match[0].trim()}… — use t("…") instead`,
+        )
+      }
+    }
+  }
+}
+
+function* walk(directory) {
+  let entries = []
+  try {
+    entries = readdirSync(directory, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    const full = join(directory, entry.name)
+    if (entry.isDirectory()) yield* walk(full)
+    else yield full
+  }
+}
+
+checkSourceStrings()
 
 if (problems.length > 0) {
   console.error(`\n${problems.length} translation problem(s):\n`)

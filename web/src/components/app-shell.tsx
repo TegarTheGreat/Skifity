@@ -74,15 +74,28 @@ import type { Project, Server } from "@/lib/types"
  * remembered open state without any of that being written here.
  */
 export function AppShell() {
+  const { t } = useTranslation()
   const { paletteOpen, setPaletteOpen } = usePaletteShortcut()
   const location = useLocation()
 
   return (
     <SidebarProvider>
+      {/*
+        Visible only once it has focus. Without it, a keyboard reaches the page
+        by tabbing through every link in the sidebar, on every navigation — the
+        sidebar is the same on all of them, so it is the same twenty presses
+        every time.
+      */}
+      <a
+        href="#content"
+        className="sr-only z-50 rounded-md bg-primary px-4 py-2 text-primary-foreground focus:not-sr-only focus:absolute focus:top-3 focus:left-3"
+      >
+        {t("common.skipToContent")}
+      </a>
       <AppSidebar />
       <SidebarInset>
         <Header onOpenPalette={() => setPaletteOpen(true)} />
-        <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
+        <main id="content" tabIndex={-1} className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
           {/*
             Inside the shell rather than around it, so a page that throws
             leaves the sidebar, the header and the command palette working and

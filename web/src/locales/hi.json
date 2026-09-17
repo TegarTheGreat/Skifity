@@ -65,7 +65,11 @@
     "cannotBeUndone": "इसे वापस नहीं लिया जा सकता।",
     "keepGoing": "आगे बढ़ें",
     "noMatches": "उससे कुछ मेल नहीं खाता",
-    "noMatchesHelp": "छोटी खोज आज़माएँ, या फ़िल्टर हटाएँ।"
+    "noMatchesHelp": "छोटी खोज आज़माएँ, या फ़िल्टर हटाएँ।",
+    "more": "और",
+    "toggleSidebar": "साइडबार दिखाएँ या छिपाएँ",
+    "skipToContent": "सामग्री पर जाएँ",
+    "breadcrumb": "पथ-सूची"
   },
   "nav": {
     "overview": "अवलोकन",

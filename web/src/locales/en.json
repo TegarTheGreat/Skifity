@@ -65,7 +65,11 @@
     "cannotBeUndone": "This cannot be undone.",
     "keepGoing": "Go ahead",
     "noMatches": "Nothing matches that",
-    "noMatchesHelp": "Try a shorter search, or clear the filter."
+    "noMatchesHelp": "Try a shorter search, or clear the filter.",
+    "more": "More",
+    "toggleSidebar": "Show or hide the sidebar",
+    "skipToContent": "Skip to content",
+    "breadcrumb": "Breadcrumb"
   },
   "nav": {
     "overview": "Overview",

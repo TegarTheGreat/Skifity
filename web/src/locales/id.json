@@ -58,7 +58,11 @@
     "cannotBeUndone": "Tindakan ini tidak bisa dibatalkan.",
     "keepGoing": "Lanjutkan",
     "noMatches": "Tidak ada yang cocok",
-    "noMatchesHelp": "Coba kata kunci yang lebih pendek, atau hapus filternya."
+    "noMatchesHelp": "Coba kata kunci yang lebih pendek, atau hapus filternya.",
+    "more": "Lainnya",
+    "toggleSidebar": "Tampilkan atau sembunyikan bilah sisi",
+    "skipToContent": "Lewati ke konten",
+    "breadcrumb": "Jejak navigasi"
   },
   "nav": {
     "overview": "Ringkasan",

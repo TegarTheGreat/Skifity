@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { FolderIcon, PlusIcon } from "lucide-react"
@@ -106,6 +106,7 @@ function NewProjectDialog({
 }) {
   const { t } = useTranslation()
   const { team } = useSession()
+  const navigate = useNavigate()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
 
@@ -115,11 +116,15 @@ function NewProjectDialog({
         name: name.trim(),
         description: description.trim(),
       }),
-    onSuccess: () => {
+    // Straight into the project, the way creating a database goes straight to
+    // the database. Nobody makes a project to look at a list of projects: the
+    // next thing is always the first app, and that button is in there.
+    onSuccess: (project) => {
       void queryClient.invalidateQueries({ queryKey: ["projects", team?.id] })
       setName("")
       setDescription("")
       onOpenChange(false)
+      navigate(`/projects/${project.id}`)
     },
   })
 

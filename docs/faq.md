@@ -47,6 +47,17 @@ roughly 700 MB between them on a fresh install; everything else is your apps.
 
 Each optional component says what it costs before you install it.
 
+## Which operating systems does it run on?
+
+Servers need systemd, because k3s is installed as a unit. Ubuntu 24.04 and
+Debian 12 are the tested pair; AlmaLinux, Rocky, RHEL, CentOS, Fedora, openSUSE,
+SLES and Arch are expected to work and are not tested. Alpine will not work —
+it uses OpenRC — and neither will a container with no init system. x86-64 and
+arm64, nothing else.
+
+The CLI runs on Linux, macOS and Windows, on both architectures, as one static
+file. See the quick start for the full table.
+
 ## Can I use my existing Kubernetes cluster?
 
 Not yet. Skifity installs and manages k3s itself. Pointing it at a cluster

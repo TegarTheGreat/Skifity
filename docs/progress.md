@@ -1449,6 +1449,51 @@ rather than copied into state, and left empty when there are several, because
 installing into the wrong environment is not a mistake anybody notices
 straight away. The label said "Environments"; it now says where it is going.
 
+## Phase 38 — which systems, asked properly
+
+"Does it work on every operating system" turns out to be four questions, and
+three of them had an honest answer already. The fourth did not.
+
+### Alpine was on the list of distributions that work, and could never work
+
+`knownWorkingDistros` said AlmaLinux, Rocky, RHEL, CentOS, Fedora, openSUSE,
+SLES, Alpine, Arch. Four lines below it, a missing systemd is a **fatal**
+problem — and Alpine runs OpenRC. So the file promised a distribution and
+refused it in the same breath. k3s itself supports OpenRC; Skifity does not,
+because it manages the unit with `systemctl`.
+
+Alpine is off the list, the refusal now names it and OpenRC by name, and a test
+walks every remaining entry and fails if one of them is refused on an otherwise
+healthy server. The same shape as the Compose claim and the WireGuard fallback:
+a list is a promise.
+
+### There was no CLI for Windows, for no reason
+
+`goos: [linux, darwin]`. The binary is pure Go with cgo off, `os.UserConfigDir`
+finds `%AppData%` by itself, and `GOOS=windows go build ./...` compiles clean on
+the first try — it had simply never been asked for. Somebody deploying from a
+Windows laptop needs the CLI as much as anybody, and the CLI, the MCP server and
+the panel are one file. Six binaries now: linux, darwin and windows, amd64 and
+arm64, with `.exe` spelled out in the release's name template rather than left
+to a default.
+
+The panel half is still Linux only, which is not a gap: what it installs is
+Linux.
+
+### `make image` built for whatever machine ran it
+
+The release builds `linux/amd64` and `linux/arm64` through buildx. `make image`
+— the path everybody uses, since no release exists — passed no platform at all,
+so an image built on an amd64 laptop for an arm64 VPS starts with "exec format
+error". `PLATFORM=linux/arm64 make image` now does the obvious thing.
+
+### And the answer, written down
+
+`docs/quick-start.md` has the table: tested, expected-to-work, will-not-work,
+and which architectures, for servers and for the CLI separately. `docs/faq.md`
+has the short version. It was knowledge somebody had to read three Go files to
+assemble.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

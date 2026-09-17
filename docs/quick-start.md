@@ -9,6 +9,36 @@ waiting for things to download.
   8 GB of free disk, and root access over SSH. Any VPS will do.
 * Optionally, a domain name. Skifity works without one.
 
+### Which systems
+
+**The servers.** Skifity installs k3s as a systemd unit and manages it with
+`systemctl`, so systemd is the one hard requirement.
+
+| | |
+|---|---|
+| **Tested** | Ubuntu 24.04, Debian 12 |
+| **Expected to work, not tested** | AlmaLinux, Rocky, RHEL, CentOS, Fedora, openSUSE, SLES, Arch |
+| **Will not work** | Alpine, or anything else on OpenRC — no systemd. An unprivileged LXC or a Docker container, for the same reason. |
+| **Architectures** | x86-64 and arm64. Nothing else, and the preflight says so before it changes anything. |
+
+Adding a server checks all of this before touching the machine, and says which
+requirement was not met rather than failing partway through an install.
+
+**Your own machine**, for the `skifity` CLI and the MCP server — which are the
+same binary as the panel:
+
+| | |
+|---|---|
+| Linux | x86-64, arm64 |
+| macOS | Intel, Apple Silicon |
+| Windows | x86-64, arm64 |
+
+The CLI needs nothing installed: one static file, no libc, no runtime. The panel
+half of that binary is only meant to run on Linux, because what it installs is
+Linux.
+
+**Anyone using the panel** needs a browser. It is a web page.
+
 ## 1. Install
 
 > **Not published yet.** `get.skifity.io` does not resolve, there is no

@@ -25,7 +25,12 @@ builds:
       # Pure Go all the way down: the SQLite driver needs no libc, so one
       # binary runs on Alpine, on Debian and on a distroless image.
       - CGO_ENABLED=0
-    goos: [linux, darwin]
+    # Windows is here because there is no reason for it not to be: the binary
+    # is pure Go with cgo off, os.UserConfigDir finds %AppData% on its own, and
+    # somebody deploying from a Windows laptop needs the CLI as much as anybody.
+    # The panel is not meant to run there — it installs k3s, which is Linux —
+    # but the CLI and the MCP server are the same file.
+    goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags:
@@ -40,7 +45,10 @@ archives:
   # expects is what the binary is published as.
   - id: binaries
     formats: [binary]
-    name_template: "skifity-{{ .Os }}-{{ .Arch }}"
+    # Spelled out rather than left to a default: the installer downloads this
+    # exact name, and a Windows binary without .exe is one nobody can run by
+    # double-clicking it.
+    name_template: 'skifity-{{ .Os }}-{{ .Arch }}{{ if eq .Os "windows" }}.exe{{ end }}'
 
 checksum:
   name_template: checksums.txt

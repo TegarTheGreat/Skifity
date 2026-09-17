@@ -112,8 +112,17 @@ e2e: backend ## Run the Playwright user interface test against the real binary
 screenshots: backend ## Recapture the screenshots in the README
 	SKIFITY_SCREENSHOTS=1 npm --prefix web exec -- playwright test screenshots
 
-image: ## Build the panel's container image
+# PLATFORM builds for a machine that is not this one, which is the usual case
+# for an arm64 VPS built from an amd64 laptop, or the other way round. Without
+# it docker builds for the host and the image will not start on the server —
+# "exec format error", which is not an obvious thing to read.
+#
+#   PLATFORM=linux/arm64 make image
+#
+# The release builds both through buildx; this is the local path.
+image: ## Build the panel's container image (PLATFORM=linux/arm64 to cross-build)
 	docker build \
+		$(if $(PLATFORM),--platform $(PLATFORM),) \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
@@ -131,10 +140,11 @@ clean: ## Remove build output
 
 release: ## Build release binaries for every supported platform
 	@mkdir -p $(BIN_DIR)/release
-	@for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do \
-		os=$${target%/*}; arch=$${target#*/}; \
+	@for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do \
+		os=$${target%/*}; arch=$${target#*/}; ext=""; \
+		[ "$$os" = "windows" ] && ext=".exe"; \
 		echo "building $$os/$$arch"; \
 		GOOS=$$os GOARCH=$$arch go build -trimpath -ldflags '$(LDFLAGS)' \
-			-o $(BIN_DIR)/release/$(BINARY)-$$os-$$arch ./cmd/$(BINARY) || exit 1; \
+			-o $(BIN_DIR)/release/$(BINARY)-$$os-$$arch$$ext ./cmd/$(BINARY) || exit 1; \
 	done
 	@ls -lh $(BIN_DIR)/release

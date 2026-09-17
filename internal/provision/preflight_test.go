@@ -231,8 +231,28 @@ func TestMissingWireGuardIsFineOnAVXLANCluster(t *testing.T) {
 func TestNoSystemdIsFatal(t *testing.T) {
 	p := ParsePreflight(realPreflightOutput)
 	p.HasSystemd = false
-	if !Fatal(Evaluate(p, DefaultRequirements(), false)) {
+	problems := Evaluate(p, DefaultRequirements(), false)
+	if !Fatal(problems) {
 		t.Fatal("a server without systemd was accepted, but k3s installs as a systemd unit")
+	}
+
+	// And it has to say which distributions that rules out. The list of
+	// known-working ones used to include Alpine, which has no systemd, four
+	// lines above the check that refuses it — so somebody who picked Alpine
+	// was told it was fine and then refused with no explanation.
+	var said string
+	for _, problem := range problems {
+		if problem.Check == "systemd" {
+			said = problem.Fix
+		}
+	}
+	if said == "" {
+		t.Fatal("nothing in the report names systemd, so the operator is left guessing")
+	}
+	for _, want := range []string{"Alpine", "OpenRC", "Ubuntu"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the fix does not mention %s, which is what somebody in this position needs to know:\n%s", want, said)
+		}
 	}
 }
 
@@ -278,5 +298,19 @@ func TestPortsInUseAreFatalForTheOnesThatMatter(t *testing.T) {
 	}
 	if len(problems) == 0 {
 		t.Fatal("a busy cluster port produced no warning")
+	}
+}
+
+// TestEveryDistributionWeCallKnownWorkingActuallyPasses: a list that says
+// "these run fine" has to mean it. Each is evaluated on an otherwise healthy
+// server, and must produce a warning about not being tested — never a refusal.
+func TestEveryDistributionWeCallKnownWorkingActuallyPasses(t *testing.T) {
+	for distro := range knownWorkingDistros {
+		p := ParsePreflight(realPreflightOutput)
+		p.OSID = distro
+		problems := Evaluate(p, DefaultRequirements(), false)
+		if Fatal(problems) {
+			t.Errorf("%s is listed as known-working and is refused: %+v", distro, problems)
+		}
 	}
 }

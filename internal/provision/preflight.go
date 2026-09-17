@@ -98,6 +98,13 @@ var supportedDistros = map[string]bool{
 }
 
 // knownWorkingDistros run k3s fine but are not covered by our smoke tests.
+//
+// Every one of them ships systemd, which is not a detail: the check below makes
+// its absence fatal, because Skifity installs k3s as a unit and then manages it
+// with systemctl. Alpine used to be on this list and does not ship systemd, so
+// the file said "runs k3s fine" and refused it four lines later. k3s itself
+// supports OpenRC; Skifity does not, and saying so is better than listing a
+// distribution nobody could actually use.
 var knownWorkingDistros = map[string]bool{
 	"almalinux": true,
 	"rocky":     true,
@@ -106,7 +113,6 @@ var knownWorkingDistros = map[string]bool{
 	"rhel":      true,
 	"opensuse":  true,
 	"sles":      true,
-	"alpine":    true,
 	"arch":      true,
 }
 
@@ -118,7 +124,7 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 		problems = append(problems, Problem{
 			Check:  "systemd",
 			Detail: "This server does not appear to use systemd.",
-			Fix:    "Skifity installs Kubernetes as a systemd service. Use a distribution with systemd, such as Ubuntu 24.04 or Debian 12. Containers without an init system will not work.",
+			Fix:    "Skifity installs Kubernetes as a systemd service and manages it with systemctl. Use a distribution with systemd, such as Ubuntu 24.04 or Debian 12. Alpine and anything else on OpenRC will not work, and neither will a container without an init system — an unprivileged LXC or a Docker container, for instance.",
 			Fatal:  true,
 		})
 	}

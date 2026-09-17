@@ -180,7 +180,16 @@
     "canvas": "Canvas",
     "canvasHelp": "How this project's apps and databases connect.",
     "deleteProject": "Delete project",
-    "deleteProjectWarning": "This removes every app, database and volume in it. This cannot be undone."
+    "deleteProjectWarning": "This removes every app, database and volume in it. This cannot be undone.",
+    "quota": "This environment's limits",
+    "quotaHelp": "How much of what this environment is allowed has been used. A deployment that would go over is refused.",
+    "quotaFull": "This environment has reached a limit. New instances will not start until something is freed or the limit is raised.",
+    "quotaResource": {
+      "requests.cpu": "CPU reserved",
+      "requests.memory": "Memory reserved",
+      "pods": "Instances",
+      "requests.storage": "Storage"
+    }
   },
   "apps": {
     "title": "Apps",

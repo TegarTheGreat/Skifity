@@ -109,14 +109,51 @@ func TestAppStatusPhases(t *testing.T) {
 		replicas       int32
 		ready          int32
 		podReason      string
+		podMessage     string
+		unschedulable  string
 		wantPhase      string
 		detailContains string
 	}{
-		{"running", 2, 2, "", "running", "running"},
-		{"updating", 3, 1, "", "updating", "1 of 3"},
-		{"stopped", 0, 0, "", "stopped", "zero"},
-		{"pending", 1, 0, "Pending", "pending", "free CPU"},
-		{"image pull", 1, 0, "ImagePullBackOff", "failed", "could not be pulled"},
+		{name: "running", replicas: 2, ready: 2, wantPhase: "running", detailContains: "running"},
+		{name: "updating", replicas: 3, ready: 1, wantPhase: "updating", detailContains: "1 of 3"},
+		{name: "stopped", wantPhase: "stopped", detailContains: "zero"},
+		{
+			name: "pending", replicas: 1, podReason: "Pending",
+			wantPhase: "pending", detailContains: "starting",
+		},
+		// The scheduler's own message, which the panel used to throw away and
+		// replace with a guess about CPU and memory — sending people to add a
+		// server for a problem that was neither.
+		{
+			name: "no room", replicas: 1,
+			unschedulable:  "0/2 nodes are available: 2 Insufficient memory.",
+			wantPhase:      "pending",
+			detailContains: "enough free memory",
+		},
+		{
+			name: "volume not bound", replicas: 1,
+			unschedulable:  "0/1 nodes are available: pod has unbound immediate PersistentVolumeClaims.",
+			wantPhase:      "pending",
+			detailContains: "volume",
+		},
+		{
+			name: "only tainted servers left", replicas: 1,
+			unschedulable:  "0/1 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }.",
+			wantPhase:      "pending",
+			detailContains: "not accepting apps",
+		},
+		{
+			name: "image gone", replicas: 1, podReason: "ErrImagePull",
+			podMessage:     `failed to pull: manifest unknown`,
+			wantPhase:      "failed",
+			detailContains: "deploy the commit again",
+		},
+		{
+			name: "private registry", replicas: 1, podReason: "ImagePullBackOff",
+			podMessage:     "unauthorized: authentication required",
+			wantPhase:      "failed",
+			detailContains: "credentials",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -130,21 +167,34 @@ func TestAppStatusPhases(t *testing.T) {
 				Status: appsv1.DeploymentStatus{Replicas: tc.replicas, ReadyReplicas: tc.ready},
 			}
 			objects = append(objects, deployment)
-			if tc.podReason != "" {
-				objects = append(objects, &corev1.Pod{
+			if tc.podReason != "" || tc.unschedulable != "" {
+				pod := &corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "web-1", Namespace: "ns",
 						Labels: map[string]string{"app.kubernetes.io/name": "web"},
 					},
-					Status: corev1.PodStatus{
-						Phase: corev1.PodPending,
-						ContainerStatuses: []corev1.ContainerStatus{{
-							State: corev1.ContainerState{
-								Waiting: &corev1.ContainerStateWaiting{Reason: tc.podReason, Message: "detail"},
-							},
-						}},
-					},
-				})
+					Status: corev1.PodStatus{Phase: corev1.PodPending},
+				}
+				if tc.podReason != "" {
+					message := tc.podMessage
+					if message == "" {
+						message = "detail"
+					}
+					pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{Reason: tc.podReason, Message: message},
+						},
+					}}
+				}
+				if tc.unschedulable != "" {
+					pod.Status.Conditions = []corev1.PodCondition{{
+						Type:    corev1.PodScheduled,
+						Status:  corev1.ConditionFalse,
+						Reason:  "Unschedulable",
+						Message: tc.unschedulable,
+					}}
+				}
+				objects = append(objects, pod)
 			}
 			c := &Client{clientset: fake.NewSimpleClientset(toObjects(objects)...), systemNamespace: "skifity-system"}
 			status, err := c.AppStatus(t.Context(), "ns", "web")
@@ -528,5 +578,68 @@ func TestDeletingAnAppStopsItsScheduledCommands(t *testing.T) {
 	}
 	if len(jobs.Items) != 0 {
 		t.Fatalf("%d of the app's runs are still there", len(jobs.Items))
+	}
+}
+
+func TestQuotaUsageIsReadableWithoutParsingKubernetes(t *testing.T) {
+	// The numbers exist so a bar can be drawn without the browser having to
+	// understand what "1536Mi" or "1500m" mean.
+	quota := &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{Name: "environment", Namespace: "acme-prod"},
+		Status: corev1.ResourceQuotaStatus{
+			Hard: corev1.ResourceList{
+				"requests.cpu":    resource.MustParse("8"),
+				"requests.memory": resource.MustParse("16Gi"),
+				"pods":            resource.MustParse("60"),
+			},
+			Used: corev1.ResourceList{
+				"requests.cpu":    resource.MustParse("7500m"),
+				"requests.memory": resource.MustParse("8Gi"),
+				"pods":            resource.MustParse("12"),
+			},
+		},
+	}
+	c := &Client{clientset: fake.NewSimpleClientset(quota), systemNamespace: "skifity-system"}
+
+	usage, err := c.QuotaUsage(t.Context(), "acme-prod")
+	if err != nil {
+		t.Fatalf("QuotaUsage: %v", err)
+	}
+	if !usage.Found || len(usage.Items) != 3 {
+		t.Fatalf("found=%v with %d items, want 3", usage.Found, len(usage.Items))
+	}
+
+	byName := map[string]QuotaItem{}
+	for _, item := range usage.Items {
+		byName[item.Resource] = item
+	}
+	// CPU in millicores, memory in mebibytes, a count as itself.
+	if cpu := byName["requests.cpu"]; cpu.UsedValue != 7500 || cpu.HardValue != 8000 {
+		t.Errorf("cpu is %d of %d, want 7500 of 8000 millicores", cpu.UsedValue, cpu.HardValue)
+	}
+	if mem := byName["requests.memory"]; mem.UsedValue != 8192 || mem.HardValue != 16384 {
+		t.Errorf("memory is %d of %d, want 8192 of 16384 MiB", mem.UsedValue, mem.HardValue)
+	}
+	if pods := byName["pods"]; pods.UsedValue != 12 || pods.HardValue != 60 {
+		t.Errorf("pods is %d of %d, want 12 of 60", pods.UsedValue, pods.HardValue)
+	}
+	// Nearly full, which is the whole reason to show it.
+	if got := byName["requests.cpu"].Percent(); got != 93 {
+		t.Errorf("cpu is %d%% full, want 93", got)
+	}
+	// The order is fixed, so the rows do not move between reloads.
+	if usage.Items[0].Resource != "requests.cpu" || usage.Items[2].Resource != "pods" {
+		t.Errorf("the limits came back in an unstable order: %v", usage.Items)
+	}
+
+	// An environment with no quota is not an error: it is an environment made
+	// before quotas existed, or a cluster somebody opened up deliberately.
+	empty := &Client{clientset: fake.NewSimpleClientset(), systemNamespace: "skifity-system"}
+	none, err := empty.QuotaUsage(t.Context(), "acme-prod")
+	if err != nil {
+		t.Fatalf("a namespace with no quota gave %v, want no error", err)
+	}
+	if none.Found {
+		t.Error("a namespace with no quota reported one")
 	}
 }

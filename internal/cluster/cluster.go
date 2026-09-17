@@ -352,6 +352,25 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 // ClusterIssuerName is the cert-manager ClusterIssuer the panel creates.
 const ClusterIssuerName = "skifity-letsencrypt"
 
+// QuotaUsage reports how much of an environment's ceiling is in use.
+func (c *Cluster) QuotaUsage(ctx context.Context, namespace string) (api.EnvironmentQuota, error) {
+	raw, err := c.client.QuotaUsage(ctx, namespace)
+	if err != nil {
+		if kube.IsUnreachable(err) {
+			return api.EnvironmentQuota{}, errdoc.ClusterUnreachable(err)
+		}
+		return api.EnvironmentQuota{}, err
+	}
+	out := api.EnvironmentQuota{Found: raw.Found}
+	for _, item := range raw.Items {
+		out.Items = append(out.Items, api.EnvironmentQuotaItem{
+			Resource: item.Resource, Used: item.Used, Hard: item.Hard,
+			UsedValue: item.UsedValue, HardValue: item.HardValue, Percent: item.Percent(),
+		})
+	}
+	return out, nil
+}
+
 // ComponentStatus reports whether an optional add-on is installed.
 func (c *Cluster) ComponentStatus(ctx context.Context, name string) (store.ClusterComponent, error) {
 	return c.db.GetComponent(ctx, name)

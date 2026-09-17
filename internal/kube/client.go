@@ -466,6 +466,17 @@ func describePod(pod corev1.Pod) Instance {
 			inst.Message = cs.State.Terminated.Message
 		}
 	}
+	// A pod nobody could place carries the reason on its own condition, and it
+	// is the one the panel used to throw away and replace with a guess.
+	if pod.Status.Phase == corev1.PodPending {
+		for _, cond := range pod.Status.Conditions {
+			if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+				inst.Status = "Unschedulable"
+				inst.Message = ExplainUnschedulable(cond.Message)
+			}
+		}
+	}
+
 	// A pod that is being deleted shows as Running, which is confusing while a
 	// deploy is finishing.
 	if pod.DeletionTimestamp != nil {
@@ -486,8 +497,11 @@ func summarisePhase(deployment *appsv1.Deployment, status AppStatus) (string, st
 		if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse {
 			return "failed", "The rollout did not finish: " + cond.Message
 		}
+		// A quota refusal lands here and nowhere else: the pod was never
+		// created, so there is nothing Pending to look at and the instance
+		// list is simply empty.
 		if cond.Type == appsv1.DeploymentReplicaFailure && cond.Status == corev1.ConditionTrue {
-			return "failed", cond.Message
+			return "failed", ExplainReplicaFailure(cond.Message)
 		}
 	}
 
@@ -500,10 +514,17 @@ func summarisePhase(deployment *appsv1.Deployment, status AppStatus) (string, st
 				return "crashing", "The app starts and then exits. The last log lines usually say why."
 			}
 			if strings.Contains(inst.Status, "ImagePull") || strings.Contains(inst.Status, "ErrImage") {
-				return "failed", "The image could not be pulled: " + inst.Message
+				return "failed", ExplainImagePull(inst.Message)
+			}
+			// describePod has already turned the scheduler's own message into
+			// a sentence with the fix in it. Replacing that with a guess about
+			// CPU and memory, which is what used to happen, sent people to add
+			// a server for a problem that was a quota or a volume.
+			if inst.Status == "Unschedulable" {
+				return "pending", inst.Message
 			}
 			if inst.Status == "Pending" {
-				return "pending", "Waiting for a server with enough free CPU and memory."
+				return "pending", "The instance has been placed and is starting."
 			}
 		}
 		return "starting", "The instances are starting."

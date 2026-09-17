@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
+import { EnvironmentQuota } from "@/components/environment-quota"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader, Section } from "@/components/page"
@@ -288,6 +289,7 @@ function EnvironmentServices({ environmentId }: { environmentId: string }) {
 
   return (
     <div className="space-y-6">
+      <EnvironmentQuota environmentId={environmentId} />
       {appItems.length > 0 && (
         <Section title={t("nav.apps")}>
           <ItemGroup className="rounded-lg border">

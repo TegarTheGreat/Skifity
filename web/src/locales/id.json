@@ -172,7 +172,16 @@
     "canvas": "Kanvas",
     "canvasHelp": "Bagaimana aplikasi dan database di proyek ini saling terhubung.",
     "deleteProject": "Hapus proyek",
-    "deleteProjectWarning": "Ini menghapus semua aplikasi, database, dan volume di dalamnya. Tindakan ini tidak bisa dibatalkan."
+    "deleteProjectWarning": "Ini menghapus semua aplikasi, database, dan volume di dalamnya. Tindakan ini tidak bisa dibatalkan.",
+    "quota": "Batas lingkungan ini",
+    "quotaHelp": "Berapa banyak dari jatah lingkungan ini yang sudah terpakai. Deploy yang melebihi batas akan ditolak.",
+    "quotaFull": "Lingkungan ini sudah mencapai batas. Instance baru tidak akan jalan sampai ada yang dibebaskan atau batasnya dinaikkan.",
+    "quotaResource": {
+      "requests.cpu": "CPU dipesan",
+      "requests.memory": "Memori dipesan",
+      "pods": "Instance",
+      "requests.storage": "Penyimpanan"
+    }
   },
   "apps": {
     "title": "Aplikasi",

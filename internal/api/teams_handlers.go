@@ -457,6 +457,31 @@ func (s *Server) handleGetEnvironment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, env)
 }
 
+// handleEnvironmentQuota reports how much of an environment's ceiling is used.
+//
+// Every environment has had a quota from the day it was created and nothing
+// showed it, so the first sign of reaching one was a deployment that failed with
+// a message about a resource nobody had heard of.
+func (s *Server) handleEnvironmentQuota(w http.ResponseWriter, r *http.Request) {
+	env, _, err := s.authorizeEnvironment(r, chi.URLParam(r, "envID"), store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if s.cluster == nil {
+		// Not an error: a panel with no cluster has environments on paper and
+		// no limits to report against them.
+		writeJSON(w, http.StatusOK, EnvironmentQuota{})
+		return
+	}
+	quota, err := s.cluster.QuotaUsage(r.Context(), env.Namespace)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, quota)
+}
+
 func (s *Server) handleDeleteEnvironment(w http.ResponseWriter, r *http.Request) {
 	env, _, err := s.authorizeEnvironment(r, chi.URLParam(r, "envID"), store.RoleAdmin)
 	if err != nil {

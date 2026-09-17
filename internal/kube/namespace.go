@@ -1,6 +1,10 @@
 package kube
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -219,4 +223,97 @@ func itoaResource(n int) string {
 		n /= 10
 	}
 	return string(buf[i:])
+}
+
+// QuotaUsage is what an environment has used out of what it is allowed.
+//
+// The quota exists from the moment a namespace is created and nothing in the
+// panel showed it, so the first sign of reaching one was a deployment that
+// failed with a message about a resource nobody had heard of. A number on the
+// page is the difference between a limit and a surprise.
+type QuotaUsage struct {
+	// Found is false when the namespace has no quota, which is the case for an
+	// environment created before quotas existed and for a cluster somebody has
+	// deliberately opened up.
+	Found bool `json:"found"`
+	// Items are the individual limits, in the order the panel shows them.
+	Items []QuotaItem `json:"items"`
+}
+
+// QuotaItem is one limit and what has been used against it.
+type QuotaItem struct {
+	// Resource is the Kubernetes name, such as requests.memory.
+	Resource string `json:"resource"`
+	// Used and Hard are the quantities as Kubernetes writes them, for example
+	// "3" or "1536Mi". They are strings because that is what they are: a
+	// quantity carries its unit, and rendering it is the panel's job.
+	Used string `json:"used"`
+	Hard string `json:"hard"`
+	// UsedValue and HardValue are the same two as plain numbers, so a bar can
+	// be drawn without the browser having to parse Kubernetes quantities.
+	// Memory and storage are in mebibytes, CPU in millicores, and a count is
+	// itself.
+	UsedValue int64 `json:"used_value"`
+	HardValue int64 `json:"hard_value"`
+}
+
+// Percent is how full one limit is, bounded at a hundred.
+func (q QuotaItem) Percent() int {
+	if q.HardValue <= 0 {
+		return 0
+	}
+	percent := int(q.UsedValue * 100 / q.HardValue)
+	if percent > 100 {
+		return 100
+	}
+	return percent
+}
+
+// QuotaUsage reads an environment's ResourceQuota.
+func (c *Client) QuotaUsage(ctx context.Context, namespace string) (QuotaUsage, error) {
+	quota, err := c.clientset.CoreV1().ResourceQuotas(namespace).Get(ctx, "environment", metav1.GetOptions{})
+	if err != nil {
+		if IsNotFound(err) {
+			return QuotaUsage{}, nil
+		}
+		return QuotaUsage{}, fmt.Errorf("read the limits for %s: %w", namespace, err)
+	}
+
+	usage := QuotaUsage{Found: true}
+	// A fixed order rather than the map's: the two that decide whether a
+	// deployment fits come first, and a page whose rows move between reloads is
+	// a page nobody can scan.
+	for _, name := range []corev1.ResourceName{
+		"requests.cpu", "requests.memory", "pods",
+		"limits.cpu", "limits.memory", "requests.storage", "services",
+	} {
+		hard, ok := quota.Status.Hard[name]
+		if !ok {
+			continue
+		}
+		used := quota.Status.Used[name]
+		usage.Items = append(usage.Items, QuotaItem{
+			Resource:  string(name),
+			Used:      used.String(),
+			Hard:      hard.String(),
+			UsedValue: quantityValue(name, used),
+			HardValue: quantityValue(name, hard),
+		})
+	}
+	return usage, nil
+}
+
+// quantityValue turns a Kubernetes quantity into a number the UI can compare.
+//
+// CPU in millicores and bytes in mebibytes, because those are the units the
+// rest of the panel already speaks; anything else is a count and is itself.
+func quantityValue(name corev1.ResourceName, q resource.Quantity) int64 {
+	switch {
+	case strings.HasSuffix(string(name), "cpu"):
+		return q.MilliValue()
+	case strings.HasSuffix(string(name), "memory"), strings.HasSuffix(string(name), "storage"):
+		return q.Value() / (1024 * 1024)
+	default:
+		return q.Value()
+	}
 }

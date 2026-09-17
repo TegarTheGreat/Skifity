@@ -172,7 +172,16 @@
     "canvas": "画布",
     "canvasHelp": "本项目的应用与数据库是如何连接的。",
     "deleteProject": "删除项目",
-    "deleteProjectWarning": "这会删除其中所有应用、数据库和存储卷，且无法撤销。"
+    "deleteProjectWarning": "这会删除其中所有应用、数据库和存储卷，且无法撤销。",
+    "quota": "此环境的限额",
+    "quotaHelp": "此环境的配额已使用多少。超出限额的部署会被拒绝。",
+    "quotaFull": "此环境已达到限额。在释放资源或提高限额之前，新实例不会启动。",
+    "quotaResource": {
+      "requests.cpu": "已预留 CPU",
+      "requests.memory": "已预留内存",
+      "pods": "实例",
+      "requests.storage": "存储"
+    }
   },
   "apps": {
     "title": "应用",

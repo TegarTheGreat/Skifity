@@ -455,3 +455,20 @@ export type AppJob = {
   created_at: string
   updated_at: string
 }
+
+/** How much of an environment's ceiling is in use. */
+export type EnvironmentQuota = {
+  found: boolean
+  items: EnvironmentQuotaItem[]
+}
+
+export type EnvironmentQuotaItem = {
+  /** The Kubernetes name, such as requests.memory. */
+  resource: string
+  /** The quantities as Kubernetes writes them, unit included. */
+  used: string
+  hard: string
+  used_value: number
+  hard_value: number
+  percent: number
+}

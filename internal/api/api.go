@@ -184,6 +184,7 @@ func (s *Server) routes() chi.Router {
 			authed.Route("/environments/{envID}", func(env chi.Router) {
 				env.Get("/", s.handleGetEnvironment)
 				env.Delete("/", s.handleDeleteEnvironment)
+				env.Get("/quota", s.handleEnvironmentQuota)
 				env.Get("/apps", s.handleListApps)
 				env.Post("/apps", s.handleCreateApp)
 				env.Get("/databases", s.handleListDatabases)

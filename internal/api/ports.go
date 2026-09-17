@@ -106,6 +106,28 @@ type Cluster interface {
 	InstallComponent(ctx context.Context, name string) error
 	// ComponentStatus reports whether an add-on is present.
 	ComponentStatus(ctx context.Context, name string) (store.ClusterComponent, error)
+	// QuotaUsage reports how much of an environment's limits are in use.
+	QuotaUsage(ctx context.Context, namespace string) (EnvironmentQuota, error)
+}
+
+// EnvironmentQuota is how much of an environment's ceiling is in use.
+//
+// Every environment has had a ResourceQuota since the first release and nothing
+// showed it, so the first sign of reaching one was a deployment that failed with
+// a message about a resource nobody had heard of.
+type EnvironmentQuota struct {
+	Found bool                   `json:"found"`
+	Items []EnvironmentQuotaItem `json:"items"`
+}
+
+// EnvironmentQuotaItem is one limit and what has been used against it.
+type EnvironmentQuotaItem struct {
+	Resource  string `json:"resource"`
+	Used      string `json:"used"`
+	Hard      string `json:"hard"`
+	UsedValue int64  `json:"used_value"`
+	HardValue int64  `json:"hard_value"`
+	Percent   int    `json:"percent"`
 }
 
 // Provisioner turns a bare VPS into a cluster node and back.

@@ -17,6 +17,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -97,6 +98,9 @@ func (m *Manager) run(ctx context.Context, storage *Storage, backup store.Backup
 		m.publish(ctx, record.ID)
 		m.notifyFailure(ctx, record, problem)
 	}
+	// A backup runs unattended, often at night. A panic here used to take the
+	// panel with it, so the first anybody knew was that the panel was gone.
+	defer runsafe.Recover(m.log, "backup "+backup.ID, fail)
 
 	env, err := m.db.GetEnvironment(ctx, record.EnvironmentID)
 	if err != nil {
@@ -256,6 +260,10 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 		_ = m.db.SetOperationStatus(ctx, op.ID, store.OpFailed, problem.Code, problem.Error())
 		m.hub.Publish(events.OperationTopic(op.ID), "failed", problem)
 	}
+	// A restore writes over live data. If the panel dies partway through one,
+	// the operation sits at "restoring" forever and nobody can tell from the
+	// interface whether the data is the old one, the new one, or neither.
+	defer runsafe.Recover(m.log, "restore "+op.ID, func(err error) { fail("restore", err) })
 
 	_ = m.db.SetOperationStatus(ctx, op.ID, store.OpRunning, "", "")
 
@@ -518,6 +526,7 @@ func (m *Manager) runVolume(ctx context.Context, storage *Storage, backup store.
 		_ = m.db.FinishBackup(ctx, backup.ID, "failed", backup.Location, 0, problem.Error())
 		m.publish(ctx, app.ID)
 	}
+	defer runsafe.Recover(m.log, "volume backup "+backup.ID, fail)
 
 	presigned, err := storage.PresignPut(ctx, backup.Location)
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/kube"
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -141,6 +142,9 @@ func (m *Manager) provision(ctx context.Context, record store.Database, spec Spe
 		_ = m.db.SetDatabaseStatus(ctx, record.ID, "failed", problem.Error())
 		m.publish(ctx, record.ID)
 	}
+	// Twenty minutes of operator installs and cluster polling, in a goroutine
+	// nobody is waiting on. A panic here used to be the end of the panel.
+	defer runsafe.Recover(m.log, "database "+record.ID, fail)
 
 	if record.Engine == EnginePostgres {
 		// The operator is installed on first use, which is what keeps a fresh

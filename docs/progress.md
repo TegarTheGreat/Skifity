@@ -497,6 +497,27 @@ a page that had drifted.
   struct and fails when any of them is missing from `docs/configuration.md` —
   which two of them already were.
 
+### One panic used to end the panel
+
+The HTTP handlers have recovered from a panic since the beginning. Nothing else
+did. Every deployment, every server being added, every database, backup,
+restore, health pass, scheduler tick and notification runs in a goroutine of its
+own, and a panic in any of them took the process down — on a self-hosted install
+that is the panel you would use to find out why, so the deployment that crashed
+it also removed the way to diagnose it.
+
+`internal/runsafe` recovers, logs the stack, and hands the failure to whatever
+was running so it is marked failed rather than left at "running" forever. It is
+wired into the two choke points every deployment and every provisioning
+operation already pass through, into the backup, restore, volume-backup and
+database goroutines beside the `fail` each of them already had, and into the
+dispatcher. The three long-running loops recover per iteration rather than
+around the loop: a panel that is alive with no scheduler is worse than one that
+restarted, because nothing says so and the backups simply stop.
+
+The test for it does not report a failure when it regresses. It takes the test
+binary down, which is the point.
+
 ### The guards that stopped guarding
 
 Four safety checks were written as `if err == nil && <the dangerous

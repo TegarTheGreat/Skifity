@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -96,6 +97,11 @@ func (d *Dispatcher) Notify(ctx context.Context, teamID, event string, msg Messa
 		d.wg.Add(1)
 		go func(kind, id string, config map[string]string) {
 			defer d.wg.Done()
+			// A notification is the least important thing the panel does and
+			// used to be able to end it: a malformed channel configuration
+			// reaching a template or a URL parser is a panic in a goroutine
+			// nobody is waiting on.
+			defer runsafe.Recover(d.log, "the "+kind+" notification", nil)
 			// Detached from the caller's context on purpose: the request that
 			// produced the event is usually over by now, and a notification
 			// cancelled because a browser navigated away is a notification

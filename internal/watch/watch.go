@@ -20,6 +20,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/runsafe"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 )
@@ -102,7 +103,13 @@ func (w *Watcher) Run(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 	for {
-		w.Once(ctx)
+		// A panic costs one pass. Recovering around the loop would keep the
+		// panel alive with nothing watching it, which is the failure nobody
+		// notices until a server has been down for a week.
+		func() {
+			defer runsafe.Recover(w.log, "the health pass", nil)
+			w.Once(ctx)
+		}()
 		select {
 		case <-ctx.Done():
 			return

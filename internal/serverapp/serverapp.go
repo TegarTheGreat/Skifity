@@ -27,6 +27,7 @@ import (
 	"skifity/internal/metrics"
 	"skifity/internal/notify"
 	"skifity/internal/provision"
+	"skifity/internal/runsafe"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 	"skifity/internal/version"
@@ -316,14 +317,22 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
-		backups.RunScheduled(ctx)
-		// Maintenance is on the same minute tick rather than a timer of its
-		// own, because "due" has to survive a restart: a panel restarted daily
-		// would never reach a weekly timer, and the disk would fill anyway.
-		pruneHistory(ctx, db, log)
-		if c != nil {
-			c.MaintainRegistry(ctx)
-		}
+		// A panic costs this minute, not the scheduler. Recovering around the
+		// loop instead would keep the process alive and leave it with no
+		// scheduler, which is worse than a crash because nothing says so and
+		// the backups simply stop happening.
+		func() {
+			defer runsafe.Recover(log, "the minute tick", nil)
+			backups.RunScheduled(ctx)
+			// Maintenance is on the same minute tick rather than a timer of its
+			// own, because "due" has to survive a restart: a panel restarted
+			// daily would never reach a weekly timer, and the disk would fill
+			// anyway.
+			pruneHistory(ctx, db, log)
+			if c != nil {
+				c.MaintainRegistry(ctx)
+			}
+		}()
 		select {
 		case <-ctx.Done():
 			return

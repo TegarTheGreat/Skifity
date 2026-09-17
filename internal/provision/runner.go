@@ -8,6 +8,7 @@ import (
 
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -37,10 +38,31 @@ func (p *Provisioner) start(op store.Operation, work func(context.Context)) {
 	p.running[op.ID] = cancel
 	p.mu.Unlock()
 
+	// Every operation this package runs goes through here, so this is where a
+	// panic in one of them is stopped. A server being added is a half-hour of
+	// SSH, parsing and cluster calls, and a panel that dies partway through it
+	// leaves a machine in an unknown state and nobody to ask.
 	go func() {
 		defer cancel()
+		defer runsafe.Recover(p.log, "operation "+op.ID, func(err error) {
+			p.finish(op.ID)
+			p.failPanicked(ctx, op, err)
+		})
 		work(ctx)
 	}()
+}
+
+// failPanicked marks an operation failed after the goroutine running it
+// panicked, so the interface shows a failure rather than a step that never
+// finishes.
+func (p *Provisioner) failPanicked(ctx context.Context, op store.Operation, err error) {
+	problem := errdoc.New("internal", "Something went wrong").
+		WithCause("The panel hit an unexpected error while working on this server.").
+		WithImpact("The operation stopped where it was. The server may be half-configured; the steps above show how far it got.").
+		WithFix("Run it again — every step is safe to repeat. If it fails the same way, copy this error and open an issue: it is a bug in Skifity.")
+
+	_ = p.db.SetOperationStatus(ctx, op.ID, store.OpFailed, problem.Code, err.Error())
+	p.hub.Publish(events.OperationTopic(op.ID), "failed", problem)
 }
 
 // finish clears an operation from the running set.

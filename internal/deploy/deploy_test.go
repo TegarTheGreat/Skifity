@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"strings"
@@ -538,5 +539,59 @@ func TestAOneOffCommandIsRefusedWithoutACluster(t *testing.T) {
 	// images, or the person reads it and starts debugging their command.
 	if code := errdoc.From(err).Code; code != "cluster.unreachable" {
 		t.Fatalf("error code is %q, want cluster.unreachable", code)
+	}
+}
+
+// TestAPanickingDeploymentFailsInsteadOfEndingThePanel: every deployment runs
+// in a goroutine of its own, and until there was a recover in start() a nil
+// pointer anywhere inside one took the whole process with it. On a self-hosted
+// panel that is the thing you would use to find out what happened, so the
+// deployment that crashed it also removed the way to diagnose it.
+//
+// If this test ever regresses it does not report a failure: it takes the test
+// binary down, which is the point.
+func TestAPanickingDeploymentFailsInsteadOfEndingThePanel(t *testing.T) {
+	d, db, app, _ := testDeployer(t)
+
+	deployment := store.Deployment{AppID: app.ID, Status: store.DeployQueued, Trigger: "manual"}
+	if err := db.CreateDeployment(t.Context(), &deployment); err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+
+	d.start(deployment.ID, func(context.Context) {
+		var spec *store.App
+		_ = spec.Slug // the nil dereference an unexpected cluster answer produces
+	})
+
+	// The deployment must end up failed rather than queued forever: a status
+	// nobody moves is indistinguishable, in the interface, from a slow build.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		current, err := db.GetDeployment(t.Context(), deployment.ID)
+		if err != nil {
+			t.Fatalf("GetDeployment: %v", err)
+		}
+		if current.Status == store.DeployFailed {
+			if current.ErrorCode != "internal" {
+				t.Errorf("the failure was recorded as %q, not as a panel bug", current.ErrorCode)
+			}
+			if !strings.Contains(current.ErrorMessage, "panicked") {
+				t.Errorf("the recorded message does not say what happened: %q", current.ErrorMessage)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the deployment is still %q; a panic left it running forever", current.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// And the deployment is no longer held in the running set, so the panel has
+	// not leaked a slot that would refuse a retry.
+	d.mu.Lock()
+	_, stillRunning := d.running[deployment.ID]
+	d.mu.Unlock()
+	if stillRunning {
+		t.Error("the deployment is still listed as running, so its slot leaked")
 	}
 }

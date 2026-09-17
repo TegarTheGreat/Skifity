@@ -17,6 +17,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/metrics"
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -473,15 +474,19 @@ func (s *Server) Background(ctx context.Context) {
 				s.log.Debug("forgot the history of finished topics", "topics", dropped)
 			}
 		case <-ticker.C:
-			if _, err := s.db.PurgeExpiredSessions(ctx); err != nil {
-				s.log.Warn("purge expired sessions", "error", err)
-			}
-			if err := s.db.PurgeOldLoginAttempts(ctx, time.Now().Add(-24*time.Hour)); err != nil {
-				s.log.Warn("purge login attempts", "error", err)
-			}
-			if err := s.db.PurgeOldAudit(ctx, time.Now().Add(-90*24*time.Hour)); err != nil {
-				s.log.Warn("purge audit events", "error", err)
-			}
+			// A panic costs one hour of housekeeping, not the housekeeping.
+			func() {
+				defer runsafe.Recover(s.log, "the hourly housekeeping", nil)
+				if _, err := s.db.PurgeExpiredSessions(ctx); err != nil {
+					s.log.Warn("purge expired sessions", "error", err)
+				}
+				if err := s.db.PurgeOldLoginAttempts(ctx, time.Now().Add(-24*time.Hour)); err != nil {
+					s.log.Warn("purge login attempts", "error", err)
+				}
+				if err := s.db.PurgeOldAudit(ctx, time.Now().Add(-90*24*time.Hour)); err != nil {
+					s.log.Warn("purge audit events", "error", err)
+				}
+			}()
 		}
 	}
 }

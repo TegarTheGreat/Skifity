@@ -77,6 +77,24 @@ sequenceDiagram
     D-->>U: succeeded, or a plain-language failure with a suggested fix
 ```
 
+## Background work
+
+Anything that takes longer than a request runs in a goroutine of its own: a
+deployment, a server being added, a database being provisioned, a backup, a
+restore, the health watcher, the minute scheduler, a notification.
+
+Each of them starts with a recover (`internal/runsafe`). A panic is a bug, and a
+bug in one deployment must not end the panel — on a self-hosted install the
+panel is usually the only way to reach the cluster, so the deployment that
+crashed it would also remove the way to find out why. The panic is logged with
+its stack, and the one thing it was doing is marked failed, so what a user sees
+is a deployment that failed rather than one that is still going and never will
+be.
+
+The loops recover per iteration rather than around the loop, because a panel
+that is alive with no scheduler is worse than one that restarted: nothing says
+so, and the backups simply stop happening.
+
 ## Adding a server
 
 ```mermaid

@@ -20,6 +20,7 @@ import (
 	"skifity/internal/metrics"
 	"skifity/internal/notify"
 	"skifity/internal/registry"
+	"skifity/internal/runsafe"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 )
@@ -458,10 +459,35 @@ func (d *Deployer) start(deploymentID string, work func(context.Context)) {
 	d.running[deploymentID] = cancel
 	d.mu.Unlock()
 
+	// Every deployment runs through here, so this is the one place a panic in
+	// one of them has to be stopped. Without it a nil pointer in a build or a
+	// rollout takes the whole panel down, and the panel is often the only way
+	// to reach the cluster and find out why.
 	go func() {
 		defer cancel()
+		defer runsafe.Recover(d.log, "deployment "+deploymentID, func(err error) {
+			d.finish(deploymentID)
+			d.failPanicked(ctx, deploymentID, err)
+		})
 		work(ctx)
 	}()
+}
+
+// failPanicked marks a deployment failed after the goroutine running it
+// panicked, so what the user sees is a deployment that failed rather than one
+// that is still going and never will be.
+func (d *Deployer) failPanicked(ctx context.Context, deploymentID string, err error) {
+	problem := errdoc.New("internal", "Something went wrong").
+		WithCause("The panel hit an unexpected error while deploying.").
+		WithImpact("The deployment stopped where it was. Whatever had already been applied is still applied.").
+		WithFix("Deploy again. If it happens every time, copy this error and open an issue: it is a bug in Skifity, not in your app.")
+
+	_ = d.db.UpdateDeploymentStatus(ctx, deploymentID, store.DeployFailed,
+		problem.Code, err.Error(), problem.Fix)
+	if deployment, getErr := d.db.GetDeployment(ctx, deploymentID); getErr == nil {
+		_ = d.db.SetAppStatus(ctx, deployment.AppID, "failed")
+	}
+	d.hub.Publish(events.DeploymentTopic(deploymentID), "failed", problem)
 }
 
 func (d *Deployer) finish(deploymentID string) {

@@ -131,7 +131,11 @@ Ordered by how well the evidence supports it.
 ## Where we are not different, and the honest reading
 
 * **Railpack is no longer a differentiator.** Dokploy already ships it.
-* **No SSO/SAML.** Dokploy has it.
+* **SSO: closed.** This was the one straight absence on the list rather than a
+  trade-off. OpenID Connect is in, with PKCE, a verified ID token, a per-sign-in
+  nonce and a single-use state — Okta, Entra, Authentik, Keycloak, Zitadel,
+  Google. SAML is not, and is not planned: a second protocol and a second class
+  of signature bug, for providers that all speak OIDC anyway.
 * **Templates: closed, but not by being better at templates.** 282 against 342, and ours are converted from theirs. What is genuinely ours is that every image names a version that was checked to exist, where more than half of Coolify's ship `latest`.
 * **Kubernetes is a category mismatch, not only an advantage.** Comparison sites
   exclude k3s and Rancher from "self-hosted PaaS" as *"a different abstraction

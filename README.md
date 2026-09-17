@@ -114,6 +114,17 @@ language needs is absent — Russian needs one, few and many — or if a transla
 drops a placeholder. Dates, numbers and relative times are formatted by the
 language, not translated around.
 
+## Sign in with the account people already have
+
+OpenID Connect, against Okta, Entra ID, Authentik, Keycloak, Zitadel or Google:
+PKCE, a verified ID token, a nonce per sign-in and a single-use state. Restrict
+it to your own email domains, and decide whether a first sign-in creates an
+account or is refused until somebody invites them.
+
+An account made this way has no password, cannot be signed into with one, and is
+refused in a way that does not tell an anonymous visitor which addresses use
+single sign-on.
+
 ## What you need
 
 A server with Ubuntu 24.04 or Debian 12, 1 GB of memory, 8 GB of free disk, and

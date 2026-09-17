@@ -995,6 +995,61 @@ single instance — and not whether the cluster can supply the number it is mean
 to scale on. It does now, as an error rather than a warning, with what to do
 about it. Scale-to-zero is exempt: KEDA counts requests, not CPU.
 
+## Phase 29 — single sign-on, and what building it found
+
+**Dokploy has SSO and this did not.** It was the only feature on the competitor
+list that was a straight absence rather than a trade-off, so it is built:
+OpenID Connect, authorization code with PKCE, against whatever an operator
+points it at — Okta, Entra, Authentik, Keycloak, Zitadel, Google.
+
+SAML is deliberately not here. It is a second protocol, a second XML parser and
+a second class of signature bug, and every provider a self-hosted panel is
+likely to meet speaks OIDC.
+
+Three things about it are load-bearing, because each is an auth bypass when it
+is wrong, and none of them is code written here:
+
+* The ID token's signature, issuer, audience and expiry are verified by
+  `oidc.IDTokenVerifier`. A hand-rolled JWT check is the usual way to end up
+  accepting `alg: none` or a token minted for somebody else's client.
+* The nonce is generated per sign-in and has to come back inside the ID token,
+  which is what makes a replay of an old one fail.
+* The state is generated per sign-in, kept in a short-lived HttpOnly cookie, and
+  **spent before the code is exchanged** — so resending the same callback cannot
+  replay it.
+
+The issuer is a setting, which makes it the **fourth** address an administrator
+types that the panel's own process then connects to. It dials through
+`internal/netguard` like the other three. The redirect URI comes from the Panel
+URL setting rather than from the request's Host, which a caller controls: that
+is the difference between a fixed redirect target and one somebody can register
+under their own hostname.
+
+### What building it found in the code that was already there
+
+An account created by single sign-on has no password hash. Signing in with a
+password was correctly refused — and refused with *"stored password hash is not
+in the expected argon2id format"*, which tells an anonymous caller which
+addresses are provider-only accounts. That is the exact enumeration
+`TestUnknownAccountLooksLikeAWrongPassword` exists to prevent, arriving through
+a new door. An empty hash now costs the same Argon2 hash, the same lockout
+entry and the same `ErrInvalidCredentials` as any other wrong password.
+
+`TestEveryRouteRefusesAnAnonymousRequest` caught the two new routes on the first
+run, which is what a complete check is for: they are open on purpose, and now
+say so with a reason next to each.
+
+### And the sandbox claim that was never checked
+
+ADR-0010 has said for months that this environment "refuses privileged
+containers", so no cluster could ever run here. Checked today for the first
+time: the container is root with nearly every capability, `docker` and `k3d` are
+both installed, `/dev/kmsg` and `/dev/net/tun` are there. What actually blocks
+it is the session's permission layer refusing to start a Docker daemon — a fact
+with a remedy, rather than a wall. The ADR now says so. No cluster has been run
+either way, so nothing else changes; what changes is that the reason written
+down was not the real one.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

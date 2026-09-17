@@ -401,6 +401,7 @@ export type Meta = {
   tagline: string
   locales: string[]
   dev_mode: boolean
+  sso: { enabled: boolean; label?: string }
   server_now: string
 }
 

@@ -144,7 +144,16 @@
     "revokeToken": "Revoke",
     "subtitle": "Your sign-in, the devices you are signed in on, and the tokens that act as you.",
     "twoFactorTitle": "Two-factor authentication",
-    "twoFactorOff": "Off. A password on its own is the only thing between anyone and this cluster."
+    "twoFactorOff": "Off. A password on its own is the only thing between anyone and this cluster.",
+    "or": "or",
+    "signInWithSSO": "Sign in with single sign-on",
+    "ssoError": {
+      "refused": "That sign-in was refused. Try again, or sign in with a password.",
+      "no_account": "You do not have an account on this panel. Ask an administrator to invite you.",
+      "state": "That sign-in did not come back the way it left. Start again.",
+      "expired": "That sign-in took too long. Start again.",
+      "disabled": "That account has been disabled on this panel."
+    }
   },
   "dashboard": {
     "title": "Overview",

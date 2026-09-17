@@ -364,3 +364,50 @@ func TestUnknownScopesAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestAnAccountWithNoPasswordCannotBeSignedIntoWithOne.
+//
+// Single sign-on creates accounts with no password hash at all. If an empty
+// hash were ever treated as a match — or as "no password set, so anything
+// works" — every account created through a provider would be open to anyone who
+// knew the address. This is the shape of the bug, so it is the shape of the
+// test: an account with an empty hash, and every password somebody might try.
+func TestAnAccountWithNoPasswordCannotBeSignedIntoWithOne(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("create a keyring: %v", err)
+	}
+	service := NewService(db, keyring, time.Hour, false)
+
+	// What the single sign-on callback creates: no PasswordHash.
+	user := store.User{Email: "sso@example.test", Name: "SSO"}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+	if user.PasswordHash != "" {
+		t.Fatalf("the account was created with a password hash %q", user.PasswordHash)
+	}
+
+	for _, password := range []string{"", " ", "password", "$argon2id$v=19$m=19456,t=2,p=4$aaaa$bbbb"} {
+		_, err := service.Login(ctx, user.Email, password, "", "198.51.100.10", "test")
+		if !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("signing in as %s with %q gave %v, want ErrInvalidCredentials",
+				user.Email, password, err)
+		}
+	}
+
+	// And the hash verifier itself, so the guard does not depend on Login
+	// happening to reach it.
+	for _, hash := range []string{"", "not a hash", "$argon2id$", "$2y$10$something"} {
+		if err := VerifyPassword("anything", hash); err == nil {
+			t.Errorf("VerifyPassword accepted the stored hash %q", hash)
+		}
+	}
+}

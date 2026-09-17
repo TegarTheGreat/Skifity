@@ -126,6 +126,12 @@ func (s *Server) routes() chi.Router {
 
 		api.Post("/auth/login", s.handleLogin)
 		api.Post("/auth/logout", s.handleLogout)
+		// Both halves of single sign-on are open, like signing in with a
+		// password: somebody with no account has no credentials to present.
+		// What makes them safe is the state and the nonce that have to come
+		// back, and the ID token's signature.
+		api.Get("/auth/sso/start", s.handleSSOStart)
+		api.Get("/auth/sso/callback", s.handleSSOCallback)
 
 		// Webhooks authenticate with their own per-source signature.
 		api.Post("/webhooks/git/{sourceID}", s.handleGitWebhook)

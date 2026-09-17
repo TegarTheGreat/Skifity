@@ -169,6 +169,14 @@ which is ~120 lines of script to reproduce.
 **Context.** The build environment has Docker but the sandbox policy refuses privileged containers and
 host-network relays, so k3d/kind clusters and real VMs cannot be started here.
 
+**Correction, 2026-09-17.** That context was checked rather than assumed for the first time, and it is
+not what it says. The container runs as root with nearly every capability, `docker` and `k3d` are both
+installed, and `/dev/kmsg` and `/dev/net/tun` are present — the pieces k3d needs. What actually stops a
+cluster being started is that the session's permission layer refuses to start a Docker daemon, which is
+a different fact with a different remedy: it needs a person to allow it, not a different sandbox. The
+decision below is unchanged, because no cluster has been run either way. What changes is that "it is
+impossible here" was not true, and it had been written down for months.
+
 **Options.** (a) Skip Kubernetes testing, (b) mock everything, (c) test against fakes that implement the
 real interfaces, and keep the cluster-dependent smoke tests as runnable scripts.
 

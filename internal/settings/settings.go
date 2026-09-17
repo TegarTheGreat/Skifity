@@ -97,6 +97,7 @@ const (
 	GroupNotifications = "notifications"
 	GroupRegistry      = "registry"
 	GroupCluster       = "cluster"
+	GroupSignIn        = "signin"
 )
 
 // Keys used elsewhere in the panel. Referring to a constant rather than a string
@@ -134,6 +135,12 @@ const (
 	KeyRegistryURL       = "registry.url"
 	KeyRegistryUser      = "registry.username"
 	KeyRegistryPassword  = "registry.password"
+	KeySSOIssuer         = "signin.oidc_issuer"
+	KeySSOClientID       = "signin.oidc_client_id"
+	KeySSOClientSecret   = "signin.oidc_client_secret"
+	KeySSOButtonLabel    = "signin.oidc_button_label"
+	KeySSODomains        = "signin.oidc_allowed_domains"
+	KeySSOAutoCreate     = "signin.oidc_auto_create"
 	KeyBuilderDefault    = "general.default_builder"
 	KeyTelemetryDisabled = "general.telemetry_disabled"
 
@@ -165,6 +172,39 @@ var Definitions = []Definition{
 	{
 		Key: KeyTelemetryDisabled, Label: "Disable usage reporting", Group: GroupGeneral,
 		Help: "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed.",
+		Kind: KindBool, Validate: validateBool,
+	},
+	{
+		Key: KeySSOIssuer, Label: "Single sign-on issuer", Group: GroupSignIn,
+		Help: "The OpenID Connect issuer URL of your identity provider — Okta, Entra, Authentik, Keycloak, Zitadel, Google. " +
+			"Skifity reads its configuration from /.well-known/openid-configuration under this address. Leave empty to sign in with a password only.",
+		Placeholder: "https://login.example.com",
+		Kind:        KindURL,
+		Validate:    validateURL,
+	},
+	{
+		Key: KeySSOClientID, Label: "Client ID", Group: GroupSignIn,
+		Help: "From the application you registered with the provider. Its redirect URI is this panel's address followed by /api/auth/sso/callback.",
+	},
+	{
+		Key: KeySSOClientSecret, Label: "Client secret", Group: GroupSignIn, Secret: true,
+		Help: "Stored encrypted and never shown again.",
+	},
+	{
+		Key: KeySSOButtonLabel, Label: "Sign-in button text", Group: GroupSignIn,
+		Help:        "What the button on the sign-in page says. Leave empty for a generic label.",
+		Placeholder: "Sign in with Okta",
+	},
+	{
+		Key: KeySSODomains, Label: "Allowed email domains", Group: GroupSignIn,
+		Help: "Comma-separated. Only people whose verified email is in one of these domains may sign in. " +
+			"Leave empty to accept anybody the provider vouches for, which is only safe when the provider is yours.",
+		Placeholder: "example.com, example.org",
+	},
+	{
+		Key: KeySSOAutoCreate, Label: "Create an account on first sign-in", Group: GroupSignIn,
+		Help: "With this off, somebody the provider knows and this panel does not is refused, " +
+			"so accounts are created by invitation rather than by anyone with a company address.",
 		Kind: KindBool, Validate: validateBool,
 	},
 	{

@@ -63,6 +63,49 @@ to get started.
 | **DNS** | A provider token, for wildcard certificates, which need a DNS challenge. |
 | **Email** | SMTP, for notifications. |
 | **Image registry** | Where built images go. An in-cluster registry is installed on first use if this is left empty. |
+| **Sign-in** | An OpenID Connect provider, so people sign in with the account they already have. See below. |
+
+## Single sign-on
+
+Skifity speaks **OpenID Connect**: Okta, Entra ID, Authentik, Keycloak, Zitadel,
+Google Workspace, or anything else that publishes a discovery document. There is
+no SAML, and there is not going to be — it is a second protocol and a second
+class of signature bug, and every provider a self-hosted panel meets speaks
+OIDC.
+
+Register an application with your provider as a **confidential client** using the
+authorization code flow, and give it this redirect URI:
+
+```
+https://panel.example.com/api/auth/sso/callback
+```
+
+The host has to be the **Panel URL** setting exactly. Skifity builds the redirect
+URI from that setting rather than from the request, so a request cannot name its
+own redirect target — which also means single sign-on does not start until Panel
+URL is set.
+
+Then, under **Settings → Sign-in**:
+
+| Setting | What it is |
+|---|---|
+| Single sign-on issuer | The provider's issuer URL. Skifity reads `/.well-known/openid-configuration` under it. |
+| Client ID | From the application you registered. |
+| Client secret | Stored encrypted and never shown again. |
+| Sign-in button text | What the button says. Empty gives a generic label. |
+| Allowed email domains | Comma-separated. Only verified addresses in these domains may sign in. |
+| Create an account on first sign-in | Off by default: somebody the provider knows and this panel does not is refused. |
+
+Leave **Allowed email domains** empty only when the provider is yours. Against a
+public provider an empty list means anybody with an account there can sign in.
+
+An account created this way has **no password**. It cannot be signed into with
+one, and the refusal is indistinguishable from a wrong password — so the sign-in
+form does not become a way to find out which addresses use single sign-on. A new
+account joins no team: an administrator adds it to one, the same as any other.
+
+Nothing is lost if the provider goes away. The first administrator account still
+has a password, and API tokens keep working.
 
 ## The CLI
 

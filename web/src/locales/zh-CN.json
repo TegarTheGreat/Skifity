@@ -136,7 +136,16 @@
     "revokeToken": "吊销",
     "subtitle": "你的登录方式、已登录的设备，以及代表你行事的令牌。",
     "twoFactorTitle": "双因素认证",
-    "twoFactorOff": "未开启。此时只有一个密码挡在任何人和这个集群之间。"
+    "twoFactorOff": "未开启。此时只有一个密码挡在任何人和这个集群之间。",
+    "or": "或",
+    "signInWithSSO": "使用单点登录",
+    "ssoError": {
+      "refused": "此次登录被拒绝。请重试，或使用密码登录。",
+      "no_account": "你在此面板上还没有账户。请让管理员邀请你。",
+      "state": "此次登录返回的内容与发出时不符。请重新开始。",
+      "expired": "此次登录用时过长。请重新开始。",
+      "disabled": "该账户已在此面板上停用。"
+    }
   },
   "dashboard": {
     "title": "总览",

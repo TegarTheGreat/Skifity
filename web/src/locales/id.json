@@ -136,7 +136,16 @@
     "revokeToken": "Cabut",
     "subtitle": "Cara Anda masuk, perangkat tempat Anda masuk, dan token yang bertindak atas nama Anda.",
     "twoFactorTitle": "Autentikasi dua faktor",
-    "twoFactorOff": "Nonaktif. Hanya kata sandi yang memisahkan siapa pun dari klaster ini."
+    "twoFactorOff": "Nonaktif. Hanya kata sandi yang memisahkan siapa pun dari klaster ini.",
+    "or": "atau",
+    "signInWithSSO": "Masuk dengan single sign-on",
+    "ssoError": {
+      "refused": "Proses masuk itu ditolak. Coba lagi, atau masuk dengan kata sandi.",
+      "no_account": "Anda belum punya akun di panel ini. Minta administrator mengundang Anda.",
+      "state": "Proses masuk itu tidak kembali seperti saat berangkat. Mulai lagi.",
+      "expired": "Proses masuk itu terlalu lama. Mulai lagi.",
+      "disabled": "Akun itu telah dinonaktifkan di panel ini."
+    }
   },
   "dashboard": {
     "title": "Ringkasan",

@@ -242,13 +242,14 @@ func (s *Server) handleSetupComplete(w http.ResponseWriter, r *http.Request) {
 }
 
 type metaResponse struct {
-	Product   string   `json:"product"`
-	Version   string   `json:"version"`
-	Commit    string   `json:"commit"`
-	Tagline   string   `json:"tagline"`
-	Locales   []string `json:"locales"`
-	DevMode   bool     `json:"dev_mode"`
-	ServerNow string   `json:"server_now"`
+	Product   string    `json:"product"`
+	Version   string    `json:"version"`
+	Commit    string    `json:"commit"`
+	Tagline   string    `json:"tagline"`
+	Locales   []string  `json:"locales"`
+	DevMode   bool      `json:"dev_mode"`
+	SSO       ssoStatus `json:"sso"`
+	ServerNow string    `json:"server_now"`
 }
 
 // handleMeta gives the frontend everything it needs before a user signs in.
@@ -260,6 +261,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		Tagline:   version.Tagline,
 		Locales:   []string{"en", "id", "hi", "ru", "zh-CN"},
 		DevMode:   s.cfg.DevMode,
+		SSO:       s.ssoStatus(r),
 		ServerNow: time.Now().UTC().Format(time.RFC3339),
 	})
 }

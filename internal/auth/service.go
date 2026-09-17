@@ -105,6 +105,16 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 		return LoginResult{}, fmt.Errorf("look up user: %w", err)
 	}
 
+	// An account created through single sign-on has no password hash at all.
+	// That is not a malformed hash to report — reporting it tells an anonymous
+	// caller which addresses belong to provider-only accounts, which is the
+	// enumeration TestUnknownAccountLooksLikeAWrongPassword exists to prevent.
+	// It costs the same hash and the same failure as any other wrong password.
+	if user.PasswordHash == "" {
+		_, _ = HashPassword(password)
+		s.recordFailure(ctx, email, ip)
+		return LoginResult{}, ErrInvalidCredentials
+	}
 	if err := VerifyPassword(password, user.PasswordHash); err != nil {
 		s.recordFailure(ctx, email, ip)
 		if errors.Is(err, ErrPasswordMismatch) {

@@ -1,8 +1,10 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeftIcon } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { ArrowLeftIcon, KeyRoundIcon } from "lucide-react"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Logo } from "@/components/logo"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Button } from "@/components/ui/button"
@@ -11,7 +13,9 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input"
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
 import { Spinner } from "@/components/ui/spinner"
+import { Separator } from "@/components/ui/separator"
 import { api } from "@/lib/api"
+import type { Meta } from "@/lib/types"
 import { CenteredLayout } from "@/pages/setup"
 
 /**
@@ -28,6 +32,21 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
   const [needsCode, setNeedsCode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
+
+  const meta = useQuery({ queryKey: ["meta"], queryFn: () => api.get<Meta>("/api/meta") })
+
+  // A sign-on that failed comes back as a redirect with a reason in the query,
+  // because the callback is a place a browser lands rather than a request the
+  // panel made.
+  //
+  // Read during the first render rather than copied in by an effect: the value
+  // is already there when this mounts, and setting state from an effect is the
+  // cascading render this codebase does not do. The effect only takes it out of
+  // the address bar, which is a side effect and nothing else's input.
+  const [ssoError] = useState(() => new URLSearchParams(window.location.search).get("sso_error"))
+  useEffect(() => {
+    if (ssoError) window.history.replaceState({}, "", window.location.pathname)
+  }, [ssoError])
 
   const signIn = async (totpCode: string) => {
     setSubmitting(true)
@@ -76,6 +95,18 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
           >
             <FieldGroup>
               {error != null && <ErrorDisplay error={error} compact />}
+              {ssoError != null && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {/*
+                      Five reasons, because more would be telling an anonymous
+                      browser things about accounts it does not have. Everything
+                      else is one sentence and a line in the panel's log.
+                    */}
+                    {t(`auth.ssoError.${["no_account", "state", "expired", "disabled"].includes(ssoError) ? ssoError : "refused"}`)}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {needsCode ? (
                 <>
@@ -152,6 +183,27 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => void }) {
                       {submitting && <Spinner />}
                       {submitting ? t("auth.signingIn") : t("auth.signIn")}
                     </Button>
+
+                    {/*
+                      The button is a link rather than a fetch: the provider
+                      answers with a redirect to its own page, and following
+                      that is the browser's job, not the API client's.
+                    */}
+                    {meta.data?.sso.enabled && (
+                      <>
+                        <div className="flex items-center gap-3 py-1">
+                          <Separator className="flex-1" />
+                          <span className="text-xs text-muted-foreground">{t("auth.or")}</span>
+                          <Separator className="flex-1" />
+                        </div>
+                        <Button variant="outline" className="w-full" asChild>
+                          <a href="/api/auth/sso/start">
+                            <KeyRoundIcon />
+                            {meta.data.sso.label ?? t("auth.signInWithSSO")}
+                          </a>
+                        </Button>
+                      </>
+                    )}
                     <FieldDescription className="text-center">
                       <Collapsible>
                         <CollapsibleTrigger className="hover:text-foreground">

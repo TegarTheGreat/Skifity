@@ -30,6 +30,14 @@ var openOnPurpose = map[string]string{
 	// secret of the source it names, not by a session: the sender is GitHub,
 	// which has no account here.
 	"POST /api/webhooks/git/{sourceID}": "authenticated by its HMAC signature instead",
+
+	// Both halves of single sign-on, for the same reason as /auth/login:
+	// somebody with no account has no credentials to present. The callback is
+	// guarded by a state this panel issued, in a cookie this browser was given,
+	// used once — and by the ID token's signature, issuer, audience, expiry and
+	// nonce. TestASingleSignOnCallbackRefusesWhatItDidNotIssue covers that.
+	"GET /api/auth/sso/start":    "starting a sign-in is how credentials are obtained",
+	"GET /api/auth/sso/callback": "guarded by a single-use state and a verified ID token, not by a session",
 }
 
 // placeholder fills a chi pattern with something shaped like an id. The value

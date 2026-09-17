@@ -1194,6 +1194,79 @@ script that ships, and that `script-src` still has no `'unsafe-inline'`.
 **32 screenshots**, in `docs/tour.md`, captured by a test against the real
 binary — so a picture can never show a screen that no longer exists.
 
+## Phase 33 — the panel at 375px, and a team that could not be joined
+
+A layout test at 375, 768 and 1440 (`web/tests/responsive.spec.ts`), and four
+faults, none of them in hard code: the inset had no `min-w-0`, so the command
+palette button's own width made every page on a tablet scroll 7px sideways; a
+`Card` had none either, so a repository URL made the app page scroll 372px on a
+phone with a `truncate` that could never apply; shadcn fixes a tab strip at one
+row, so Settings' seven tabs wrapped out of the pill and onto the panel below;
+and the switch, the checkbox and the breadcrumb links were all under the 24px
+WCAG 2.2 (AA, 2.5.8) minimum. The test seeds a project, an app and a long secret
+variable first, because an empty install has none of the shapes that break.
+
+Separately, and larger: **there was no way to add anybody to a team.** Members
+could be listed and their role changed; an account could only be made by
+first-run setup, which happens once. An invitation is now a one-time link —
+stored as a SHA-256, spent on use, expiring in seven days, carrying the address
+it was issued for so an accept cannot be pointed at somebody else's account.
+
+Also: a missing file was served `index.html` with a 200, which is how a browser
+holding a cached page ends up parsing `<!doctype html>` as JavaScript; and
+`Cross-Origin-Resource-Policy` was missing from an otherwise complete set of
+headers.
+
+## Phase 34 — what autoscaling did after it worked
+
+Three faults on the scaling path, found by reading it against KEDA's own
+manifests rather than against itself. All three are the same shape: an object
+that renders correctly and a system that then behaves differently.
+
+### Every apply undid the autoscaler
+
+Objects are applied with server-side apply and `Force`, and the Deployment
+carried `spec.replicas`. An apply happens on a deploy, a rollback, a variable
+change, a domain change and a scaling change — so each of those reasserted the
+panel's number over the autoscaler's. An app the HPA had taken to six under load
+dropped to its minimum because somebody edited a variable, then climbed back
+over the next few minutes. With scale to zero it was the mirror image: a
+sleeping app forced awake and billed for it.
+
+The field is now omitted whenever an autoscaler owns it, which is what
+Kubernetes documents for this case. The test that existed asserted the old
+behaviour — "the Deployment must start at the minimum" — which is why nothing
+ever failed.
+
+### A sleeping app could not be woken
+
+An app that scales to zero is reached through an ExternalName Service aliasing
+KEDA's interceptor. That alias said `port: 80` with `targetPort: 8080`, and the
+Ingress asked for port 80.
+
+`targetPort` is not applied to an ExternalName Service: no kube-proxy rule is
+made for one, so the ingress controller dials whatever number it settles on —
+Traefik the Service's `port`, nginx the number in the Ingress backend. Both
+would have dialled port 80 of a proxy that listens on 8080 and nothing else.
+Every request to an app that could sleep would have been a 502, and the app
+would never have started. KEDA's own example points an Ingress at 8080 and gives
+the alias no ports at all; this now says 8080 in all three places, which is the
+only value that is right under every reading.
+
+### A percentage target of a number nobody chose
+
+A CPU or memory target is a percentage of what the app *reserves*. A new app
+reserves 50m and 128Mi, so a 70% target fires at 35m and 90Mi — under what most
+frameworks use while idle. Autoscaling would therefore "work" by going straight
+to the ceiling and staying there. The readiness checker now does that arithmetic
+and says the numbers out loud, and `docs/concepts.md` explains it.
+
+`test/cluster/verify.sh` gained the two checks that would have caught the first
+two: it scales an app to three, changes a variable and fails if the count moves;
+and it puts an app to sleep, sends one request through the real ingress and
+fails unless the app answers and comes back. The second used to be a sentence
+telling the operator to try it by hand.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

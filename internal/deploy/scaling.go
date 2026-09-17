@@ -101,6 +101,39 @@ func (d *Deployer) ScalingReadiness(ctx context.Context, appID string) ([]api.Sc
 		})
 	}
 
+	// A percentage target is a percentage of the request, not of the server.
+	//
+	// This is the arithmetic nobody does, and it is why "autoscaling is on and
+	// the app sits at its maximum" is the second most common complaint about
+	// an HPA after "it never scales at all". A new app requests 50m of CPU and
+	// 128Mi of memory — sensible numbers for packing a small server — so a 70%
+	// target fires at 35m and 90Mi, which almost any framework is over before
+	// it has served a single request.
+	if app.Autoscale {
+		if trip, ok := firstTripwire(app.CPUTarget, app.CPURequestM, 100); ok {
+			findings = append(findings, api.ScalingFinding{
+				Code:     "target_below_idle",
+				Severity: "warning",
+				Title:    "The CPU target is reached before the app does anything",
+				Detail: fmt.Sprintf(
+					"The target is a percentage of what this app reserves, not of the server. It reserves %dm of CPU and the target is %d%%, so a new instance is added above %dm — about a tenth of one core, which most frameworks pass while idle.",
+					app.CPURequestM, app.CPUTarget, trip),
+				Fix: "Raise the reserved CPU under the app's settings to what it actually uses when busy, so the percentage means something. The reservation is what the app is guaranteed, not a limit on it.",
+			})
+		}
+		if trip, ok := firstTripwire(app.MemoryTarget, app.MemRequestMB, 256); ok {
+			findings = append(findings, api.ScalingFinding{
+				Code:     "memory_target_below_idle",
+				Severity: "warning",
+				Title:    "The memory target is reached before the app does anything",
+				Detail: fmt.Sprintf(
+					"The target is a percentage of what this app reserves. It reserves %dMi and the target is %d%%, so a new instance is added above %dMi — which a Node or JVM process passes at startup.",
+					app.MemRequestMB, app.MemoryTarget, trip),
+				Fix: "Raise the reserved memory under the app's settings to what the app uses when it is idle, plus room to work. Memory does not fall once it has been claimed, so a target below the idle figure never comes back down.",
+			})
+		}
+	}
+
 	// A single instance with no autoscaling has no redundancy at all.
 	if app.Replicas == 1 && !app.Autoscale {
 		findings = append(findings, api.ScalingFinding{
@@ -125,6 +158,20 @@ func (d *Deployer) ScalingReadiness(ctx context.Context, appID string) ([]api.Sc
 	}
 
 	return findings, nil
+}
+
+// firstTripwire is the usage at which an autoscaler adds an instance, and
+// whether that point is low enough to be worth saying out loud.
+//
+// floor is the level under which the answer is "this fires at idle": a tenth of
+// a core, or a quarter of a gigabyte. Above it the operator has chosen a
+// reservation that means something and does not need to be told twice.
+func firstTripwire(targetPercent, request, floor int) (int, bool) {
+	if targetPercent <= 0 || request <= 0 {
+		return 0, false
+	}
+	trip := request * targetPercent / 100
+	return trip, trip < floor
 }
 
 // inspectVariable spots configuration that will not survive being scaled.

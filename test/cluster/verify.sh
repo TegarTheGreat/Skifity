@@ -6,8 +6,8 @@
 # a cluster. This is the other half: it installs Skifity on a real server,
 # deploys a real application, and then checks the three claims that only a real
 # cluster can settle — that an app comes up and answers, that autoscaling has
-# numbers to scale on, and that scale-to-zero puts an idle app to sleep and a
-# request wakes it.
+# numbers to scale on and is not undone by the next apply, and that
+# scale-to-zero puts an idle app to sleep and a request wakes it.
 #
 #   THIS INSTALLS k3s AND CHANGES THE MACHINE IT RUNS ON.
 #
@@ -252,6 +252,30 @@ else
 	no "no HorizontalPodAutoscaler exists after turning autoscaling on"
 fi
 
+# The check that costs nothing and was missing.
+#
+# Every object is applied with server-side apply and Force, and an apply happens
+# on a deploy, a rollback and on any change to a variable or a domain. If the
+# panel writes spec.replicas while an autoscaler also manages it, each of those
+# knocks the app back to the floor — an app the HPA had taken to three under
+# load collapses to one because somebody edited a variable. Nothing in
+# Kubernetes reports that; the graph just dips.
+#
+# Twenty seconds is inside the HPA's five-minute scale-down window, so the only
+# thing that can take these instances away in that time is the panel.
+kubectl -n "$NAMESPACE" scale deploy hello --replicas=3 >/dev/null 2>&1
+sleep 5
+BEFORE=$(kubectl -n "$NAMESPACE" get deploy hello -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 0)
+api PUT "/api/apps/$APP_ID/variables" '{"key":"VERIFY_SYNC","value":"1"}' >/dev/null 2>&1 ||
+	no "a variable could not be set, so this check could not run"
+sleep 20
+AFTER=$(kubectl -n "$NAMESPACE" get deploy hello -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 0)
+if [ "$BEFORE" = "3" ] && [ "$AFTER" = "3" ]; then
+	ok "changing a variable left the autoscaler's instance count alone"
+else
+	no "the instance count went from ${BEFORE:-?} to ${AFTER:-?} when a variable changed: the panel is overwriting what the autoscaler decided, and every deploy does the same"
+fi
+
 step "Scale to zero"
 
 if api PUT "/api/apps/$APP_ID/scaling" '{"autoscale":false,"scale_to_zero":true,"replicas":1}' >/dev/null 2>&1; then
@@ -275,10 +299,45 @@ if api PUT "/api/apps/$APP_ID/scaling" '{"autoscale":false,"scale_to_zero":true,
 	else
 		ok "the app's own HPA was removed, so KEDA's is the only one"
 	fi
-	say "  A cold start takes as long as the image takes to pull. Leave it idle for"
-	say "  the cooldown, then curl the app's domain and time the first response:"
-	say "    time curl -fsS -o /dev/null https://hello.$DOMAIN"
-	skip "the sleep-then-wake timing" "it needs a wait longer than this script should hold"
+	# Sleep, then wake. This is the whole feature, and it is the one part of it
+	# that no unit test can reach: the request has to leave the ingress
+	# controller, cross into KEDA's namespace through an ExternalName alias,
+	# reach the interceptor, and come back with the app started behind it.
+	#
+	# The alias's port is the thing this catches. targetPort is not applied to
+	# an ExternalName Service — no kube-proxy rule is made for one — so if the
+	# port on the alias and the port the interceptor listens on ever disagree,
+	# every request to a sleeping app is a 502 and every object above still
+	# looks right. It said 80 against the interceptor's 8080 until this check
+	# existed.
+	#
+	# Over plain HTTP against the node with a Host header, rather than over
+	# HTTPS on the real name: a certificate that has not been issued yet would
+	# fail this for a reason that has nothing to do with waking anything.
+	kubectl -n "$NAMESPACE" scale deploy hello --replicas=0 >/dev/null 2>&1
+	for _ in $(seq 1 24); do
+		ASLEEP=$(kubectl -n "$NAMESPACE" get deploy hello -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+		# An empty field is how Kubernetes says none are ready.
+		[ -z "$ASLEEP" ] || [ "$ASLEEP" = "0" ] && break
+		sleep 5
+	done
+	if [ -z "$ASLEEP" ] || [ "$ASLEEP" = "0" ]; then
+		ok "the app is asleep with no instances running"
+	else
+		no "the app still has $ASLEEP instances, so what follows is not a cold start"
+	fi
+
+	WOKE_AT=$(date +%s)
+	if curl -fsS -o /dev/null --max-time 120 -H "Host: hello.$DOMAIN" "http://127.0.0.1/"; then
+		ok "a request to a sleeping app was answered in $(($(date +%s) - WOKE_AT))s"
+	else
+		no "a request to a sleeping app was not answered. The path is ingress -> the app's wake Service -> KEDA's interceptor in the keda namespace -> the app. Look at: kubectl -n $NAMESPACE get svc hello-wake -o yaml, and whether its port matches the one keda-add-ons-http-interceptor-proxy listens on"
+	fi
+	if kubectl -n "$NAMESPACE" get deploy hello -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -q '^[1-9]'; then
+		ok "the request is what started the app again"
+	else
+		no "the app never came back, so the request above was answered by something else"
+	fi
 else
 	no "scale to zero was refused"
 fi

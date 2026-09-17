@@ -291,6 +291,12 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 		reason := err.Error()
 		if statusErr == nil {
 			ready = status.ReadyReplicas
+			// The live number, not the configured one: an autoscaled app is
+			// waiting for however many instances the autoscaler has asked for,
+			// and saying "2 of 1 ready" helps nobody.
+			if status.DesiredReplicas > 0 {
+				wanted = status.DesiredReplicas
+			}
 			if status.Detail != "" {
 				reason = status.Detail
 			}

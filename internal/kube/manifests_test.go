@@ -307,10 +307,106 @@ func TestHPAOnlyWhenAutoscaling(t *testing.T) {
 		t.Fatalf("scale-down window (%ds) is not longer than scale-up (%ds), which causes flapping", down, up)
 	}
 
-	// The Deployment must start at the minimum and let the HPA take over.
-	d := BuildDeployment(s)
-	if *d.Spec.Replicas != 2 {
-		t.Fatalf("an autoscaling Deployment was rendered with %d replicas, want the minimum of 2", *d.Spec.Replicas)
+	// And the Deployment must not carry a replica count at all. This test used
+	// to assert the opposite — that it was rendered at the minimum — which is
+	// what made the bug invisible: see TestAnAutoscalerIsNotArguedWith.
+	if d := BuildDeployment(s); d.Spec.Replicas != nil {
+		t.Fatalf("an autoscaling Deployment was rendered with %d replicas; the HPA owns that field",
+			*d.Spec.Replicas)
+	}
+}
+
+// TestAnAutoscalerIsNotArguedWith is about the field nobody looks at.
+//
+// Objects are applied with server-side apply and Force, and an apply happens on
+// a deploy, a rollback, a variable change, a domain change and a scaling
+// change. Any `replicas` the panel sends is therefore reasserted every time —
+// so an app the HPA had taken to six under load dropped back to its minimum the
+// moment somebody edited a variable, and a sleeping app was forced awake.
+// Omitting the field is what Kubernetes documents for this case.
+func TestAnAutoscalerIsNotArguedWith(t *testing.T) {
+	fixed := baseSpec()
+	fixed.Replicas = 3
+	if got := BuildDeployment(fixed).Spec.Replicas; got == nil || *got != 3 {
+		t.Fatalf("an app with a fixed instance count must still be written with it, got %v", got)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		shape func(*AppSpec)
+	}{
+		{"autoscaling", func(s *AppSpec) {
+			s.Autoscale, s.MinReplicas, s.MaxReplicas, s.CPUTarget = true, 2, 8, 70
+		}},
+		{"scale to zero", func(s *AppSpec) { s.ScaleToZero = true }},
+		{"both", func(s *AppSpec) {
+			s.ScaleToZero = true
+			s.Autoscale, s.MinReplicas, s.MaxReplicas, s.CPUTarget = true, 1, 8, 70
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := scalableSpec()
+			spec.Replicas = 3
+			tc.shape(&spec)
+
+			if got := BuildDeployment(spec).Spec.Replicas; got != nil {
+				t.Fatalf("replicas was written as %d, so the next apply undoes the autoscaler", *got)
+			}
+			// A nil pointer is only half the answer: server-side apply reads
+			// the JSON, and a field that is serialised as null claims ownership
+			// just as firmly as one with a number in it.
+			raw, err := ToUnstructured(BuildDeployment(spec))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, found, _ := unstructured.NestedFieldNoCopy(raw.Object, "spec", "replicas"); found {
+				t.Fatal("spec.replicas is present in the applied object, so apply owns it")
+			}
+		})
+	}
+}
+
+// TestTheWakeServiceAndTheIngressAgreeOnAPort is the whole of scale to zero
+// working or not working.
+//
+// An ExternalName Service is a DNS alias: no kube-proxy rule is made for it, so
+// `targetPort` is never applied and the ingress controller dials whatever
+// number it settles on — Traefik the Service's port, nginx the number in the
+// Ingress backend. The alias said port 80, so both dialled port 80 of KEDA's
+// interceptor, which listens on 8080 and nothing else. Every request to an app
+// that could sleep was a 502, and the app was never woken.
+func TestTheWakeServiceAndTheIngressAgreeOnAPort(t *testing.T) {
+	spec := scalableSpec()
+	spec.ScaleToZero = true
+
+	service := BuildInterceptorService(spec)
+	if service == nil {
+		t.Fatal("no wake service")
+	}
+	ports, _, _ := unstructured.NestedSlice(service.Object, "spec", "ports")
+	if len(ports) != 1 {
+		t.Fatalf("the wake service has %d ports, want one", len(ports))
+	}
+	port := ports[0].(map[string]any)
+	if port["port"] != int64(KEDAInterceptorPort) {
+		t.Errorf("the wake service listens on %v, want %d — the interceptor's own port",
+			port["port"], KEDAInterceptorPort)
+	}
+	if port["targetPort"] != int64(KEDAInterceptorPort) {
+		t.Errorf("targetPort is %v, want %d: it is ignored on an ExternalName, so it must "+
+			"not be the one value that disagrees", port["targetPort"], KEDAInterceptorPort)
+	}
+
+	backend := BuildIngress(spec).Spec.Rules[0].HTTP.Paths[0].Backend.Service
+	if backend.Port.Number != int32(KEDAInterceptorPort) {
+		t.Errorf("the ingress dials port %d of the interceptor, which listens on %d",
+			backend.Port.Number, KEDAInterceptorPort)
+	}
+
+	// An ordinary app is unaffected: its own Service really does listen on 80.
+	ordinary := scalableSpec()
+	if got := BuildIngress(ordinary).Spec.Rules[0].HTTP.Paths[0].Backend.Service.Port.Number; got != 80 {
+		t.Errorf("an ordinary app's ingress dials port %d, want 80", got)
 	}
 }
 

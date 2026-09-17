@@ -187,11 +187,32 @@ func (s AppSpec) Annotations() map[string]string {
 	return out
 }
 
-// DesiredReplicas is the replica count to write on the Deployment.
+// ReplicasAreSomebodyElses reports whether an autoscaler owns the replica
+// count, so the panel must not write one.
 //
-// When autoscaling is on, the Deployment is created at the minimum and the HPA
-// takes over. Writing the fixed count there instead would fight the HPA on
-// every reconcile.
+// This is the difference between autoscaling that works and autoscaling that
+// looks like it works. The Deployment is applied with server-side apply and
+// Force, so every field the panel sends is reasserted on every apply — and an
+// apply happens on a deploy, a rollback, a variable change, a domain change and
+// a scaling change. Sending `replicas` while an autoscaler also manages it
+// means each of those knocks the app straight back down to the floor: an app
+// the HPA had taken to six instances under load collapses to one the moment
+// somebody edits a variable, and then climbs back over the next few minutes.
+// With scale to zero it is the mirror image — a sleeping app is forced awake
+// and billed for it.
+//
+// Omitting the field instead is what Kubernetes documents for this exact case.
+// The autoscaler becomes the field's only owner and the panel stops arguing
+// with it.
+func (s AppSpec) ReplicasAreSomebodyElses() bool {
+	return s.Autoscale || ScaleToZeroEnabled(s)
+}
+
+// DesiredReplicas is the replica count the app is configured for.
+//
+// It is what the Deployment is written with when nothing else owns that field,
+// and the number the rest of the panel reasons about — a disruption budget, for
+// one, which is worth having as soon as more than one instance is wanted.
 func (s AppSpec) DesiredReplicas() int32 {
 	if s.Autoscale {
 		return int32(max(s.MinReplicas, 1))

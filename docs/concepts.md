@@ -141,6 +141,24 @@ looks for the things that break: a SQLite file on a local disk, sessions kept in
 memory, a background job that assumes it is the only one. Each finding says what
 would go wrong and how to fix it.
 
+A CPU or memory target is a percentage of what the app *reserves*, not of the
+server. A new app reserves 50m of CPU and 128Mi of memory, so a 70% target adds
+an instance above 35m and 90Mi — which many frameworks are over before they have
+served a request. If autoscaling pins your app at its maximum, that is almost
+always why, and the fix is to raise the reservation under the app's settings to
+what the app really uses. The panel says so on the scaling tab rather than
+leaving you to work it out.
+
+An app can also scale to zero: with no traffic for five minutes it stops, and
+the next request starts it again while the request waits. That request is held
+by KEDA's interceptor, so nobody sees a 503 — they see a slow first page. It
+needs a hostname, because the interceptor decides what to wake from the address
+that was asked for.
+
+Once anything is scaling an app — a target or scale to zero — the panel stops
+writing an instance count of its own. It would otherwise put the app back to its
+minimum every time you changed a variable.
+
 Instances are spread across servers where possible, so losing a server does not
 take an app down.
 

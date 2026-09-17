@@ -117,9 +117,20 @@ func BuildInterceptorService(s AppSpec) *unstructured.Unstructured {
 		"spec": map[string]any{
 			"type":         "ExternalName",
 			"externalName": KEDAInterceptorService + "." + KEDANamespace + ".svc.cluster.local",
+			// The port has to be the interceptor's own, on both sides.
+			//
+			// An ExternalName Service is a DNS alias and nothing else: no
+			// kube-proxy rule is created for it, so `targetPort` is never
+			// applied and the ingress controller connects to whatever number
+			// it settles on. Traefik takes the Service's `port`, nginx takes
+			// the number in the Ingress backend. This used to say port 80 with
+			// targetPort 8080, so every one of them dialled port 80 of the
+			// interceptor, which listens on 8080 and nothing else — a sleeping
+			// app answered 502 and was never woken. 8080 everywhere is the
+			// only value that is right under all three readings.
 			"ports": []any{map[string]any{
 				"name":       "http",
-				"port":       int64(80),
+				"port":       int64(KEDAInterceptorPort),
 				"targetPort": int64(KEDAInterceptorPort),
 				"protocol":   "TCP",
 			}},

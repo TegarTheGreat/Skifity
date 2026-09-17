@@ -143,6 +143,14 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 		strategy = appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 	}
 
+	// Not written at all when an autoscaler owns it: server-side apply removes
+	// the field from the panel's ownership, and whatever the HPA or KEDA has
+	// set survives the next apply. See AppSpec.ReplicasAreSomebodyElses.
+	replicaField := &replicas
+	if s.ReplicasAreSomebodyElses() {
+		replicaField = nil
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -152,7 +160,7 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 			Annotations: s.Annotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: replicaField,
 			Selector: &metav1.LabelSelector{MatchLabels: s.SelectorLabels()},
 			Strategy: strategy,
 			// Ten revisions is enough history for rollback without filling
@@ -221,8 +229,13 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 	// Service would mean a request to a sleeping app got a 503 and nothing
 	// ever started it.
 	backend := s.Name
+	backendPort := int32(80)
 	if ScaleToZeroEnabled(s) {
 		backend = InterceptorServiceName(s.Name)
+		// Not 80. That Service is an alias for KEDA's interceptor, which
+		// listens on 8080; see BuildInterceptorService for why the number has
+		// to be the same on both sides of the alias.
+		backendPort = KEDAInterceptorPort
 	}
 
 	pathType := networkingv1.PathTypePrefix
@@ -242,7 +255,7 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 						Backend: networkingv1.IngressBackend{
 							Service: &networkingv1.IngressServiceBackend{
 								Name: backend,
-								Port: networkingv1.ServiceBackendPort{Number: 80},
+								Port: networkingv1.ServiceBackendPort{Number: backendPort},
 							},
 						},
 					}},

@@ -73,9 +73,26 @@ until you say you have.
 
 ## Can I take the data with me?
 
-Yes. The panel's state is one SQLite file at `/var/lib/skifity/panel.db`, and
-the key that opens it is at `/etc/skifity/master.key`. Your apps are ordinary
-container images and ordinary Kubernetes objects.
+Yes, and there is a command for it:
+
+    skifity export --out ./leaving
+
+That writes `skifity-export.json` — every project, app, domain, database,
+variable and schedule this team has — and `manifests/<namespace>/<app>.yaml` for
+each app: the Deployment, Service, Ingress, autoscaler, disruption budget,
+volume claims and scheduled commands, as plain Kubernetes objects. `kubectl
+apply -f` them on any cluster and the apps run there with nothing of ours. The
+panel has the same thing as a download under **Settings → Take your data with
+you**.
+
+The value of anything marked secret is not in the export, because a stored
+secret is never shown again. You do not need the panel for those: they are in
+your own cluster as ordinary Kubernetes Secrets, and the README the export
+writes has the one-line `kubectl` command that reads them out.
+
+Underneath, the panel's state is one SQLite file at `/var/lib/skifity/panel.db`
+and the key that opens it is at `/etc/skifity/master.key`, if you would rather
+take the whole thing.
 
 ## Does it support Docker Compose?
 

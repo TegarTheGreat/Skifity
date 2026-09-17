@@ -98,6 +98,7 @@ export function SettingsPage() {
         <TabsContent value="panel" className="space-y-6 pt-4">
           {/* Git has its own tab, where the connected accounts are. */}
           <SettingGroups except={["git"]} />
+          <ExportCard />
           <VersionCard />
         </TabsContent>
         <TabsContent value="git" className="space-y-6 pt-4">
@@ -342,6 +343,46 @@ function VersionCard() {
         <p className="text-xs text-muted-foreground">
           {t("settings.noUpdateCheck", { product: meta?.product ?? "Skifity" })}
         </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Taking everything out again.
+ *
+ * A self-hosted product that is hard to leave is a trap with good onboarding.
+ * The download is the panel's whole answer for this team; the CLI writes the
+ * same thing as a directory with the Kubernetes objects split out per app,
+ * which is the form somebody actually migrates with.
+ */
+function ExportCard() {
+  const { t } = useTranslation()
+  const { team } = useSession()
+  if (!team) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("settings.export")}</CardTitle>
+        <CardDescription>{t("settings.exportHelp")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-xs text-muted-foreground">{t("settings.exportSecrets")}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            A plain link rather than a fetch: the browser saves the file with
+            the session cookie it already has, and nothing has to be held in
+            memory on the way.
+          */}
+          <Button asChild variant="outline">
+            <a href={`/api/teams/${team.id}/export`} download={`${team.slug}-export.json`}>
+              <DownloadIcon />
+              {t("settings.exportDownload")}
+            </a>
+          </Button>
+          <code className="rounded bg-muted px-2 py-1 font-mono text-xs">skifity export</code>
+        </div>
       </CardContent>
     </Card>
   )

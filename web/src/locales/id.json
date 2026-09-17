@@ -588,7 +588,11 @@
     "pendingInvitations": "Menunggu diterima",
     "revokeInvitation": "Tarik undangan ini",
     "invitationExpires": "Kedaluwarsa {{when}}",
-    "inviteMemberHelp": "Undang seseorang lewat email. Skifity memberi Anda tautan untuk dikirimkan; mereka memilih kata sandinya sendiri. Yang sudah punya akun di sini langsung ditambahkan."
+    "inviteMemberHelp": "Undang seseorang lewat email. Skifity memberi Anda tautan untuk dikirimkan; mereka memilih kata sandinya sendiri. Yang sudah punya akun di sini langsung ditambahkan.",
+    "export": "Bawa data Anda",
+    "exportHelp": "Semua milik tim ini — proyek, aplikasi, domain, basis data, variabel dan jadwal — dalam satu berkas JSON, lengkap dengan objek Kubernetes setiap aplikasi.",
+    "exportSecrets": "Nilai dari apa pun yang ditandai rahasia tidak disertakan. Nilai itu sudah ada di cluster Anda sendiri, sebagai Secret Kubernetes biasa yang bisa Anda akses.",
+    "exportDownload": "Unduh JSON"
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

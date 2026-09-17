@@ -599,7 +599,11 @@
     "pendingInvitations": "Waiting to be accepted",
     "revokeInvitation": "Withdraw this invitation",
     "invitationExpires": "Expires {{when}}",
-    "inviteMemberHelp": "Invite somebody by email. Skifity gives you a link to send them; they choose their own password. Somebody who already has an account here is added directly instead."
+    "inviteMemberHelp": "Invite somebody by email. Skifity gives you a link to send them; they choose their own password. Somebody who already has an account here is added directly instead.",
+    "export": "Take your data with you",
+    "exportHelp": "Everything this team has — projects, apps, domains, databases, variables and schedules — as one JSON file, with each app's Kubernetes objects beside it.",
+    "exportSecrets": "The value of anything marked secret is not included. Those values are already in your own cluster, as ordinary Kubernetes Secrets you have access to.",
+    "exportDownload": "Download the JSON"
   },
   "errors": {
     "whatHappened": "What happened",

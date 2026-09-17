@@ -171,6 +171,9 @@ func (s *Server) routes() chi.Router {
 				team.Delete("/invitations/{invitationID}", s.handleRevokeInvitation)
 				team.Delete("/members/{userID}", s.handleRemoveMember)
 				team.Get("/audit", s.handleListAudit)
+				// Everything this team has, in one answer, so that leaving is
+				// a command rather than a project. See export_handlers.go.
+				team.Get("/export", s.handleExportTeam)
 
 				team.Get("/projects", s.handleListProjects)
 				team.Post("/projects", s.handleCreateProject)

@@ -588,7 +588,11 @@
     "pendingInvitations": "等待接受",
     "revokeInvitation": "撤回此邀请",
     "invitationExpires": "{{when}} 过期",
-    "inviteMemberHelp": "用邮箱邀请某人。Skifity 会给你一个链接发给对方；密码由他们自己设置。已经在此有账户的人则直接添加。"
+    "inviteMemberHelp": "用邮箱邀请某人。Skifity 会给你一个链接发给对方；密码由他们自己设置。已经在此有账户的人则直接添加。",
+    "export": "带走你的数据",
+    "exportHelp": "这个团队的一切——项目、应用、域名、数据库、变量和计划任务——导出为一个 JSON 文件，并附上每个应用的 Kubernetes 对象。",
+    "exportSecrets": "标记为机密的值不会包含在内。那些值已经在你自己的集群里，是你有权访问的普通 Kubernetes Secret。",
+    "exportDownload": "下载 JSON"
   },
   "errors": {
     "whatHappened": "发生了什么",

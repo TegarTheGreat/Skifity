@@ -73,11 +73,20 @@ skifity run -- npm run migrate    # run a one-off command in the app's image
 skifity open                      # print the URLs
 skifity apps                      # everything in this environment
 skifity servers                   # the machines
+skifity export --out ./leaving    # the whole team, as JSON and Kubernetes YAML
 ```
 
 Any command takes `--app <id>` to act on something other than the current
 directory's app, and `--json` for output a script can rely on. The human format
 is not stable; the JSON is.
+
+`export` is the one worth knowing about before you need it. It writes
+`skifity-export.json` — every project, app, domain, database, variable and
+schedule — plus `manifests/<namespace>/<app>.yaml` per app: the Deployment,
+Service, Ingress, autoscaler, disruption budget, volume claims and scheduled
+commands as plain Kubernetes objects. `kubectl apply -f` them on any cluster and
+the apps run there without this panel. Secret values are not included, and the
+README it writes says where they already are.
 
 ## Recovering access
 

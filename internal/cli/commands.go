@@ -57,6 +57,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = cmdApps(ctx, rest, stdout)
 	case "servers":
 		err = cmdServers(ctx, rest, stdout)
+	case "export":
+		err = cmdExport(ctx, rest, stdout)
 	case "open":
 		err = cmdOpen(ctx, rest, stdout)
 	case "admin":
@@ -116,6 +118,9 @@ Working with apps:
 
 Cluster:
   servers               List the servers in a team
+
+Leaving:
+  export                Write this team out as JSON and Kubernetes objects
 
 On the panel's own server:
   admin                 Recover access when nobody can sign in

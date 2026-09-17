@@ -13,6 +13,33 @@ pass changed the conclusions, so what follows is the second pass.
 | Dokku | Docker + herokuish | very light | — | Mature, single host | MIT |
 | aaPanel | None (LAMP/Docker manager) | — | — | Mature | Free + paid Pro |
 
+### What each one keeps its own state in
+
+Researched 2026-09-17. This is the panel's *own* records — accounts, servers,
+apps — not the databases it provisions for users, which is a different question
+and the one most comparisons answer by mistake.
+
+| Product | Its own state | What that costs to run |
+|---|---|---|
+| **cPanel / WHM** | Flat files: `/var/cpanel/users/*` per account, plus config under `/var/cpanel`. MySQL is for the *hosted* databases, not for cPanel's own records. | Nothing. It is text on disk. |
+| **aaPanel** | SQLite, one file at `/www/server/panel/data/default.db`. | Nothing. |
+| **CapRover** | Flat JSON, `config-captain.json`. | Nothing. |
+| **Plesk** | MySQL/MariaDB, the `psa` database. | A database server. |
+| **Coolify** | PostgreSQL 15 **and** Redis 7 **and** Soketi for websockets, beside a Laravel/PHP app and its queue workers. | Four processes before a single app of yours is running. This is most of the 500 MB – 1.2 GB. |
+| **Dokploy** | PostgreSQL and Redis. | Two. |
+| **Skifity** | SQLite in WAL mode, on the node's disk, through a pure-Go driver — no database server, no libc, no second process. | Nothing. This is most of the 35 MiB. |
+
+The split is not about maturity. The two products with the largest installed
+base in this list, cPanel and aaPanel, both keep their own state in files. A
+control panel has one writer and a few thousand rows; the panel that brings a
+PostgreSQL, a Redis and a websocket server to hold that is paying for a shape it
+does not have.
+
+Where an embedded store stops being right is a **hosted, multi-tenant** control
+plane — many customers, horizontal scale, failover. SQLite is the correct answer
+for one panel on one node and the wrong answer for that, which is worth knowing
+before anybody designs the second thing (see "Renting the panel" below).
+
 **Coolify** is the market leader and the reason is not technical: 280+ one-click
 services, the largest Discord, the most tutorials. When a comparison recommends
 it, "broader community, more one-click services, more tutorial content" is the
@@ -161,6 +188,48 @@ Ordered by how well the evidence supports it.
   same kind of unearned statement this project keeps finding in its own
   documentation.
 
+## Renting the panel out, with the customer's own servers
+
+A question worth writing down because the answer is architectural rather than
+commercial. Coolify Cloud is the reference implementation of the model:
+**their control plane, your servers**. It runs on Hetzner in Falkenstein,
+connects out to customer machines over SSH from published IP addresses, and
+requires nothing installed on the customer's side but Docker and sshd. The
+customer keeps the operating system, the network and the workloads.
+
+Skifity cannot do that today, and the reason is one sentence: **the panel runs
+inside the cluster it manages.** It is a Deployment in `skifity-system`, pinned
+to the node holding its SQLite file, using an in-cluster ServiceAccount. A
+hosted control plane is the opposite shape — outside, holding credentials for
+many clusters.
+
+Three ways to get there, in order of what they cost:
+
+1. **One panel per customer.** Install it on their server, sell support,
+   updates and the catalogue. Almost everything needed exists; what does not is
+   licensing, update orchestration across a fleet, and any view of that fleet.
+   This is what most "sell a panel" businesses actually are, and it is the only
+   one of the three that does not put customer credentials in your building.
+2. **Hosted control plane, customer's servers** — Coolify Cloud's model. For
+   Skifity this means: the panel manages N clusters instead of living in one,
+   SQLite becomes PostgreSQL because it is now multi-tenant with failover, and
+   accounts become a layer above teams. The security shape changes completely:
+   your infrastructure holds every customer's cluster credentials and becomes
+   the highest-value target in the system.
+3. **Hosted control plane with an agent that dials out.** Same as (2) without
+   needing inbound access to the customer's network, which is what makes home
+   servers and strict corporate networks possible. More work, better reach.
+
+Where Skifity is genuinely better placed than Coolify for (2) and (3): the thing
+it would talk to is a **Kubernetes API server**, not a Docker socket over SSH.
+That means a scoped ServiceAccount token with RBAC and a short expiry, rather
+than root over SSH — a hosted control plane that is compromised loses much less.
+Coolify Cloud holds SSH access to every customer's machine; the equivalent here
+could hold a token that may only touch the namespaces it created.
+
+None of that is built. It is written here so the choice is a decision rather
+than a drift.
+
 ## Sources
 
 - https://hostzero.com/articles/is-coolify-safe-2026-cves
@@ -179,3 +248,7 @@ Ordered by how well the evidence supports it.
 - https://coolify.io/docs/core/networking/proxy/traefik/load-balancing
 - https://docs.dokploy.com/docs/core/applications/advanced
 - https://northflank.com/blog/dokploy-vs-coolify
+- https://coolify.io/docs/get-started/introduction and https://next.coolify.io/docs/start-with-cloud (read 2026-09-17, for Coolify Cloud's BYOS model)
+- https://deepwiki.com/coollabsio/coolify (Coolify's own control-plane stack: Laravel, PostgreSQL, Redis, Soketi)
+- https://www.aapanel.com/forum/ and https://fornex.com/help/database-aapanel/ (aaPanel's SQLite store)
+- https://www.logicweb.com/knowledge-base/cpanel-tutorials/cpanel-directory-structure/ and https://gist.github.com/irazasyed/6488963 (cPanel's flat files under /var/cpanel)

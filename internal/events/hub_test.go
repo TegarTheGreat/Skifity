@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -224,4 +225,40 @@ func TestTheHubDoesNotGrowWithoutBound(t *testing.T) {
 	if got := hub.TopicCount(); got > 10 {
 		t.Fatalf("the hub holds %d topics with a limit of 10", got)
 	}
+}
+
+// TestPublishingWhileAClientDisconnectsDoesNotPanic.
+//
+// Publish used to collect its subscribers under the lock, release it, and then
+// send. Between those two steps a client whose request context had just ended
+// had its channel closed by the goroutine watching that context — and a send on
+// a closed channel is a panic, in whatever was publishing. A browser tab closed
+// during a build, which emits thousands of log events, is all it takes.
+//
+// This fails in a few hundred iterations without the fix.
+func TestPublishingWhileAClientDisconnectsDoesNotPanic(t *testing.T) {
+	hub := NewHub(1)
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				hub.Publish("build", "log", "a line")
+			}
+		}
+	}()
+
+	for i := 0; i < 5000; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		hub.Subscribe(ctx, 0, "build")
+		cancel()
+	}
+	close(stop)
+	wg.Wait()
 }

@@ -891,6 +891,92 @@ Thirty-eight multi-service templates made three gaps visible that seven had hidd
   "appear after installation"; they did not. They do now, on the page the
   install lands on, until dismissed.
 
+## Phase 27 — reliability and security, looked at properly
+
+Three real defects, one of them a panic with a trigger anybody could hit by
+accident, and two spot checks turned into complete ones.
+
+### A closed browser tab could end a deployment
+
+`Hub.Publish` collected its subscribers under the lock, released it, and then
+sent. Between those two steps a client whose request context had just ended had
+its channel closed by the goroutine watching that context — and a send on a
+closed channel is a panic, in whatever happened to be publishing. A build emits
+thousands of log events; closing the tab during one is all it takes. The panic
+is contained by `internal/runsafe`, so the panel survives, but the deployment
+that was publishing does not.
+
+Reproduced in about three hundred iterations of subscribe-and-cancel, and it is
+now a test that does exactly that. The sends happen under the lock, which is
+safe because every one of them is non-blocking: the default arm drops the event
+rather than waiting, so the section never sleeps.
+
+### The third setting that becomes a request, and did not go through netguard
+
+`internal/netguard`'s own comment said "two settings hold an address the panel
+then makes a request to". There are three. The URL a cluster component's
+manifest is downloaded from is a setting, `ApplyManifestURL` fetched it with
+`http.DefaultClient`, and **what comes back is applied to the cluster as
+Kubernetes objects** — which makes it the worst of the three to have been able
+to point at `169.254.169.254`. It goes through the guarded client now, a scheme
+that is not http or https is refused before anything is dialled, and a test asks
+for the metadata service and for loopback and requires a `netguard.Blocked`.
+
+### Two things a restart left in progress forever
+
+A deployment interrupted by a panel restart is marked failed at startup, and so
+is a provisioning operation. A **backup** written as `running` and a **database**
+written as `creating` were not, and they are the same shape: a row only the
+goroutine holding it ever finishes. The panel is a Deployment with a self-upgrade
+endpoint, so a restart is routine rather than exotic.
+
+The database is the worse of the two. One stuck at `creating` cannot be backed
+up either — the backup manager refuses a target that is not running — so it is
+not merely wrong on screen, it is unusable, and the only way out was to delete it
+and start again.
+
+### A key id longer than the header could hold
+
+The envelope header carries the key id's length in one byte, and the id comes out
+of the master key file, which an operator edits by hand. Nothing checked it: a
+longer id would have been written truncated, every secret sealed afterwards would
+have been unopenable, and the first sign of it would have been a decryption
+failure on rows that were written correctly weeks earlier. The keyring refuses
+one now, at both boundaries, and `encode` refuses to truncate rather than doing
+it quietly.
+
+### Two spot checks became complete ones
+
+`TestNothingIsReachableWithoutCredentials` named seven paths out of a hundred and
+twenty-three. `TestOneTeamCannotReachAnother` named thirty-three. The route that
+matters is always the one nobody thought to add, so both now walk the router:
+
+* **112 routes** refuse an anonymous request; 8 are open on purpose, each with a
+  reason written next to it, and a second test fails if one of those 8 stops
+  being a route this panel serves.
+* **84 team-scoped routes** answer 404 for another team's team, project,
+  environment, app, database or server — not 403, which would confirm the thing
+  exists.
+
+Neither found a hole. That is the point of running them: "authorization lives in
+one place" was a claim about a hundred and twenty-three routes checked at seven.
+
+### What was looked at and was already right
+
+Argon2id at the OWASP parameters, sign-in lockout per account *and* per address
+with the correct password refused while locked, constant-time comparisons,
+unknown accounts indistinguishable from wrong passwords, CSRF double-submit with
+bearer tokens exempt, `HttpOnly`/`Secure`/`SameSite` on the session cookie, a
+strict CSP, request body limits, HMAC-verified webhooks, SQLite on WAL with a
+busy timeout and every write serialised through one mutex, and `runsafe` on every
+background goroutine including the four launched as method calls that a grep for
+`go func` misses.
+
+Three things gosec reports here are not findings: SHA-1 in `internal/auth/totp.go`
+is what RFC 6238 specifies, the CSRF cookie is readable by the frontend because
+that is how double-submit works, and `skifity.toml` is 0644 because it is meant
+to be committed.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

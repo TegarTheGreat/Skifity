@@ -355,3 +355,43 @@ func TestIsEnvelope(t *testing.T) {
 		t.Fatal("IsEnvelope said yes to plaintext")
 	}
 }
+
+// TestAKeyIDTooLongForTheHeaderIsRefused: the envelope header carries the key
+// id's length in one byte. A longer id would be written truncated, every secret
+// sealed with it would be unopenable, and the first sign of it would be a
+// decryption failure on data that was written correctly weeks earlier.
+func TestAKeyIDTooLongForTheHeaderIsRefused(t *testing.T) {
+	key, err := GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+
+	if _, err := NewKeyring(strings.Repeat("k", 256), key); err == nil {
+		t.Fatal("a 256-byte key id was accepted, and its length does not fit the header")
+	}
+	// 255 is the boundary and has to keep working, or the check is off by one
+	// in the direction that refuses something valid.
+	ring, err := NewKeyring(strings.Repeat("k", 255), key)
+	if err != nil {
+		t.Fatalf("a 255-byte key id was refused: %v", err)
+	}
+	sealed, err := ring.Seal([]byte("secret"), "app:1:VAR")
+	if err != nil {
+		t.Fatalf("seal: %v", err)
+	}
+	opened, err := ring.Open(sealed, "app:1:VAR")
+	if err != nil {
+		t.Fatalf("open what was just sealed: %v", err)
+	}
+	if string(opened) != "secret" {
+		t.Fatalf("opened %q, want %q", opened, "secret")
+	}
+
+	retired, err := GenerateKey()
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	if err := ring.AddRetired(strings.Repeat("r", 256), retired); err == nil {
+		t.Fatal("a 256-byte retired key id was accepted")
+	}
+}

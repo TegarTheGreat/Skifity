@@ -123,15 +123,23 @@ func (h *Hub) Publish(topic, eventType string, data any) Event {
 		entry.events = entry.events[len(entry.events)-h.historyLimit:]
 	}
 	entry.lastAt = ev.At
-	targets := make([]*subscriber, 0, len(h.subscribers))
-	for s := range h.subscribers {
-		if s.topics[topic] {
-			targets = append(targets, s)
-		}
-	}
-	h.mu.Unlock()
 
-	for _, s := range targets {
+	// The sends happen under the same lock that registers and removes a
+	// subscriber, and this is not an optimisation to undo.
+	//
+	// Collecting the subscribers, unlocking and then sending looks kinder to
+	// the lock and is a panic: between the unlock and the send, a client whose
+	// request context has just ended has its channel closed, and sending on a
+	// closed channel takes down whatever was publishing. A browser tab closed
+	// during a build, which emits thousands of log events, is enough to hit it.
+	//
+	// Holding the lock is safe because every send below is non-blocking: the
+	// default arm drops the event rather than waiting for a reader, so this
+	// section never sleeps and never re-enters the hub.
+	for s := range h.subscribers {
+		if !s.topics[topic] {
+			continue
+		}
 		select {
 		case s.ch <- ev:
 		default:
@@ -140,6 +148,7 @@ func (h *Hub) Publish(topic, eventType string, data any) Event {
 			s.dropped.Add(1)
 		}
 	}
+	h.mu.Unlock()
 	return ev
 }
 

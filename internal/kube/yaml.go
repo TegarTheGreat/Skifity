@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"k8s.io/client-go/restmapper"
 	k8syaml "sigs.k8s.io/yaml"
 
+	"skifity/internal/netguard"
 	"skifity/internal/version"
 )
 
@@ -33,6 +35,16 @@ import (
 
 // yamlFetchTimeout bounds how long a component manifest download may take.
 const yamlFetchTimeout = 2 * time.Minute
+
+// manifestClient refuses to dial an address the panel has no business reaching.
+//
+// The URL below is a setting, which makes this the third place a value an
+// administrator types becomes a request the panel's own process makes — after a
+// Git connection's base URL and a notification webhook, both of which already
+// go through netguard. This one did not, and what comes back is applied to the
+// cluster as Kubernetes objects, so it is the worst of the three to have
+// pointed at 169.254.169.254.
+var manifestClient = netguard.Client(yamlFetchTimeout)
 
 // ApplyYAML applies every document in a multi-document YAML stream.
 //
@@ -88,30 +100,35 @@ func (c *Client) ApplyYAML(ctx context.Context, manifest []byte) error {
 //
 // The URL comes from configuration rather than being hardcoded, so an operator
 // can pin a version or host it themselves on a network with no internet access.
-func (c *Client) ApplyManifestURL(ctx context.Context, url string) error {
+func (c *Client) ApplyManifestURL(ctx context.Context, address string) error {
+	parsed, err := url.Parse(address)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf("%s is not an http or https address, and a manifest is fetched over one", address)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, yamlFetchTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
-		return fmt.Errorf("build the request for %s: %w", url, err)
+		return fmt.Errorf("build the request for %s: %w", address, err)
 	}
 	req.Header.Set("User-Agent", version.UserAgent())
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := manifestClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("download %s: %w", url, err)
+		return fmt.Errorf("download %s: %w", address, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: the server answered %s", url, resp.Status)
+		return fmt.Errorf("download %s: the server answered %s", address, resp.Status)
 	}
 
 	// 64 MiB is far more than any of these manifests, and stops a wrong URL
 	// from streaming something enormous into memory.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return fmt.Errorf("read %s: %w", url, err)
+		return fmt.Errorf("read %s: %w", address, err)
 	}
 	return c.ApplyYAML(ctx, body)
 }

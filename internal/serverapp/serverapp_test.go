@@ -173,3 +173,95 @@ func TestAnUnknownPodNetworkStopsThePanelStarting(t *testing.T) {
 		}
 	}
 }
+
+// TestARestartDoesNotLeaveABackupOrADatabaseInProgressForever.
+//
+// A deployment and a provisioning operation were both recovered at startup.
+// A backup row written as "running" and a database written as "creating" were
+// not, and they are the same shape: a row that only the goroutine holding it
+// ever finishes. The database is the worse of the two — the backup manager
+// refuses a target that is not running, so one stuck at "creating" cannot even
+// be backed up, and the only way out was to delete it.
+func TestARestartDoesNotLeaveABackupOrADatabaseInProgressForever(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	app := seedApp(t, db)
+
+	creating := store.Database{
+		EnvironmentID: app.EnvironmentID, Name: "shop-db", Slug: "shop-db",
+		Engine: "postgres", Status: "creating",
+	}
+	if err := db.CreateDatabase(ctx, &creating); err != nil {
+		t.Fatalf("create a database: %v", err)
+	}
+	healthy := store.Database{
+		EnvironmentID: app.EnvironmentID, Name: "blog-db", Slug: "blog-db",
+		Engine: "postgres", Status: "running",
+	}
+	if err := db.CreateDatabase(ctx, &healthy); err != nil {
+		t.Fatalf("create a database: %v", err)
+	}
+
+	interrupted := store.Backup{TargetType: "database", TargetID: creating.ID, Status: "running"}
+	if err := db.CreateBackup(ctx, &interrupted); err != nil {
+		t.Fatalf("create a backup: %v", err)
+	}
+	done := store.Backup{TargetType: "database", TargetID: healthy.ID, Status: "succeeded"}
+	if err := db.CreateBackup(ctx, &done); err != nil {
+		t.Fatalf("create a backup: %v", err)
+	}
+
+	if err := markInterruptedWork(ctx, db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("markInterruptedWork: %v", err)
+	}
+
+	after, err := db.GetBackup(ctx, interrupted.ID)
+	if err != nil {
+		t.Fatalf("read back the backup: %v", err)
+	}
+	if after.Status != "failed" {
+		t.Errorf("the interrupted backup is %q, want failed", after.Status)
+	}
+	if after.ErrorMessage == "" {
+		t.Error("the interrupted backup does not say what happened")
+	}
+
+	stuck, err := db.GetDatabase(ctx, creating.ID)
+	if err != nil {
+		t.Fatalf("read back the database: %v", err)
+	}
+	if stuck.Status != "failed" {
+		t.Errorf("the interrupted database is %q, want failed", stuck.Status)
+	}
+	if stuck.StatusDetail == "" {
+		t.Error("the interrupted database does not say what happened")
+	}
+
+	// Nothing that had already finished, or was healthy, is touched.
+	if b, _ := db.GetBackup(ctx, done.ID); b.Status != "succeeded" {
+		t.Errorf("a finished backup became %q", b.Status)
+	}
+	if d, _ := db.GetDatabase(ctx, healthy.ID); d.Status != "running" {
+		t.Errorf("a running database became %q", d.Status)
+	}
+
+	// A restart loop must not rewrite history on every pass.
+	if err := markInterruptedWork(ctx, db, slog.New(slog.DiscardHandler)); err != nil {
+		t.Fatalf("second pass: %v", err)
+	}
+	left, err := db.ListUnfinishedBackups(ctx)
+	if err != nil {
+		t.Fatalf("list unfinished backups: %v", err)
+	}
+	if len(left) != 0 {
+		t.Errorf("expected nothing left running, got %d", len(left))
+	}
+	if being, err := db.ListDatabasesBeingCreated(ctx); err != nil || len(being) != 0 {
+		t.Errorf("expected no database left creating, got %d (%v)", len(being), err)
+	}
+}

@@ -36,6 +36,7 @@ import (
 type harness struct {
 	t       *testing.T
 	server  *httptest.Server
+	api     *Server
 	db      *store.DB
 	auth    *auth.Service
 	keyring *crypto.Keyring
@@ -65,7 +66,7 @@ func newHarness(t *testing.T) *harness {
 		Logger:  slog.New(slog.DiscardHandler),
 	})
 
-	h := &harness{t: t, db: db, auth: authService, keyring: keyring}
+	h := &harness{t: t, api: server, db: db, auth: authService, keyring: keyring}
 	h.server = httptest.NewServer(server)
 	t.Cleanup(h.server.Close)
 	return h
@@ -602,4 +603,31 @@ func TestAnAppCannotBeCreatedFromAComposeFile(t *testing.T) {
 	if !strings.Contains(body, "app per service") {
 		t.Errorf("the refusal does not say what to do instead: %s", body)
 	}
+}
+
+// database creates a database in a tenant's environment.
+func (h *harness) database(owner tenant, name string) store.Database {
+	h.t.Helper()
+	record := store.Database{
+		EnvironmentID: owner.env.ID, Name: name, Slug: name,
+		Engine: "postgres", Status: "running",
+	}
+	if err := h.db.CreateDatabase(h.t.Context(), &record); err != nil {
+		h.t.Fatalf("create database: %v", err)
+	}
+	return record
+}
+
+// node creates a server in a tenant's team. Not `server`: the harness
+// already has one of those, and it is the HTTP one.
+func (h *harness) node(owner tenant, name string) store.Server {
+	h.t.Helper()
+	record := store.Server{
+		TeamID: owner.team.ID, Name: name, Host: "198.51.100.10",
+		SSHPort: 22, SSHUser: "root", Role: "control-plane", Status: "ready",
+	}
+	if err := h.db.CreateServer(h.t.Context(), &record); err != nil {
+		h.t.Fatalf("create server: %v", err)
+	}
+	return record
 }

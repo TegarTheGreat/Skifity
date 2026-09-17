@@ -121,6 +121,9 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	if err := provisioner.ResumeInterrupted(ctx); err != nil {
 		log.Warn("could not tidy up interrupted operations", "error", err)
 	}
+	if err := markInterruptedWork(ctx, db, log); err != nil {
+		return err
+	}
 	if err := markInterruptedDeployments(ctx, db, log); err != nil {
 		log.Warn("could not tidy up interrupted deployments", "error", err)
 	}
@@ -280,6 +283,44 @@ func readSetupToken(cfg config.Config, db *store.DB, log *slog.Logger) (string, 
 		"open", setupURL,
 		"setup_token", logging.Public{Value: token})
 	return token, nil
+}
+
+// markInterruptedWork does the same for the two things that were left out.
+//
+// A deployment and a provisioning operation are both recovered at startup; a
+// backup and a database being created were not, and they are the same shape —
+// a row written as in-progress and finished by a goroutine that the restart
+// took with it. The database is the worse of the two: one stuck at "creating"
+// cannot be backed up either, because the backup manager refuses a target that
+// is not running, so it is unusable rather than merely wrong on screen.
+func markInterruptedWork(ctx context.Context, db *store.DB, log *slog.Logger) error {
+	backups, err := db.ListUnfinishedBackups(ctx)
+	if err != nil {
+		return err
+	}
+	for _, b := range backups {
+		log.Info("marking an interrupted backup as failed", "backup", b.ID, "target", b.TargetID)
+		if err := db.FinishBackup(ctx, b.ID, "failed", b.Location, 0,
+			"The panel restarted while this backup was running. Take another one."); err != nil {
+			return err
+		}
+	}
+
+	databases, err := db.ListDatabasesBeingCreated(ctx)
+	if err != nil {
+		return err
+	}
+	for _, d := range databases {
+		log.Info("marking an interrupted database as failed", "database", d.ID, "name", d.Name)
+		// Not deleted: whatever was created in the cluster is still there, and
+		// removing it from underneath somebody is not this function's call.
+		if err := db.SetDatabaseStatus(ctx, d.ID, "failed",
+			"The panel restarted while this database was being created. "+
+				"Delete it and create it again."); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // markInterruptedDeployments fails deployments that were running when the panel

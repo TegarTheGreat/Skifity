@@ -75,12 +75,33 @@ func NewKeyring(activeID string, activeKey []byte) (*Keyring, error) {
 	if activeID == "" {
 		return nil, errors.New("master key id must not be empty")
 	}
-	if strings.Contains(activeID, ":") {
-		return nil, errors.New("master key id must not contain a colon")
+	if err := checkKeyID(activeID); err != nil {
+		return nil, err
 	}
 	k := &Keyring{keys: map[string][]byte{}, activeID: activeID}
 	k.keys[activeID] = append([]byte(nil), activeKey...)
 	return k, nil
+}
+
+// maxKeyIDLen is what the envelope header can carry: one byte of length.
+//
+// The id comes out of the master key file, which an operator edits by hand.
+// Without this, a longer one would be written into that byte truncated, every
+// secret sealed afterwards would be unopenable, and nothing would say so until
+// something tried to read one back — long after the rows were written.
+const maxKeyIDLen = 255
+
+func checkKeyID(id string) error {
+	switch {
+	case id == "":
+		return errors.New("master key id must not be empty")
+	case strings.Contains(id, ":"):
+		return errors.New("master key id must not contain a colon")
+	case len(id) > maxKeyIDLen:
+		return fmt.Errorf("master key id is %d bytes; an envelope header holds at most %d",
+			len(id), maxKeyIDLen)
+	}
+	return nil
 }
 
 // AddRetired registers a key that can still open old envelopes but is never used
@@ -89,8 +110,8 @@ func (k *Keyring) AddRetired(id string, key []byte) error {
 	if len(key) != KeySize {
 		return ErrKeySize
 	}
-	if id == "" || strings.Contains(id, ":") {
-		return errors.New("master key id must be non-empty and contain no colon")
+	if err := checkKeyID(id); err != nil {
+		return err
 	}
 	if _, exists := k.keys[id]; exists {
 		return ErrDuplicateKeyI
@@ -160,7 +181,7 @@ func (k *Keyring) Seal(plaintext []byte, context string) (string, error) {
 		return "", fmt.Errorf("wrap data key: %w", err)
 	}
 
-	return encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: ciphertext}), nil
+	return encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: ciphertext})
 }
 
 // Open decrypts an envelope produced by Seal. context must match exactly.
@@ -216,7 +237,11 @@ func (k *Keyring) Rewrap(stored string) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("wrap data key: %w", err)
 	}
-	return encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: env.Ciphertext}), true, nil
+	sealed, err := encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: env.Ciphertext})
+	if err != nil {
+		return "", false, err
+	}
+	return sealed, true, nil
 }
 
 // KeyIDOf reports which master key sealed an envelope, without opening it.
@@ -272,14 +297,27 @@ func newGCM(key []byte) (cipher.AEAD, error) {
 // encode serialises an envelope as "SKF1.<base64url>". The binary body is
 //
 //	version(1) | keyIDLen(1) | keyID | wrappedLen(2 BE) | wrappedDEK | ciphertext
-func encode(e Envelope) string {
+func encode(e Envelope) (string, error) {
+	// Both lengths are bounded by construction — the id is checked when a key
+	// joins the keyring, and a wrapped 32-byte DEK is 60 bytes — so this can
+	// only fire if one of those changes. Truncating a length field produces an
+	// envelope that looks fine and can never be opened, which is worse than any
+	// error, so it is refused here rather than caught later.
+	if len(e.KeyID) > maxKeyIDLen {
+		return "", fmt.Errorf("key id is %d bytes; an envelope header holds at most %d",
+			len(e.KeyID), maxKeyIDLen)
+	}
+	if len(e.WrappedDEK) > 0xFFFF {
+		return "", fmt.Errorf("wrapped data key is %d bytes; an envelope header holds at most %d",
+			len(e.WrappedDEK), 0xFFFF)
+	}
 	body := make([]byte, 0, 4+len(e.KeyID)+len(e.WrappedDEK)+len(e.Ciphertext))
 	body = append(body, magicV1, byte(len(e.KeyID)))
 	body = append(body, e.KeyID...)
 	body = binary.BigEndian.AppendUint16(body, uint16(len(e.WrappedDEK)))
 	body = append(body, e.WrappedDEK...)
 	body = append(body, e.Ciphertext...)
-	return magic + "." + base64.RawURLEncoding.EncodeToString(body)
+	return magic + "." + base64.RawURLEncoding.EncodeToString(body), nil
 }
 
 func decode(stored string) (Envelope, error) {

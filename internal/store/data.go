@@ -271,6 +271,49 @@ func (db *DB) FinishBackup(ctx context.Context, id, status, location string, siz
 	return nil
 }
 
+func scanBackups(rows *sql.Rows) ([]Backup, error) {
+	out := []Backup{}
+	for rows.Next() {
+		var b Backup
+		var created string
+		var finished sql.NullString
+		if err := rows.Scan(&b.ID, &b.TargetType, &b.TargetID, &b.Status, &b.Kind, &b.Location,
+			&b.SizeBytes, &b.ErrorMessage, &created, &finished); err != nil {
+			return nil, fmt.Errorf("scan backup: %w", err)
+		}
+		b.CreatedAt, _ = ParseTime(created)
+		b.FinishedAt = scanTime(finished)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// ListUnfinishedBackups finds backups interrupted by a panel restart.
+//
+// A backup row is written as "running" and finished by the goroutine taking it.
+// If the panel stops in between, nothing finishes it: the row says a backup is
+// in progress forever, and the panel is a Deployment that restarts for an
+// upgrade or a drained node like anything else.
+func (db *DB) ListUnfinishedBackups(ctx context.Context) ([]Backup, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, target_type, target_id, status, kind, location, size_bytes,
+		error_message, created_at, finished_at FROM backups WHERE status = 'running' ORDER BY created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("list unfinished backups: %w", err)
+	}
+	defer rows.Close()
+	return scanBackups(rows)
+}
+
+// ListDatabasesBeingCreated finds databases interrupted while being provisioned.
+//
+// The same shape as an unfinished backup, with a worse consequence: a database
+// stuck at "creating" cannot be backed up — the manager refuses a target that
+// is not running — so it is not only misleading, it is unusable.
+func (db *DB) ListDatabasesBeingCreated(ctx context.Context) ([]Database, error) {
+	return db.queryDatabases(ctx, `SELECT `+databaseColumns+` FROM databases
+		WHERE status IN ('creating','starting') ORDER BY created_at`)
+}
+
 // GetBackup looks a backup up by id.
 func (db *DB) GetBackup(ctx context.Context, id string) (Backup, error) {
 	var b Backup
@@ -303,20 +346,7 @@ func (db *DB) ListBackups(ctx context.Context, targetType, targetID string, limi
 		return nil, fmt.Errorf("list backups: %w", err)
 	}
 	defer rows.Close()
-	out := []Backup{}
-	for rows.Next() {
-		var b Backup
-		var created string
-		var finished sql.NullString
-		if err := rows.Scan(&b.ID, &b.TargetType, &b.TargetID, &b.Status, &b.Kind, &b.Location,
-			&b.SizeBytes, &b.ErrorMessage, &created, &finished); err != nil {
-			return nil, fmt.Errorf("scan backup: %w", err)
-		}
-		b.CreatedAt, _ = ParseTime(created)
-		b.FinishedAt = scanTime(finished)
-		out = append(out, b)
-	}
-	return out, rows.Err()
+	return scanBackups(rows)
 }
 
 // ExpiredBackups lists successful backups beyond the retention count, which the

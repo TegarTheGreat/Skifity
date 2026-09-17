@@ -1,14 +1,18 @@
 // Package netguard stops the panel being used to reach addresses it should
 // never reach on somebody else's behalf.
 //
-// Two settings hold an address the panel then makes a request to: a Git
-// connection's base URL, and a notification channel's webhook. Both are written
-// by a team administrator, which on a single-tenant install is the operator
-// themselves and no boundary at all — and on an install with more than one team
-// is somebody who should not be able to point the panel's own process at
+// Three settings hold an address the panel then makes a request to: a Git
+// connection's base URL, a notification channel's webhook, and the URL a
+// cluster component's manifest is downloaded from. They are written by an
+// administrator, which on a single-tenant install is the operator themselves
+// and no boundary at all — and on an install with more than one team is
+// somebody who should not be able to point the panel's own process at
 // 169.254.169.254 and read what comes back. The panel holds the master key and
 // can reach the Kubernetes API; it is the last process on the box that should
 // make arbitrary requests.
+//
+// The third was missed for as long as this comment said "two", and it is the
+// one where what comes back is applied to the cluster as Kubernetes objects.
 //
 // What is refused is deliberately narrow:
 //

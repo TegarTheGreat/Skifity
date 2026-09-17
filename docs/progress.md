@@ -597,6 +597,37 @@ those still compiles and still renders. A test now reads the file as source and
 checks every entry for all three, for a code shaped like a code, and for codes
 that do not collide, since the UI picks a translation by code.
 
+## Phase 21 — the competitors, researched properly
+
+`docs/research/competitors.md` was written before the code and never checked
+against the market again. Re-researched against live 2026 sources, it changed
+the conclusions rather than confirming them.
+
+* **Coolify disclosed eleven critical CVEs on 8 January 2026, five at CVSS
+  10.0**, all authenticated command injection ending in root, plus a readable
+  root SSH key and later a cross-team authorization bypass. Censys counted
+  52,890 publicly reachable dashboards. The published cause is a class, not a
+  mistake: user input reaching a shell in many independent code paths — which is
+  exactly what `internal/shellsafe` exists for and exactly the bug found in this
+  repository in September. ADR-0002a now records why there is one place for it.
+* **Railpack is no longer a differentiator.** Dokploy ships it already, along
+  with SSO/SAML that Skifity does not have.
+* **aaPanel is not a competitor.** It replaces cPanel — websites, PHP, mail, a
+  WordPress toolkit — and is sold to agencies running hundreds of client
+  servers. It was researched and removed from the comparison rather than left in
+  as a name.
+* **Kubernetes is a category mismatch as much as an advantage.** Comparison
+  sites exclude k3s from "self-hosted PaaS" as a different abstraction layer
+  entirely, and one of the most-read 2026 guides is titled "Best Self-Hosted
+  PaaS to Replace Heroku (No Kubernetes)". The audience is selecting away from
+  what this is built on, which makes hiding it well the whole bet rather than a
+  nice touch.
+* **The footprint gap is the clearest measurable win.** 35 MiB against Coolify's
+  500 MB–1.2 GB and Dokploy's ~350 MB.
+* **Eight templates against Coolify's 280+** is the single most-cited reason
+  people choose Coolify, and it is a content problem rather than an engineering
+  one.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

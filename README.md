@@ -31,10 +31,14 @@ nothing has been released, so there is no one-line install to run — see
 
 ## What it is
 
-Coolify and Dokploy run Docker Compose on one machine. Skifity runs Kubernetes,
-so several servers are one pool: an app that wants three instances gets them
-wherever there is room, and an app whose server dies is restarted elsewhere
-without anyone being woken up.
+Coolify and Dokploy run Docker, and their multi-server story is Docker Swarm,
+which is in maintenance. Skifity runs Kubernetes, so several servers are one
+pool: an app that wants three instances gets them wherever there is room, and an
+app whose server dies is restarted elsewhere without anyone being woken up.
+
+The panel itself costs **35 MiB of memory**. Coolify idles at 500 MB to 1.2 GB
+and Dokploy at around 350 MB, because they run a web framework, a database, a
+cache and a websocket server to be a panel. Skifity is one process.
 
 What it does not do is make you learn Kubernetes. The panel talks about **Apps**,
 **Instances**, **Servers**, **Domains** and **Databases**. The Kubernetes objects

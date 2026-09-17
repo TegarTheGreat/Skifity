@@ -1,63 +1,132 @@
 # Research: Competing platforms
 
-Date: 2026-09-16. Reconciled with the code on 2026-09-17.
+Researched 2026-09-16, re-researched against live sources 2026-09-17. The second
+pass changed the conclusions, so what follows is the second pass.
 
-## Summary table
+## The self-hosted panels
 
-| Product | Orchestrator | Multi-server | Build | Notable strength | Notable weakness |
+| Product | Orchestrator | Idle cost | Stars | State | Licence |
 |---|---|---|---|---|---|
-| Coolify | Docker / Docker Swarm | Swarm, still labelled experimental in its own docs (2026) | Nixpacks, Dockerfile, Compose | Huge template library, large community (~60k users) | Swarm multi-node is experimental; unexpected rebuilds on config change; struggles on 1 GB VPS; CVE disclosures Jan 2026 |
-| Dokploy | Docker Swarm | Swarm; multi-node + templates under a source-available licence restricting commercial use | Nixpacks, Dockerfile | Clean modern UI, fast iteration | Pre-1.0 (v0.29.x); licence restructure Jan 2026; Swarm indirection leaks into debugging |
-| CapRover | Docker Swarm | Yes | Dockerfile/captain-definition | Very light, stable, old and proven | Dated UI; limited scaling story; little multi-tenant structure |
-| Dokku | Docker + herokuish | Single host (scheduler plugins exist) | Buildpacks/Dockerfile | `git push` deploys, tiny footprint | Single host by default, CLI-first, no panel |
-| Kubero | Kubernetes | Yes (bring your own cluster) | Buildpacks | Heroku-like on real k8s | Assumes you already run Kubernetes; installation is not "one command on a fresh VPS" |
-| Rancher | Kubernetes | Yes | n/a | Excellent cluster lifecycle management | Cluster management tool, not an app platform; heavy |
-| k3sup | k3s | Yes | n/a | Dead simple k3s bootstrap over SSH | CLI only, no panel, no app model |
-| Railway | Proprietary | n/a | Railpack (was Nixpacks) | Service canvas, shared variables, superb DX | Not self-hostable |
-| Vercel | Proprietary | n/a | Framework presets | Preview URL per branch/PR, instant rollback | Not self-hostable, function-shaped |
-| Heroku | Proprietary | n/a | Buildpacks | Language auto-detection without a Dockerfile | Expensive, not self-hostable |
-| Fly.io / Render | Proprietary | n/a | Dockerfile/buildpacks | Global scheduling, scale-to-zero | Not self-hostable |
-| Cloudflare Workers | Proprietary | n/a | n/a | Fast deploys, scale to zero | Only fits the Workers runtime |
+| Coolify | Docker / Swarm | 500 MB – 1.2 GB RAM, 5–7% CPU | ~51–59k | v4.0.0 stable **April 2026**, after four years of beta | Apache 2.0 |
+| Dokploy | Docker Swarm | ~350 MB RAM, 0.8–1.5% CPU | ~26–36k | v0.28.x, **still pre-1.0** | Apache 2.0 + proprietary directories |
+| CapRover | Docker Swarm | light | ~13k | Stable since 2017, development slowed | Apache 2.0 |
+| Dokku | Docker + herokuish | very light | — | Mature, single host | MIT |
+| aaPanel | None (LAMP/Docker manager) | — | — | Mature | Free + paid Pro |
+
+**Coolify** is the market leader and the reason is not technical: 280+ one-click
+services, the largest Discord, the most tutorials. When a comparison recommends
+it, "broader community, more one-click services, more tutorial content" is the
+reason given. Its costs are a heavy runtime (Laravel, Postgres, Redis, Soketi
+and workers, all running), no Kubernetes, and the security record below.
+
+**Dokploy** is the fastest-growing, and is lighter than Coolify by roughly 3x. It
+has **already adopted Railpack**, has **SSO/SAML**, which Coolify does not, and
+ships an AI Docker Compose generator. Multi-node stops at Swarm. Its licence is
+Apache 2.0 with proprietary directories carved out.
+
+**aaPanel is not in this category.** It is a cPanel/Plesk replacement — websites,
+PHP, mail, a WordPress toolkit, a Docker manager — sold to agencies running
+hundreds of client servers. Its users praise multi-user account isolation and
+the WP Toolkit; its complaint is annual-only Pro pricing. It competes with
+cPanel, not with a Git-deploy PaaS, and nothing here should be aimed at it.
+
+### The security record, which is the most important fact in this table
+
+On **8 January 2026 Coolify disclosed eleven critical CVEs in one day. Five carry
+CVSS 10.0** — authenticated command injection ending in root on the host
+(CVE-2025-66209 … 66213). One (CVE-2025-64420, also 10.0) let a low-privileged
+user read the root SSH private key. More followed through spring: a Sentinel
+token injection to host RCE (CVE-2026-34034), command injection during
+deployment (CVE-2026-34038), and **an authorization bypass that let users reach
+another team's servers** (CVE-2026-34592). Censys counted **52,890 publicly
+reachable Coolify dashboards** at disclosure.
+
+The analysis of why is worth quoting, because it describes a class rather than a
+mistake: *"user input reaches a shell without enough sanitization, in many
+independent code paths."*
+
+That is the exact class `internal/shellsafe` exists for, and the exact bug found
+in this repository in September 2026 — every generated script used Go's `%q`,
+which is not shell quoting. The difference is not that Skifity avoided the
+mistake. It is that there is now one place where quoting happens, a test that
+runs a real shell against it, and no second path. Coolify's problem is that
+there were many paths and no single place.
+
+Dokploy has no publicly disclosed CVEs. It also has a fraction of the exposure.
+
+## The managed platforms
+
+| Product | What wins | What it costs | Why people leave |
+|---|---|---|---|
+| **Vercel** | The best PR preview workflow in the industry, image optimisation, edge middleware, native Next.js | Hobby free but explicitly not for production; Pro per-seat plus usage | A bill that is not a function of traffic you chose — one documented case is **$286 from a single morning of bot traffic** crossing a 100k-invocation line |
+| **Railway** | Persistent containers, co-located databases, background jobs, genuinely liked DX | Hobby $5/mo incl. $5 credits, Pro $20/user/mo incl. $20, Enterprise from $2,000/mo | Usage pricing that is fine until it is not |
+| **Heroku** | Predictability, buildpacks, nothing surprising | Performance dynos **$250–500/month each**, add-ons stacked separately | Price, and the free tier's removal — which is what created this entire category |
+
+What all three sell is the same thing: **you push, and it is live, and you never
+think about a server.** Vercel's preview-per-pull-request is repeatedly called
+the best thing in the industry. That is the bar for developer experience, and it
+is not a bar any self-hosted panel has reached.
 
 ## What we take from each
 
-* **Vercel** - deploy from Git, one preview URL per branch/PR, one-click rollback.
-* **Railway** - visual canvas of services, variables shared between services of a project.
-* **Heroku** - detect the language and build without a Dockerfile.
-* **Cloudflare Workers** - scale-to-zero for idle apps.
-* **Coolify / Dokploy** - one-click templates, S3 backups, being genuinely self-hosted. Their template
-  libraries are much larger than ours: Skifity ships eight, and that gap is real rather than closing.
-* **Kubernetes** - self-healing, rolling updates, rollback, node failover for free.
+* **Vercel** — deploy from Git, one preview URL per branch or pull request, one-click rollback.
+* **Railway** — a visual canvas of services, variables shared across a project.
+* **Heroku** — detect the language and build with no Dockerfile.
+* **Cloudflare Workers** — scale-to-zero for idle apps.
+* **Coolify / Dokploy** — one-click templates, S3 backups, being genuinely self-hosted. Their catalogues are far larger than ours: Coolify ships 280+, Skifity ships eight. That gap is real, it is the single most-cited reason people choose Coolify, and it is a content problem rather than an engineering one.
+* **Kubernetes** — self-healing, rolling updates, rollback, node failover, for free.
 
-## Weaknesses we explicitly design against
+## Where we are actually different
 
-1. **Multi-server is the weak spot of every Docker/Swarm-based competitor.** Swarm is in maintenance,
-   and both Coolify and Dokploy carry warnings about it. Skifity builds on k3s, where multi-node,
-   rescheduling and node failure are first-class. This is our main differentiator.
-2. **"Unexpected rebuild on a config change"** (top Coolify complaint). Skifity separates *build inputs*
-   (source commit, build config) from *runtime inputs* (env vars, replicas, domains). Changing a runtime
-   input performs a rollout of the existing image and never triggers a build. Implemented as a build
-   fingerprint - see `internal/deploy`.
-3. **Memory footprint.** Coolify can fail to install on a 1 GB VPS. Skifity ships a single Go binary and
-   installs heavy components (Longhorn, KEDA, database operators, full monitoring) only when a user first
-   enables the feature. What is measured is the panel: 34 MiB resident idle. What is not measured is k3s
-   underneath it, because a real cluster could never be started where this was built (ADR-0010), so the
-   1 GB figure in [performance](../performance.md) is an estimate and says so there. Until somebody runs
-   the installer on a real 1 GB server, this is a design argument and not a result.
-4. **Leaky abstraction.** Swarm task states leak into debugging. Skifity keeps Kubernetes nouns behind an
-   "Advanced" view and translates events into plain language with a cause / impact / fix structure.
-5. **Licensing.** Skifity is Apache-2.0 for everything, including multi-node and templates.
-6. **Security posture.** CVEs in this category are usually missing authz on an endpoint or unencrypted
-   credentials at rest. Skifity uses envelope encryption for every secret and an audit log. The
-   authorization is not one middleware: authentication is, and then every handler resolves the thing
-   it was asked about through `authorizeTeam`, `authorizeApp`, `authorizeEnvironment` and their
-   siblings, which is what makes a handler that reaches into the store without one a tenant-isolation
-   bug you can find by reading. A middleware cannot do this, because what a route may touch depends on
-   which row the id in it names.
+Ordered by how well the evidence supports it.
+
+1. **One place where user input becomes a shell command.** The leading product in
+   this category shipped five CVSS-10.0 command injections in a day because it
+   had many. This is the strongest claim Skifity has, and it is an architectural
+   one: `shellsafe`, tested against a real `sh`, plus secrets sealed to the
+   context they are stored in, plus one authorization layer that a handler
+   cannot skip without it being visible — against a competitor whose 2026 CVE
+   list includes a cross-team authorization bypass and a readable root SSH key.
+2. **Footprint.** 35 MiB idle, measured, against Coolify's 500 MB–1.2 GB and
+   Dokploy's ~350 MB. On the 1 GB VPS this category sells to, that is the
+   difference between the panel being the problem and the panel being invisible.
+3. **Multi-node that is not Swarm.** Both leaders depend on Docker Swarm, which
+   is in maintenance. k3s gives rescheduling, node failure and rolling updates
+   as properties of the system rather than features of the panel.
+4. **A config change does not rebuild.** The top Coolify complaint, answered by
+   the build fingerprint (ADR-0007).
+5. **Built for assistants.** An MCP server in the same binary, and every failure
+   carrying cause, impact and fix. Nobody else in the category has this.
+
+## Where we are not different, and the honest reading
+
+* **Railpack is no longer a differentiator.** Dokploy already ships it.
+* **No SSO/SAML.** Dokploy has it.
+* **Eight templates against 280.** The reason people pick Coolify.
+* **Kubernetes is a category mismatch, not only an advantage.** Comparison sites
+  exclude k3s and Rancher from "self-hosted PaaS" as *"a different abstraction
+  layer entirely"*, and one of the most-read 2026 guides is titled *"Best
+  Self-Hosted PaaS to Replace Heroku (**No Kubernetes**)"*. The audience is
+  actively selecting away from the thing Skifity is built on. Hiding Kubernetes
+  well is therefore not a bonus feature; it is the entire bet.
+* **The security advantage is architectural, not demonstrated.** Coolify has
+  eleven critical CVEs because 52,890 people run it and researchers look.
+  Skifity has none because nobody has looked. Better structure is a reason to
+  expect fewer, not evidence of fewer. Claiming otherwise in public would be the
+  same kind of unearned statement this project keeps finding in its own
+  documentation.
 
 ## Sources
 
-- https://bex.co/blog/2026/07/28/self-hosted-paas-crowded-2026-coolify-dokku-caprover-dokploy
-- https://cloudzy.com/blog/coolify-vs-dokploy/
-- https://introserv.com/blog/dokploy-vs-coolify-complete-comparison-of-the-best-self-hosted-paas-platforms-for-vps-and-dedicated-servers-2026/
-- https://dev.to/deploynix/self-hosted-paas-showdown-2026-coolify-vs-dokploy-vs-caprover-vs-deploynix-46l3
+- https://hostzero.com/articles/is-coolify-safe-2026-cves
+- https://thehackernews.com/2026/01/coolify-discloses-11-critical-flaws.html
+- https://github.com/coollabsio/coolify/security/advisories/GHSA-qqrq-r9h4-x6wp
+- https://www.sentinelone.com/vulnerability-database/cve-2026-34058/
+- https://www.virtua.cloud/learn/en/concepts/coolify-vs-dokploy-self-hosted-paas
+- https://massivegrid.com/blog/dokploy-vs-coolify-vs-caprover/
+- https://contabo.com/blog/self-hosted-paas-replace-heroku/
+- https://lumadock.com/tutorials/coolify-alternatives
+- https://justinmckelvey.com/blog/railway-vs-vercel
+- https://resources.rework.com/tools/dev-tools/best-vercel-alternatives
+- https://medium.com/@allahverdiyev.tural/your-paas-bill-lied-to-you-the-real-cost-of-railway-render-fly-io-and-vercel-in-2026-8b74074014ce
+- https://www.aapanel.com/ and https://www.trustpilot.com/review/aapanel.com

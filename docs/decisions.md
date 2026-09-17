@@ -38,6 +38,30 @@ than a migration.
 
 ---
 
+## ADR-0002a - One place where user input becomes a shell command
+
+**Context.** On 8 January 2026 Coolify disclosed eleven critical CVEs in one day, five at CVSS 10.0,
+all authenticated command injection ending in root on the host; more followed through spring,
+including an authorization bypass across teams. The published analysis names the cause as a class
+rather than a mistake: user input reaching a shell without sanitisation, in many independent code
+paths. Skifity has the same job description — turn a Git URL, a compose file, a database name into
+privileged operations on somebody's servers — so it has the same attack surface.
+
+**Decision.** Exactly one function turns a value into a shell word — `Quote`, in `internal/shellsafe` — it is
+tested by running a real `sh` against injection payloads rather than by asserting on the string, and
+no generated script interpolates a value any other way. Secrets are sealed to the context they are
+stored in, so a row copied elsewhere does not open. Authorization is resolved per handler through
+`authorizeTeam` and friends, so a handler that reaches the store without one is visible when read.
+
+**Consequences.** This does not make Skifity safe; it makes one class of bug have one place to be. The
+same bug was in this repository in September 2026 — every generated script used Go's `%q`, which
+reads as shell quoting and is not — and it was one change to fix because there was one place. Claiming
+a security advantage over a product that has actually been attacked would be unearned: Coolify has
+eleven CVEs because 52,890 people run it and researchers look, and Skifity has none because nobody
+has. See `docs/research/competitors.md`.
+
+---
+
 ## ADR-0003 - `wireguard-native` flannel backend
 
 **Context.** Users combine cheap VPSes from different providers, so pod traffic crosses the public

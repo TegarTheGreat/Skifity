@@ -162,6 +162,9 @@ func (s *Server) routes() chi.Router {
 				team.Post("/servers", s.handleAddServer)
 				team.Get("/cluster", s.handleClusterSummary)
 
+				// Looking at a repository before creating anything from it.
+				team.Post("/detect", s.handleDetect)
+
 				team.Get("/git-sources", s.handleListGitSources)
 				team.Post("/git-sources", s.handleCreateGitSource)
 				team.Delete("/git-sources/{sourceID}", s.handleDeleteGitSource)

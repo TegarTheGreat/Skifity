@@ -472,3 +472,21 @@ export type EnvironmentQuotaItem = {
   hard_value: number
   percent: number
 }
+
+/** What the panel worked out about a repository before building it. */
+export type Detection = {
+  builder: string
+  language: string
+  framework: string
+  port: number
+  start_command?: string
+  health_path?: string
+  dockerfile_path?: string
+  static_dir?: string
+  /** "high" when a marker file is unambiguous, lower when it is a guess. */
+  confidence: string
+  /** Why it decided that, which is what makes the guess reviewable. */
+  notes?: string[]
+  /** The repository was larger than the panel read. */
+  truncated?: boolean
+}

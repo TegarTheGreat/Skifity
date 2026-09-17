@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ContainerIcon, GitBranchIcon } from "lucide-react"
+import { ContainerIcon, GitBranchIcon, SparklesIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { ErrorDisplay } from "@/components/error-display"
@@ -22,7 +22,7 @@ import {
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { App, Deployment, GitSource } from "@/lib/types"
+import type { App, Deployment, Detection, GitSource } from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
 
 type SourceType = "git" | "image"
@@ -63,6 +63,36 @@ export function NewAppPage() {
     enabled: Boolean(team),
   })
   const sources = gitSources.data?.items ?? []
+
+  // Looking at the repository before anything is created.
+  //
+  // Explicit rather than on every keystroke: a provider's rate limit is shared
+  // by the whole panel, and a form that quietly makes requests while somebody
+  // types is one that runs out of them on the day it matters.
+  const detect = useMutation({
+    mutationFn: () =>
+      api.post<Detection>(`/api/teams/${team!.id}/detect`, {
+        repo_url: repoURL.trim(),
+        branch: branch.trim(),
+        root_dir: rootDir.trim(),
+        git_source_id: gitSourceID,
+      }),
+    onSuccess: (found) => {
+      // Only fields nobody has filled in, and only when the guess is a
+      // statement rather than a question. Overwriting what somebody typed
+      // because a heuristic disagreed is the behaviour that makes people stop
+      // trusting a form.
+      if (found.confidence !== "high") return
+      if (!port && found.port) setPort(String(found.port))
+      if (!healthPath && found.health_path) setHealthPath(found.health_path)
+      if (!startCommand && found.start_command) setStartCommand(found.start_command)
+      if (builder === "auto" && (found.builder === "dockerfile" || found.builder === "static")) {
+        setBuilder(found.builder)
+      }
+      if (!dockerfilePath && found.dockerfile_path) setDockerfilePath(found.dockerfile_path)
+    },
+  })
+  const found = detect.data
 
   // "github.com/you/blog" becomes "blog", which is almost always the name the
   // user would have typed anyway.
@@ -146,7 +176,23 @@ export function NewAppPage() {
                     autoFocus
                     required
                   />
+                  <FieldDescription>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-2 h-7"
+                      disabled={!repoURL.trim() || detect.isPending}
+                      onClick={() => detect.mutate()}
+                    >
+                      {detect.isPending ? <Spinner /> : <SparklesIcon className="size-3.5" />}
+                      {t("apps.detect")}
+                    </Button>
+                  </FieldDescription>
                 </Field>
+
+                {detect.error != null && <ErrorDisplay error={detect.error} compact />}
+                {found && <DetectionSummary detection={found} />}
                 {sources.length > 0 && (
                   <Field>
                     <FieldLabel htmlFor="git-source">
@@ -266,6 +312,7 @@ export function NewAppPage() {
                       <SelectContent>
                         <SelectItem value="auto">{t("apps.builderAuto")}</SelectItem>
                         <SelectItem value="dockerfile">{t("apps.builderDockerfile")}</SelectItem>
+                        <SelectItem value="static">{t("apps.builderStatic")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>
@@ -350,5 +397,44 @@ function SourceChoice({
       <Icon className="size-4 shrink-0" />
       {label}
     </button>
+  )
+}
+
+/**
+ * What the panel worked out about a repository.
+ *
+ * A guess presented as a guess. High confidence comes from a marker file the
+ * repository's author put there — a package.json naming Next.js — and is stated;
+ * anything lower is a question, and the fields below are left for the person to
+ * answer. The notes are what make it reviewable rather than magic.
+ */
+function DetectionSummary({ detection }: { detection: Detection }) {
+  const { t } = useTranslation()
+  const sure = detection.confidence === "high"
+  const what = [detection.framework, detection.language].filter(Boolean).join(" · ")
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border p-3 text-sm",
+        sure ? "border-success/40 bg-success/5" : "border-dashed",
+      )}
+    >
+      <p className="font-medium">
+        {sure
+          ? t("apps.detected", { what: what || detection.builder })
+          : t("apps.detectedMaybe", { what: what || detection.builder })}
+      </p>
+      {detection.notes && detection.notes.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+          {detection.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
+      {detection.truncated && (
+        <p className="mt-1.5 text-xs text-muted-foreground">{t("apps.detectedPartly")}</p>
+      )}
+    </div>
   )
 }

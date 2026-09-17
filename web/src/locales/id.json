@@ -261,7 +261,12 @@
     "scheduledCommandsHelp": "Laporan harian, pembersihan tiap jam. Masing-masing berjalan sendiri, di image aplikasi ini, sesuai jadwal yang Anda beri.",
     "scheduledNamePlaceholder": "laporan harian",
     "scheduleHelp": "Lima kolom cron, dalam UTC. \"0 3 * * *\" berarti setiap hari pukul 03.00.",
-    "schedule": "Jadwal"
+    "schedule": "Jadwal",
+    "detect": "Periksa repositori ini",
+    "detected": "Ini sepertinya {{what}}.",
+    "detectedMaybe": "Ini mungkin {{what}}. Tidak ada yang diisi otomatis — periksa kolom di bawah.",
+    "detectedPartly": "Repositorinya besar, jadi hanya bagian atasnya yang dibaca.",
+    "builderStatic": "Berkas statis"
   },
   "deploy": {
     "title": "Deployment",

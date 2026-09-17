@@ -261,7 +261,12 @@
     "scheduledCommandsHelp": "每晚的报表、每小时的清理。每一条都单独运行，使用该应用的镜像，按你设定的时间。",
     "scheduledNamePlaceholder": "每晚报表",
     "scheduleHelp": "五个 cron 字段，使用 UTC。\"0 3 * * *\" 表示每天 03:00。",
-    "schedule": "计划"
+    "schedule": "计划",
+    "detect": "检查这个仓库",
+    "detected": "这看起来是 {{what}}。",
+    "detectedMaybe": "这可能是 {{what}}。没有自动填写任何内容，请检查下面的字段。",
+    "detectedPartly": "仓库较大，只读取了顶层内容。",
+    "builderStatic": "静态文件"
   },
   "deploy": {
     "title": "部署记录",

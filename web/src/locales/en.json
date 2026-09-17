@@ -269,7 +269,12 @@
     "scheduledCommandsHelp": "A nightly report, an hourly cleanup. Each runs on its own, in this app's image, on the schedule you give it.",
     "scheduledNamePlaceholder": "nightly report",
     "scheduleHelp": "Five cron fields, in UTC. \"0 3 * * *\" is every day at 03:00.",
-    "schedule": "Schedule"
+    "schedule": "Schedule",
+    "detect": "Check this repository",
+    "detected": "This looks like {{what}}.",
+    "detectedMaybe": "This might be {{what}}. Nothing was filled in — check the fields below.",
+    "detectedPartly": "The repository is large, so only the top of it was read.",
+    "builderStatic": "Static files"
   },
   "deploy": {
     "title": "Deployments",

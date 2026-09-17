@@ -6,6 +6,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -474,4 +475,58 @@ func TestFollowingAnEarlierContainerIsNotAThing(t *testing.T) {
 		t.Fatalf("AppLogs: %v", err)
 	}
 	defer stream.Close()
+}
+
+func TestDeletingAnAppStopsItsScheduledCommands(t *testing.T) {
+	// A scheduled command is the part of an app that keeps going on its own.
+	// Left behind, a deleted app's nightly job fires every night forever
+	// against an image nothing will pull, and the only sign of it is failed
+	// pods piling up in a namespace nobody is looking at.
+	ours := &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-job-nightly", Namespace: "team-prod",
+		Labels: map[string]string{
+			"app.kubernetes.io/name": "web", "app.kubernetes.io/component": "run",
+		},
+	}}
+	run := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{
+		Name: "web-run-abcd1234", Namespace: "team-prod",
+		Labels: map[string]string{
+			"app.kubernetes.io/name": "web", "app.kubernetes.io/component": "run",
+		},
+	}}
+	// Another app in the same environment, which must survive.
+	theirs := &batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{
+		Name: "api-job-nightly", Namespace: "team-prod",
+		Labels: map[string]string{
+			"app.kubernetes.io/name": "api", "app.kubernetes.io/component": "run",
+		},
+	}}
+
+	c := &Client{
+		clientset:       fake.NewSimpleClientset(ours, run, theirs),
+		systemNamespace: "skifity-system",
+	}
+	if err := c.deleteRuns(t.Context(), "team-prod", "web"); err != nil {
+		t.Fatalf("deleteRuns: %v", err)
+	}
+
+	crons, err := c.clientset.BatchV1().CronJobs("team-prod").List(t.Context(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list cron jobs: %v", err)
+	}
+	if len(crons.Items) != 1 || crons.Items[0].Name != "api-job-nightly" {
+		var left []string
+		for _, item := range crons.Items {
+			left = append(left, item.Name)
+		}
+		t.Fatalf("scheduled commands left behind: %v, want only api-job-nightly", left)
+	}
+
+	jobs, err := c.clientset.BatchV1().Jobs("team-prod").List(t.Context(), metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("list jobs: %v", err)
+	}
+	if len(jobs.Items) != 0 {
+		t.Fatalf("%d of the app's runs are still there", len(jobs.Items))
+	}
 }

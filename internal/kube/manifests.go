@@ -271,8 +271,16 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 }
 
 // BuildHPA renders the HorizontalPodAutoscaler, or nil when autoscaling is off.
+//
+// An app that can scale to zero never gets one, even when it also asked for
+// autoscaling. KEDA creates its own HorizontalPodAutoscaler for the
+// HTTPScaledObject, and two of them pointed at one Deployment do not divide the
+// work: each reconciles the replica count towards its own answer and overwrites
+// the other's, so the app oscillates for as long as both exist. The floor is
+// what scale to zero is for, and KEDA owns it; the ceiling is carried into the
+// HTTPScaledObject so the maximum the person chose still applies.
 func BuildHPA(s AppSpec) *autoscalingv2.HorizontalPodAutoscaler {
-	if !s.Autoscale {
+	if !s.Autoscale || ScaleToZeroEnabled(s) {
 		return nil
 	}
 	metrics := []autoscalingv2.MetricSpec{}
@@ -314,15 +322,25 @@ func BuildHPA(s AppSpec) *autoscalingv2.HorizontalPodAutoscaler {
 }
 
 // BuildPDB renders a PodDisruptionBudget so that draining a node for an upgrade
-// cannot take an app's last instance with it.
+// takes an app's instances one at a time instead of all at once.
 //
-// Returns nil for a single-instance app: a budget that cannot be satisfied would
-// block node drains forever, which is worse than the brief outage.
+// Returns nil for a single-instance app: a budget has nothing to protect when
+// there is one instance, and one that cannot be satisfied blocks a drain
+// forever, which is worse than the brief outage.
+//
+// maxUnavailable rather than minAvailable, which is not the same shape of
+// promise. minAvailable: 1 says "leave one running", so on a three-instance app
+// it permits two to go at once, and on an autoscaled app that has come down to
+// its minimum of one it permits none at all — the drain then waits for an
+// eviction that can never be allowed, which is the deadlock this comment used
+// to say it avoided. maxUnavailable: 1 says "take one at a time", which is the
+// actual intention, holds at every instance count, and leaves a single
+// remaining instance evictable so a node can always be emptied.
 func BuildPDB(s AppSpec) *policyv1.PodDisruptionBudget {
 	if s.DesiredReplicas() < 2 && !s.Autoscale {
 		return nil
 	}
-	minAvailable := intstr.FromInt32(1)
+	maxUnavailable := intstr.FromInt32(1)
 	return &policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{APIVersion: "policy/v1", Kind: "PodDisruptionBudget"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -331,8 +349,8 @@ func BuildPDB(s AppSpec) *policyv1.PodDisruptionBudget {
 			Labels:    s.Labels(),
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
-			MinAvailable: &minAvailable,
-			Selector:     &metav1.LabelSelector{MatchLabels: s.SelectorLabels()},
+			MaxUnavailable: &maxUnavailable,
+			Selector:       &metav1.LabelSelector{MatchLabels: s.SelectorLabels()},
 		},
 	}
 }

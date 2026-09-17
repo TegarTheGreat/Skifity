@@ -302,7 +302,11 @@ func (d *Deployer) removeUnwanted(ctx context.Context, spec kube.AppSpec, app st
 			d.log.Warn("could not remove the ingress", "app", app.ID, "error", err)
 		}
 	}
-	if !spec.Autoscale {
+	// Not "autoscaling was switched off": an app that turns scale to zero on
+	// keeps autoscaling on and stops having an HorizontalPodAutoscaler, because
+	// KEDA brings its own. Asking the builder is the only way this stays true
+	// when the rule changes again.
+	if kube.BuildHPA(spec) == nil {
 		if err := applier.Delete(ctx, "autoscaling/v2", "HorizontalPodAutoscaler",
 			spec.Namespace, kube.ResourceName(spec.Name, "hpa")); err != nil {
 			d.log.Warn("could not remove the autoscaler", "app", app.ID, "error", err)

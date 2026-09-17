@@ -79,6 +79,27 @@ func BuildRunJob(s RunSpec) (*batchv1.Job, error) {
 	labels["app.kubernetes.io/component"] = "run"
 	labels[version.LabelKey("run-kind")] = s.Kind
 
+	// The pod's labels are deliberately not the Job's.
+	//
+	// An app's Service, its disruption budget, its topology spread and the
+	// panel's own "which pods are this app" queries all select on the app's
+	// name and instance together, and so does the Deployment, which is what
+	// the autoscaler reads its metrics through. A migration pod carrying both
+	// would be listed on the instances tab as though it were serving traffic,
+	// have its CPU averaged into the decision to scale the app up, and be
+	// offered as the pod to read the app's logs from — which is how somebody
+	// opens the logs tab during a nightly job and reads the job instead.
+	//
+	// Changing the name label is enough to fall out of every one of those
+	// selectors while the app-id, project and team labels still say who this
+	// belongs to. The Job's own labels keep the app's name, because that is
+	// what a run is looked up by.
+	podLabels := make(map[string]string, len(labels))
+	for k, v := range labels {
+		podLabels[k] = v
+	}
+	podLabels["app.kubernetes.io/name"] = s.Name
+
 	container := corev1.Container{
 		Name:            "run",
 		Image:           s.App.Image,
@@ -150,7 +171,7 @@ func BuildRunJob(s RunSpec) (*batchv1.Job, error) {
 			ActiveDeadlineSeconds:   &deadline,
 			TTLSecondsAfterFinished: &ttl,
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: labels},
+				ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
 				Spec:       podSpec,
 			},
 		},
@@ -194,6 +215,15 @@ func BuildCronJob(s RunSpec, schedule string) (*batchv1.CronJob, error) {
 	// than firing every missed interval at once.
 	var startingDeadline int64 = 300
 
+	// A one-off Job deletes itself an hour after it finishes, because nobody
+	// comes back to a command they ran by hand a day later. A scheduled one
+	// must not: the history limits above are the promise that the last three
+	// runs are there to look at, and an hourly self-deletion would empty a
+	// nightly job's history long before anybody woke up to read it. Kubernetes
+	// keeps exactly as many as the limits say.
+	template := job.Spec
+	template.TTLSecondsAfterFinished = nil
+
 	return &batchv1.CronJob{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "batch/v1", Kind: "CronJob"},
 		ObjectMeta: metav1.ObjectMeta{Name: s.Name, Namespace: s.App.Namespace, Labels: job.Labels},
@@ -207,7 +237,7 @@ func BuildCronJob(s RunSpec, schedule string) (*batchv1.CronJob, error) {
 			// cluster's idea of local time is not something anybody chose.
 			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: job.Labels},
-				Spec:       job.Spec,
+				Spec:       template,
 			},
 		},
 	}, nil

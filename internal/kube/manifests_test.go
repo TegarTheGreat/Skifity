@@ -326,8 +326,70 @@ func TestPDBSkippedForSingleInstance(t *testing.T) {
 	if pdb == nil {
 		t.Fatal("no PodDisruptionBudget for a three-instance app")
 	}
-	if pdb.Spec.MinAvailable.IntValue() != 1 {
-		t.Fatalf("minAvailable is %v, want 1", pdb.Spec.MinAvailable)
+	if pdb.Spec.MinAvailable != nil {
+		t.Fatalf("minAvailable is set to %v; it permits every instance but one to "+
+			"be evicted at once, and deadlocks a drain when there is one left",
+			pdb.Spec.MinAvailable)
+	}
+	if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != 1 {
+		t.Fatalf("maxUnavailable is %v, want 1", pdb.Spec.MaxUnavailable)
+	}
+}
+
+func TestPDBNeverBlocksADrainForever(t *testing.T) {
+	// An autoscaled app is allowed a minimum of one instance, and an HPA with
+	// nothing to do sits at that minimum. A budget that insists one instance
+	// stays available then refuses every eviction, and `kubectl drain` waits
+	// for an eviction that can never be permitted: the node never empties and
+	// the cluster cannot be upgraded.
+	s := baseSpec()
+	s.Autoscale = true
+	s.MinReplicas = 1
+	s.MaxReplicas = 5
+	s.CPUTarget = 70
+
+	pdb := BuildPDB(s)
+	if pdb == nil {
+		t.Fatal("no PodDisruptionBudget for an autoscaling app")
+	}
+	if pdb.Spec.MinAvailable != nil {
+		t.Fatal("minAvailable on an app whose minimum is one instance blocks every drain")
+	}
+	if pdb.Spec.MaxUnavailable == nil || pdb.Spec.MaxUnavailable.IntValue() != 1 {
+		t.Fatalf("maxUnavailable is %v, want 1 so one instance can always be taken",
+			pdb.Spec.MaxUnavailable)
+	}
+}
+
+func TestScaleToZeroLeavesTheAutoscalingToKEDA(t *testing.T) {
+	// KEDA's HTTPScaledObject creates its own HorizontalPodAutoscaler. A second
+	// one from us, pointed at the same Deployment, does not divide the work:
+	// each overwrites the other's replica count on every reconcile and the app
+	// oscillates for as long as both exist.
+	s := baseSpec()
+	s.Autoscale = true
+	s.MinReplicas = 1
+	s.MaxReplicas = 4
+	s.CPUTarget = 70
+	s.ScaleToZero = true
+	s.Domains = []DomainSpec{{Hostname: "app.example.com", TLS: true}}
+
+	if hpa := BuildHPA(s); hpa != nil {
+		t.Fatal("an HorizontalPodAutoscaler was rendered for an app KEDA already scales")
+	}
+	scaled := BuildHTTPScaledObject(s)
+	if scaled == nil {
+		t.Fatal("no HTTPScaledObject, so nothing scales this app at all")
+	}
+	replicas, _, _ := unstructured.NestedMap(scaled.Object, "spec", "replicas")
+	if replicas["max"] != int64(4) {
+		t.Fatalf("the ceiling is %v, want the 4 the app asked for", replicas["max"])
+	}
+
+	// Without scale to zero the autoscaler is still ours.
+	s.ScaleToZero = false
+	if BuildHPA(s) == nil {
+		t.Fatal("no HorizontalPodAutoscaler for an app that only asked for autoscaling")
 	}
 }
 
@@ -738,6 +800,22 @@ func TestAScheduledCommandDoesNotPileUp(t *testing.T) {
 	if cron.Spec.SuccessfulJobsHistoryLimit == nil || cron.Spec.FailedJobsHistoryLimit == nil {
 		t.Error("finished jobs would pile up in the namespace forever")
 	}
+	// A one-off run deletes itself an hour after it finishes. A scheduled one
+	// inheriting that would make the history limits a lie: a nightly job's last
+	// three runs would be gone by morning, which is exactly when somebody looks
+	// for the one that failed.
+	if cron.Spec.JobTemplate.Spec.TTLSecondsAfterFinished != nil {
+		t.Errorf("a scheduled job deletes itself after %ds, so the history limits keep nothing",
+			*cron.Spec.JobTemplate.Spec.TTLSecondsAfterFinished)
+	}
+	// And the one-off still does.
+	once, err := BuildRunJob(RunSpec{App: app, Name: "web-run-abc", Command: "echo hi"})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+	if once.Spec.TTLSecondsAfterFinished == nil {
+		t.Error("a one-off run never deletes itself, so a namespace fills with commands somebody ran once")
+	}
 
 	// The name is derived from the app and the job, so two apps can both have a
 	// "nightly report" and one app cannot have two.
@@ -746,5 +824,52 @@ func TestAScheduledCommandDoesNotPileUp(t *testing.T) {
 	}
 	if len(cron.Name) > 63 {
 		t.Errorf("%q is %d characters, which Kubernetes refuses", cron.Name, len(cron.Name))
+	}
+}
+
+func TestARunsPodIsNotOneOfTheAppsInstances(t *testing.T) {
+	// The app's Service, its disruption budget, its topology spread and the
+	// panel's own instance list all select on the same two labels, and so does
+	// the Deployment the autoscaler reads its metrics through. A pod running a
+	// migration that carried both would be counted as an instance of the app.
+	app := baseSpec()
+	app.Replicas = 2
+	job, err := BuildRunJob(RunSpec{App: app, Name: "web-run-abcd1234", Command: "npm run migrate"})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+
+	selector := BuildDeployment(app).Spec.Selector.MatchLabels
+	podLabels := job.Spec.Template.Labels
+	matches := true
+	for k, v := range selector {
+		if podLabels[k] != v {
+			matches = false
+		}
+	}
+	if matches {
+		t.Fatalf("a run's pod matches the app's own selector %v, so it counts as an instance", selector)
+	}
+	if svc := BuildService(app); svc != nil {
+		matches = true
+		for k, v := range svc.Spec.Selector {
+			if podLabels[k] != v {
+				matches = false
+			}
+		}
+		if matches {
+			t.Error("a run's pod matches the app's Service, which would send it traffic")
+		}
+	}
+
+	// It still says who it belongs to, which is what the panel looks it up by.
+	if podLabels[version.LabelKey("app-id")] != app.AppID {
+		t.Error("a run's pod no longer says which app it belongs to")
+	}
+	if job.Labels["app.kubernetes.io/name"] != app.Name {
+		t.Error("the Job itself lost the app's name, which is how a run is found again")
+	}
+	if job.Labels["app.kubernetes.io/component"] != "run" {
+		t.Error("the Job is no longer marked as a run")
 	}
 }

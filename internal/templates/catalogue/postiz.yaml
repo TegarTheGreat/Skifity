@@ -26,5 +26,6 @@ databases:
 - name: postiz-db
   engine: postgres
   storage_gb: 5
-  link_to: postiz
+  link_to:
+  - postiz
   var_name: DATABASE_URL

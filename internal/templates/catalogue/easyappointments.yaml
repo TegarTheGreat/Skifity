@@ -19,5 +19,6 @@ databases:
 - name: easyappointments-db
   engine: mysql
   storage_gb: 5
-  link_to: easyappointments
+  link_to:
+  - easyappointments
   var_name: DATABASE_URL

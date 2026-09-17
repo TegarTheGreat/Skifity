@@ -16,5 +16,6 @@ databases:
 - name: traccar-db
   engine: postgres
   storage_gb: 5
-  link_to: traccar
+  link_to:
+  - traccar
   var_name: DATABASE_URL

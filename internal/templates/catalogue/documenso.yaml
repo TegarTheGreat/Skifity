@@ -19,5 +19,6 @@ databases:
 - name: documenso-db
   engine: postgres
   storage_gb: 5
-  link_to: documenso
+  link_to:
+  - documenso
   var_name: DATABASE_URL

@@ -23,5 +23,6 @@ databases:
 - name: zipline-db
   engine: postgres
   storage_gb: 5
-  link_to: zipline
+  link_to:
+  - zipline
   var_name: DATABASE_URL

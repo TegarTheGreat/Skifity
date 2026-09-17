@@ -17,5 +17,6 @@ databases:
 - name: ryot-db
   engine: postgres
   storage_gb: 5
-  link_to: ryot
+  link_to:
+  - ryot
   var_name: DATABASE_URL

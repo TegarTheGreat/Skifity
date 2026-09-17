@@ -16,5 +16,6 @@ databases:
 - name: superset-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: superset
+  link_to:
+  - superset
   var_name: DATABASE_URL

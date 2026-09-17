@@ -16,5 +16,6 @@ databases:
 - name: metamcp-db
   engine: postgres
   storage_gb: 5
-  link_to: app
+  link_to:
+  - app
   var_name: DATABASE_URL

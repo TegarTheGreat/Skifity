@@ -19,7 +19,8 @@ databases:
 - name: umami-db
   engine: postgres
   storage_gb: 5
-  link_to: umami
+  link_to:
+  - umami
   var_name: DATABASE_URL
 inputs:
 - key: APP_SECRET

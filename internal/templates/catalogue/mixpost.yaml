@@ -27,5 +27,6 @@ databases:
 - name: mixpost-db
   engine: mysql
   storage_gb: 5
-  link_to: mixpost
+  link_to:
+  - mixpost
   var_name: DATABASE_URL

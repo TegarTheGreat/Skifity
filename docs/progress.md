@@ -714,6 +714,46 @@ This is also the path the quick start tells somebody to use, since nothing is
 published — clone, `make image`, run the installer from inside the clone. It
 would not have worked for them either.
 
+## Phase 24 — the multi-service templates, and what they were worth
+
+Seventy-two templates in Coolify's catalogue install more than one application
+service. Installing several apps from one template was never the problem —
+`installTemplate` already creates an app per service — so this was a converter
+problem, and the converter kept being confidently wrong.
+
+The first attempt produced 21 templates. They looked fine and were not: a
+Sidekiq worker marked public on the web app's port, Elasticsearch given Kibana's
+port, n8n given Postgres's, HeyForm given Redis's. Every heuristic fix revealed
+another wrong guess, because a Compose file encodes a topology and the converter
+was inferring one.
+
+So it stopped inferring. A service's port now comes from the source saying so —
+its own `SERVICE_FQDN` marker, or `expose`, or `ports` — or from a short table of
+ports that are documented facts about an image, and that table only answers when
+the image appears once in the stack (seaweedfs runs a master and an admin from
+one image, and 8333 was wrong for both). Anything else is dropped as ambiguous.
+
+That leaves **seven**, and all seven are right. It also produced three real
+changes to the product rather than the converter:
+
+* **`link_to` is a list.** A web app and its worker share one database, and
+  linking only the first left the worker starting without the variable it cannot
+  run without — the same crash loop as a link that names nothing.
+* **A worker is `port: 0`**, which the manifest builder already handled: no
+  Service, no probes, no ingress. The catalogue tests now allow it, and refuse a
+  service that is public or has a health path with no port to check it on.
+* **A shared volume does not carry over**, and that is said rather than
+  discovered. A Compose volume is shared between services; a Skifity volume
+  belongs to one app and is read-write-once, so Chatwoot's web app and its
+  Sidekiq get two different `/app/storage` directories. The template says so and
+  points at object storage.
+
+Of the 65 that did not convert: 8 need the Docker socket, which cannot run under
+a restricted pod security policy at all; 8 are stacks of five to twenty-three
+services where getting startup order and shared state right without ever running
+them is not a bet worth making; the rest have an image whose version could not be
+verified or a service nothing says the port of.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

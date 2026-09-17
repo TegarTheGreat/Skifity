@@ -20,5 +20,6 @@ databases:
 - name: matrix-synapse-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: synapse
+  link_to:
+  - synapse
   var_name: DATABASE_URL

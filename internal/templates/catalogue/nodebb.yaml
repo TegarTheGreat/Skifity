@@ -23,5 +23,6 @@ databases:
 - name: nodebb-db
   engine: postgres
   storage_gb: 5
-  link_to: nodebb
+  link_to:
+  - nodebb
   var_name: DATABASE_URL

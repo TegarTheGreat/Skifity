@@ -26,5 +26,6 @@ databases:
 - name: onedev-db
   engine: postgres
   storage_gb: 5
-  link_to: onedev
+  link_to:
+  - onedev
   var_name: DATABASE_URL

@@ -21,5 +21,6 @@ databases:
 - name: uptime-kuma-with-mariadb-db
   engine: mysql
   storage_gb: 5
-  link_to: uptime-kuma
+  link_to:
+  - uptime-kuma
   var_name: DATABASE_URL

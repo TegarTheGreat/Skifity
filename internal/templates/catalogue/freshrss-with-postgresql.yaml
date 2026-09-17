@@ -23,5 +23,6 @@ databases:
 - name: freshrss-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: freshrss
+  link_to:
+  - freshrss
   var_name: DATABASE_URL

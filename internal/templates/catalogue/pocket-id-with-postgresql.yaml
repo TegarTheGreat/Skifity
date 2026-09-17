@@ -22,5 +22,6 @@ databases:
 - name: pocket-id-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: pocket-id
+  link_to:
+  - pocket-id
   var_name: DATABASE_URL

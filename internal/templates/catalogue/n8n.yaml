@@ -26,7 +26,8 @@ databases:
 - name: n8n-db
   engine: postgres
   storage_gb: 5
-  link_to: n8n
+  link_to:
+  - n8n
   var_name: DB_POSTGRESDB_URL
 inputs:
 - key: N8N_ENCRYPTION_KEY

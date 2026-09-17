@@ -21,5 +21,6 @@ databases:
 - name: nitropage-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: nitropage
+  link_to:
+  - nitropage
   var_name: DATABASE_URL

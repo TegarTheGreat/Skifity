@@ -27,5 +27,6 @@ databases:
 - name: nextcloud-with-mysql-db
   engine: mysql
   storage_gb: 5
-  link_to: nextcloud
+  link_to:
+  - nextcloud
   var_name: DATABASE_URL

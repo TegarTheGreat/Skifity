@@ -23,5 +23,6 @@ databases:
 - name: bookstack-db
   engine: mysql
   storage_gb: 5
-  link_to: bookstack
+  link_to:
+  - bookstack
   var_name: DATABASE_URL

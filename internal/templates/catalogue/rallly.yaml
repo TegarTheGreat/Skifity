@@ -17,5 +17,6 @@ databases:
 - name: rallly-db
   engine: postgres
   storage_gb: 5
-  link_to: rallly
+  link_to:
+  - rallly
   var_name: DATABASE_URL

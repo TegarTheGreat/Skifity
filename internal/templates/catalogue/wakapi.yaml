@@ -23,5 +23,6 @@ databases:
 - name: wakapi-db
   engine: postgres
   storage_gb: 5
-  link_to: wakapi
+  link_to:
+  - wakapi
   var_name: DATABASE_URL

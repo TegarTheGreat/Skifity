@@ -24,5 +24,6 @@ databases:
 - name: dolibarr-db
   engine: mysql
   storage_gb: 5
-  link_to: dolibarr
+  link_to:
+  - dolibarr
   var_name: DATABASE_URL

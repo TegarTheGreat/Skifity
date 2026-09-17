@@ -21,7 +21,8 @@ databases:
 - name: wordpress-db
   engine: mysql
   storage_gb: 5
-  link_to: wordpress
+  link_to:
+  - wordpress
   var_name: WORDPRESS_DB_URL
 notes: Open the site to finish the WordPress installer. The uploads folder is on a volume, so it survives
   redeploys.

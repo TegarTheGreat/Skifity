@@ -19,5 +19,6 @@ databases:
 - name: metabase-db
   engine: postgres
   storage_gb: 5
-  link_to: metabase
+  link_to:
+  - metabase
   var_name: DATABASE_URL

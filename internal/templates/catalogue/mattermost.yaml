@@ -25,5 +25,6 @@ databases:
 - name: mattermost-db
   engine: postgres
   storage_gb: 5
-  link_to: mattermost
+  link_to:
+  - mattermost
   var_name: DATABASE_URL

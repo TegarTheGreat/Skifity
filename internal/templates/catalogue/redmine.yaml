@@ -23,5 +23,6 @@ databases:
 - name: redmine-db
   engine: postgres
   storage_gb: 5
-  link_to: redmine
+  link_to:
+  - redmine
   var_name: DATABASE_URL

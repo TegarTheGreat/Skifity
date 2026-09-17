@@ -26,7 +26,7 @@ crash-loops until somebody redeploys it.
 
 ## What is in the catalogue
 
-**212 applications**, grouped by what they are for: productivity, developer
+**219 applications**, grouped by what they are for: productivity, developer
 tools, media, storage, publishing, communication, security, AI, analytics,
 monitoring, automation, finance and networking. WordPress, Ghost, n8n,
 Vaultwarden, Uptime Kuma, Plausible, Umami, MinIO, BookStack, Gitea, Metabase,
@@ -36,6 +36,9 @@ Eight of them were written by hand. The rest were converted from the Coolify
 catalogue, which is the largest in this category and has been exercised by tens
 of thousands of installations — so the ports, the variables and the volumes come
 from somewhere that works rather than from guesswork.
+
+Seven install more than one app: a web app and its worker, or a service and its
+search index. They land in the same environment and reach each other by name.
 
 What the conversion added is the part Coolify does not do:
 

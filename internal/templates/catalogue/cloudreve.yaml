@@ -20,5 +20,6 @@ databases:
 - name: cloudreve-db
   engine: postgres
   storage_gb: 5
-  link_to: cloudreve
+  link_to:
+  - cloudreve
   var_name: DATABASE_URL

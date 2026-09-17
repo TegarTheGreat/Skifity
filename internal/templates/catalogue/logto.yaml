@@ -19,5 +19,6 @@ databases:
 - name: logto-db
   engine: postgres
   storage_gb: 5
-  link_to: logto
+  link_to:
+  - logto
   var_name: DATABASE_URL

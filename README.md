@@ -124,10 +124,12 @@ else. The panel is **35 MiB of resident memory idle**, measured, and does not
 drift. Certificates, the builder, the PostgreSQL operator and the rest install
 themselves the first time you use them, and each one says what it costs first.
 
-## Two hundred and twelve one-click applications
+## Two hundred and nineteen one-click applications
 
 WordPress, Ghost, Gitea, n8n, Vaultwarden, Metabase, BookStack, MinIO, Uptime
-Kuma and about two hundred more, grouped by what they are for.
+Kuma and about two hundred more, grouped by what they are for. Seven of them
+install more than one app — a web app and its worker, a service and its search
+index — which land in the same environment and reach each other by name.
 
 Every one of them **names a version**, and every version was fetched from its
 registry to prove it exists. That sounds like a detail until you roll back: an

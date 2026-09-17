@@ -16,5 +16,6 @@ databases:
 - name: inngest-db
   engine: postgres
   storage_gb: 5
-  link_to: inngest
+  link_to:
+  - inngest
   var_name: DATABASE_URL

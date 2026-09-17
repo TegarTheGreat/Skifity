@@ -17,5 +17,6 @@ databases:
 - name: drupal-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: drupal
+  link_to:
+  - drupal
   var_name: DATABASE_URL

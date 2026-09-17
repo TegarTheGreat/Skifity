@@ -19,5 +19,6 @@ databases:
 - name: sequin-db
   engine: postgres
   storage_gb: 5
-  link_to: sequin
+  link_to:
+  - sequin
   var_name: DATABASE_URL

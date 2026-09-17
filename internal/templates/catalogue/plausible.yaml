@@ -19,7 +19,8 @@ databases:
 - name: plausible-db
   engine: postgres
   storage_gb: 10
-  link_to: plausible
+  link_to:
+  - plausible
   var_name: DATABASE_URL
 inputs:
 - key: SECRET_KEY_BASE

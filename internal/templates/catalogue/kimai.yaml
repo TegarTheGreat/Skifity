@@ -20,5 +20,6 @@ databases:
 - name: kimai-db
   engine: mysql
   storage_gb: 5
-  link_to: kimai
+  link_to:
+  - kimai
   var_name: DATABASE_URL

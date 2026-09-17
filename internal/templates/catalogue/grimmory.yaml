@@ -26,5 +26,6 @@ databases:
 - name: grimmory-db
   engine: mysql
   storage_gb: 5
-  link_to: grimmory
+  link_to:
+  - grimmory
   var_name: DATABASE_URL

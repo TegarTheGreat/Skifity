@@ -48,10 +48,62 @@ def engine_of(image):
     return None
 
 
-def port_of(body, fallback):
-    """The port a service listens on, from the compose file's own words."""
+# A worker does not listen: sidekiq, a celery beat, a queue consumer. Skifity
+# represents one as an app with no port, which gets no Service, no probes and no
+# ingress — so the important thing is not to invent a port for it. Giving a
+# Sidekiq the web app's port produces a readiness check against something that
+# never answers, and an app that is "starting" forever.
+WORKER_NAME = re.compile(
+    r'(^|[-_])(worker|workers|sidekiq|celery|beat|scheduler|cron|queue|consumer|daemon|'
+    r'runner|supervisor|jobs?)([-_]|$)', re.I)
+
+
+def fqdn_marker(name, body):
+    """The SERVICE_FQDN marker for *this* service, if the source set one.
+
+    Coolify writes SERVICE_FQDN_<SERVICE>_<PORT> into the environment of the
+    service that gets a domain. Matching the service name matters: a stack often
+    shares one environment block, so looking only for the prefix marked a
+    Sidekiq worker as the public web app.
+    """
+    wanted = re.sub(r'[^A-Z0-9]', "_", name.upper())
+    for match in re.finditer(r'SERVICE_FQDN_([A-Z0-9_]+?)(?:_(\d+))?\b', str(body.get("environment") or "")):
+        if match.group(1) == wanted:
+            return True, int(match.group(2)) if match.group(2) else 0
+    return False, 0
+
+
+# Ports that are documented facts about an image rather than guesses about a
+# template. Each of these is the port the project itself publishes, and they
+# appear again and again as sidecars in these stacks. Anything not here and not
+# written down in the compose file is left alone: that is the line between
+# knowing and inferring, and crossing it is what gave HeyForm Redis's port.
+KNOWN_PORT = {
+    "clickhouse/clickhouse-server": 8123,
+    "getmeili/meilisearch": 7700,
+    "minio/minio": 9000,
+    "ghcr.io/coollabsio/minio": 9000,
+    "mongo": 27017,
+    "nginx": 80,
+    "darthsim/imgproxy": 8080,
+    "chrislusf/seaweedfs": 8333,
+    "docker.elastic.co/elasticsearch/elasticsearch": 9200,
+    "elasticsearch": 9200,
+    "opensearchproject/opensearch": 9200,
+    "qdrant/qdrant": 6333,
+    "typesense/typesense": 8108,
+}
+
+
+def declared_port(body, image_is_unique=True):
+    """The port the compose file says this service listens on, or 0.
+
+    Only what is written down. Reading a port out of the environment looked
+    clever and was not: DB_PORT=5432 and REDIS_PORT=6379 are in there too, and
+    guessing from them gave n8n Postgres's port and HeyForm Redis's.
+    """
     for entry in body.get("expose") or []:
-        digits = re.sub(r'\D', '', str(entry))
+        digits = re.sub(r'\D', "", str(entry))
         if digits:
             return int(digits)
     for entry in body.get("ports") or []:
@@ -59,15 +111,12 @@ def port_of(body, fallback):
         parts = text.split(":")
         if parts and parts[-1].isdigit():
             return int(parts[-1])
-    for key, value in (body.get("environment") or {} if isinstance(body.get("environment"), dict)
-                       else {k.split("=")[0]: k.split("=", 1)[-1] for k in (body.get("environment") or [])
-                             if isinstance(k, str) and "=" in k}).items():
-        if re.search(r'(^|_)PORT$', key, re.I) and str(value).strip("'\"").isdigit():
-            return int(str(value).strip("'\""))
-    match = re.search(r'SERVICE_FQDN_[A-Z0-9_]+_(\d+)', str(body.get("environment") or ""))
-    if match:
-        return int(match.group(1))
-    return fallback
+    # The table is about an image, so it can only answer for a service that is
+    # the only one running that image. seaweedfs runs a master and an admin from
+    # one image on different ports, and answering 8333 for both was wrong twice.
+    if not image_is_unique:
+        return 0
+    return KNOWN_PORT.get((body.get("image") or "").split(":")[0], 0)
 
 
 def env_of(body, databases):
@@ -129,15 +178,30 @@ def convert(key, template, compose, pinned):
     if not 2 <= len(real) <= MAX_SERVICES:
         return None, f"{len(real)} long-running services"
 
+    # How many services share each image, so the table above knows when it can
+    # answer and when the answer would be a coincidence.
+    image_count = {}
+    for name in real:
+        base = (services[name].get("image") or "").split(":")[0]
+        image_count[base] = image_count.get(base, 0) + 1
+
     out_services, names = [], set()
     for name in real:
         body = services[name]
         image = pinned.get(f"{key}::{name}") or pinned.get(body.get("image", ""))
         if not image:
             return None, f"no verified image for {name}"
-        port = port_of(body, template.get("port"))
-        if not port or not 1 <= int(port) <= 65535:
-            return None, f"no port for {name}"
+        public, marked_port = fqdn_marker(name, body)
+        unique = image_count.get((body.get("image") or "").split(":")[0], 0) == 1
+        port = marked_port or declared_port(body, unique)
+        if not public and port == 0 and WORKER_NAME.search(name):
+            pass  # a worker: no port, and none invented
+        elif port == 0:
+            # Nothing said what this listens on, and guessing is what produced
+            # a search engine with no port and a web app on a database's.
+            return None, f"nothing says what {name} listens on"
+        if port and not 1 <= port <= 65535:
+            return None, f"port {port} for {name}"
         service_slug = slug(name) or slug(key)
         if service_slug in names:
             return None, "two services with the same slug"
@@ -149,7 +213,7 @@ def convert(key, template, compose, pinned):
             "port": int(port),
             # Public when the source marked it with a domain of its own. Each
             # app here can have a domain, so several public services is fine.
-            "public": "SERVICE_FQDN" in str(body.get("environment") or ""),
+            "public": public,
             "mem_request_mb": 128, "mem_limit_mb": 1024,
             "cpu_request_m": 50, "cpu_limit_m": 1000,
         }
@@ -161,9 +225,12 @@ def convert(key, template, compose, pinned):
             entry["volumes"] = volumes
         out_services.append(entry)
 
+    listening = [s for s in out_services if s["port"] > 0]
+    if not listening:
+        return None, "nothing in it listens on a port"
     if not any(s["public"] for s in out_services):
         # Nothing was marked, so the one carrying the template's own port is it.
-        main = max(out_services, key=lambda s: s["port"] == template.get("port"))
+        main = max(listening, key=lambda s: s["port"] == template.get("port"))
         main["public"] = True
 
     out = {
@@ -181,11 +248,33 @@ def convert(key, template, compose, pinned):
             "name": (slug(key) + "-db")[:40],
             "engine": engine_of(str(databases[first].get("image", ""))),
             "storage_gb": 5,
-            "link_to": out_services[0]["name"],
+            # Every app in the stack, not just the first: a web app and its
+            # worker share one database, and linking only one of them leaves
+            # the other without the variable it cannot run without.
+            "link_to": [s["name"] for s in out_services],
             "var_name": "DATABASE_URL",
         }]
 
     notes = []
+    # A compose volume is shared between the services that mount it. A Skifity
+    # volume belongs to one app: each gets its own claim, read-write-once. Two
+    # apps mounting the same path therefore get two different directories, and
+    # for something like Chatwoot — where the web app writes an upload and the
+    # worker reads it — that is a real difference, not a detail.
+    mounted = {}
+    for service in out_services:
+        for volume in service.get("volumes") or []:
+            mounted.setdefault(volume["mount_path"], []).append(service["name"])
+    shared = {path: names for path, names in mounted.items() if len(names) > 1}
+    if shared:
+        notes.append(
+            "In the original this stack shares "
+            + ", ".join(sorted(shared))
+            + " between "
+            + " and ".join(sorted({name for names in shared.values() for name in names}))
+            + ". Skifity gives each app storage of its own, so those are separate "
+            "directories here. If the apps need to see the same files, point them "
+            "at object storage — MinIO is in this catalogue — rather than a path.")
     if oneshot:
         notes.append(
             "This stack has a set-up step that runs once and exits — "

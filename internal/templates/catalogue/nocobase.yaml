@@ -20,5 +20,6 @@ databases:
 - name: nocobase-db
   engine: postgres
   storage_gb: 5
-  link_to: nocobase
+  link_to:
+  - nocobase
   var_name: DATABASE_URL

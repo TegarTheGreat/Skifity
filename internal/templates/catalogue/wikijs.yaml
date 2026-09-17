@@ -16,5 +16,6 @@ databases:
 - name: wikijs-db
   engine: postgres
   storage_gb: 5
-  link_to: wikijs
+  link_to:
+  - wikijs
   var_name: DATABASE_URL

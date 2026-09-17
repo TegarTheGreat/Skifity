@@ -23,5 +23,6 @@ databases:
 - name: odoo-db
   engine: postgres
   storage_gb: 5
-  link_to: odoo
+  link_to:
+  - odoo
   var_name: DATABASE_URL

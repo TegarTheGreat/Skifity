@@ -20,5 +20,6 @@ databases:
 - name: faraday-db
   engine: postgres
   storage_gb: 5
-  link_to: faraday
+  link_to:
+  - faraday
   var_name: DATABASE_URL

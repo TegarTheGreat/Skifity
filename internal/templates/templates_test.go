@@ -67,7 +67,18 @@ func TestEveryServiceCouldRun(t *testing.T) {
 			}
 			names[svc.Name] = true
 
-			if svc.Port < 1 || svc.Port > 65535 {
+			// A worker does not listen, and Skifity runs one as an app with
+			// no port: no Service, no probes, no ingress. Inventing a port for
+			// a Sidekiq gives it a readiness check against something that
+			// never answers, and an app that is "starting" forever.
+			if svc.Port == 0 {
+				if svc.Public {
+					t.Errorf("%s/%s is public and listens on nothing", tpl.ID, svc.Name)
+				}
+				if svc.HealthPath != "" {
+					t.Errorf("%s/%s has a health path and no port to check it on", tpl.ID, svc.Name)
+				}
+			} else if svc.Port < 1 || svc.Port > 65535 {
 				t.Errorf("%s/%s listens on %d", tpl.ID, svc.Name, svc.Port)
 			}
 			if svc.Public {
@@ -123,9 +134,14 @@ func TestEveryDatabaseReachesTheServiceItIsFor(t *testing.T) {
 			if db.StorageGB <= 0 {
 				t.Errorf("%s/%s asks for %d GB of storage", tpl.ID, db.Name, db.StorageGB)
 			}
-			if !services[db.LinkTo] {
-				t.Errorf("%s: the database %s links to %q, which is not a service in this template",
-					tpl.ID, db.Name, db.LinkTo)
+			if len(db.LinkTo) == 0 {
+				t.Errorf("%s: the database %s is created and linked to nothing", tpl.ID, db.Name)
+			}
+			for _, target := range db.LinkTo {
+				if !services[target] {
+					t.Errorf("%s: the database %s links to %q, which is not a service in this template",
+						tpl.ID, db.Name, target)
+				}
 			}
 			if db.VarName != "" {
 				if _, err := kube.SanitiseEnvKey(db.VarName); err != nil {

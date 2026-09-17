@@ -23,5 +23,6 @@ databases:
 - name: sftpgo-db
   engine: postgres
   storage_gb: 5
-  link_to: sftpgo
+  link_to:
+  - sftpgo
   var_name: DATABASE_URL

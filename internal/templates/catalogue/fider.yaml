@@ -16,5 +16,6 @@ databases:
 - name: fider-db
   engine: postgres
   storage_gb: 5
-  link_to: fider
+  link_to:
+  - fider
   var_name: DATABASE_URL

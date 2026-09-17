@@ -23,5 +23,6 @@ databases:
 - name: weblate-db
   engine: postgres
   storage_gb: 5
-  link_to: weblate
+  link_to:
+  - weblate
   var_name: DATABASE_URL

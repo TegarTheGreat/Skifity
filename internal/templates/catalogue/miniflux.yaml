@@ -16,5 +16,6 @@ databases:
 - name: miniflux-db
   engine: postgres
   storage_gb: 5
-  link_to: miniflux
+  link_to:
+  - miniflux
   var_name: DATABASE_URL

@@ -16,5 +16,6 @@ databases:
 - name: activepieces-db
   engine: postgres
   storage_gb: 5
-  link_to: activepieces
+  link_to:
+  - activepieces
   var_name: DATABASE_URL

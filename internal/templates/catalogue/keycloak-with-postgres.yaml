@@ -20,5 +20,6 @@ databases:
 - name: keycloak-with-postgres-db
   engine: postgres
   storage_gb: 5
-  link_to: keycloak
+  link_to:
+  - keycloak
   var_name: DATABASE_URL

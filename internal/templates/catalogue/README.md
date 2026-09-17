@@ -29,7 +29,7 @@ databases:                       # optional; created before the app starts
   - name: example-db
     engine: postgres             # postgres, mysql or redis
     storage_gb: 5
-    link_to: example             # must name a service above
+    link_to: [example, worker]   # every service that needs it, not just one
     var_name: DATABASE_URL       # how the connection string arrives
 inputs:                          # optional; asked for at install time
   - key: SECRET_KEY
@@ -38,6 +38,27 @@ inputs:                          # optional; asked for at install time
     generate: true               # filled with a random value when left empty
 notes: Anything that has to be done by hand afterwards.
 ```
+
+## Several services in one template
+
+A template may install more than one app — a web app and its worker, a service
+and a search index. They land in the same environment and reach each other by
+name, which is what makes the references between them work.
+
+A worker is a service with **`port: 0`** and `public: false`. That is not a
+placeholder: an app with no port gets no Service, no readiness probe and no
+ingress, which is exactly what a Sidekiq or a Celery beat wants. Giving one the
+web app's port instead produces a readiness check against something that never
+answers, and an app that is "starting" forever.
+
+`link_to` is a list because the web app and the worker usually share one
+database, and linking only the first leaves the other without the variable it
+cannot run without.
+
+One thing does not carry over: a volume shared between services. A Compose
+volume is shared; a Skifity volume belongs to one app and is read-write-once, so
+two apps mounting the same path get two different directories. Where that
+matters, say so in `notes` and point people at object storage.
 
 ## The two rules that are not obvious
 

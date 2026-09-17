@@ -29,5 +29,6 @@ databases:
 - name: moodle-db
   engine: mysql
   storage_gb: 5
-  link_to: moodle
+  link_to:
+  - moodle
   var_name: DATABASE_URL

@@ -126,10 +126,14 @@ type DatabaseSpec struct {
 	Name      string `json:"name"`
 	Engine    string `json:"engine"`
 	StorageGB int    `json:"storage_gb"`
-	// LinkTo names the service that gets the connection string, and VarName is
+	// LinkTo names the services that get the connection string, and VarName is
 	// the variable it arrives as.
-	LinkTo  string `json:"link_to"`
-	VarName string `json:"var_name"`
+	//
+	// It is a list because a stack is usually a web app and a worker sharing
+	// one database, and linking only the first of them produces a worker that
+	// starts without the variable it cannot run without.
+	LinkTo  []string `json:"link_to"`
+	VarName string   `json:"var_name"`
 }
 
 // Input is a value asked for at install time.

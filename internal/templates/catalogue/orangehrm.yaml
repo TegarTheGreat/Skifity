@@ -20,5 +20,6 @@ databases:
 - name: orangehrm-db
   engine: mysql
   storage_gb: 5
-  link_to: orangehrm
+  link_to:
+  - orangehrm
   var_name: DATABASE_URL

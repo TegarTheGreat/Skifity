@@ -20,5 +20,6 @@ databases:
 - name: docmost-db
   engine: postgres
   storage_gb: 5
-  link_to: docmost
+  link_to:
+  - docmost
   var_name: DATABASE_URL

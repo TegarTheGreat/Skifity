@@ -17,5 +17,6 @@ databases:
 - name: yamtrack-with-postgresql-db
   engine: postgres
   storage_gb: 5
-  link_to: yamtrack
+  link_to:
+  - yamtrack
   var_name: DATABASE_URL

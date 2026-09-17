@@ -24,6 +24,7 @@ databases:
 - name: ghost-db
   engine: mysql
   storage_gb: 5
-  link_to: ghost
+  link_to:
+  - ghost
   var_name: DATABASE_URL
 notes: Set the mail settings in Ghost's admin area, or it cannot send member emails.

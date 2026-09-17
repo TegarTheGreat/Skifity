@@ -191,25 +191,60 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Time{})
 
-	scanner := bufio.NewScanner(stream)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	// Read on its own goroutine, so the heartbeat below can still be written
+	// while the app is saying nothing. A healthy app that is simply idle is the
+	// ordinary case for this stream, and a connection with nothing on it is
+	// what a proxy in front of the panel closes.
+	lines := make(chan string, 64)
+	readErr := make(chan error, 1)
+	go func() {
+		defer close(lines)
+		scanner := bufio.NewScanner(stream)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			// Scrub before the line leaves the process: an app that prints its
+			// own credentials should not have them stored in a browser's
+			// memory too.
+			select {
+			case lines <- logging.Scrub(scanner.Text()):
+			case <-r.Context().Done():
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			readErr <- err
+		}
+	}()
+
+	heartbeat := time.NewTicker(sseHeartbeat)
+	defer heartbeat.Stop()
+
 	seq := 0
-	for scanner.Scan() {
-		if r.Context().Err() != nil {
+	for {
+		select {
+		case <-r.Context().Done():
 			return
-		}
-		seq++
-		// Scrub before the line leaves the process: an app that prints its own
-		// credentials should not have them stored in a browser's memory too.
-		line := logging.Scrub(scanner.Text())
-		if _, err := fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", seq, jsonString(line)); err != nil {
+		case err := <-readErr:
+			fmt.Fprintf(w, "event: error\ndata: %s\n\n", jsonString(err.Error()))
+			_ = rc.Flush()
 			return
+		case <-heartbeat.C:
+			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+				return
+			}
+			_ = rc.Flush()
+		case line, ok := <-lines:
+			if !ok {
+				// The container stopped writing, which for a log that is not
+				// being followed any more is simply the end.
+				return
+			}
+			seq++
+			if _, err := fmt.Fprintf(w, "id: %d\nevent: log\ndata: %s\n\n", seq, jsonString(line)); err != nil {
+				return
+			}
+			_ = rc.Flush()
 		}
-		_ = rc.Flush()
-	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", jsonString(err.Error()))
-		_ = rc.Flush()
 	}
 }
 

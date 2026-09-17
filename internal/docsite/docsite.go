@@ -52,6 +52,7 @@ type Site struct {
 var order = []string{
 	"quick-start",
 	"concepts",
+	"templates",
 	"adding-servers",
 	"backups",
 	"configuration",

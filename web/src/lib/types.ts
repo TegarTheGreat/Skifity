@@ -358,7 +358,6 @@ export type Template = {
   name: string
   description: string
   category: string
-  icon: string
   website: string
   beta?: boolean
   services: { name: string; image: string; port: number; public: boolean }[]

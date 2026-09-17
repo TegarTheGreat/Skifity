@@ -112,13 +112,28 @@ export function TemplatesPage() {
                     className="flex h-full flex-col transition-colors hover:border-primary/40"
                   >
                     <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="truncate text-base">{template.name}</CardTitle>
-                        {template.beta && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {t("common.beta")}
-                          </Badge>
-                        )}
+                      <div className="flex items-start gap-3">
+                        {/* The name is right beside it, so this is decoration
+                            and a screen reader should skip it. */}
+                        <span
+                          aria-hidden
+                          className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted text-sm font-semibold text-muted-foreground"
+                        >
+                          {template.name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <CardTitle className="truncate text-base">{template.name}</CardTitle>
+                            {template.beta && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {t("common.beta")}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {installs(template)}
+                          </p>
+                        </div>
                       </div>
                       <CardDescription className="line-clamp-3">
                         {template.description}
@@ -147,6 +162,32 @@ export function TemplatesPage() {
       {installing && <InstallDialog template={installing} onClose={() => setInstalling(null)} />}
     </Page>
   )
+}
+
+/**
+ * What a template actually installs, in one line.
+ *
+ * The version matters enough to be on the card: every template names one, none
+ * of them runs `latest`, and "WordPress" alone does not say which WordPress.
+ * The databases are there because a template that brings one is a bigger thing
+ * to install than a template that does not.
+ */
+function installs(template: Template): string {
+  const parts = template.services.map((service) => versionOf(service.image))
+  for (const database of template.databases) parts.push(database.engine)
+  return parts.join(" · ")
+}
+
+/**
+ * The tag of an image reference, or the whole reference when it has none.
+ *
+ * A registry host may carry a port — `registry:5000/app` — so the tag is what
+ * follows the last colon, and only when no slash follows it.
+ */
+function versionOf(image: string): string {
+  const colon = image.lastIndexOf(":")
+  if (colon < 0 || image.slice(colon).includes("/")) return image
+  return image.slice(colon + 1)
 }
 
 function InstallDialog({ template, onClose }: { template: Template; onClose: () => void }) {

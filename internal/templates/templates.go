@@ -14,8 +14,6 @@ type Template struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Category    string `json:"category"`
-	// Icon is a short identifier the UI maps to an icon; no remote images.
-	Icon string `json:"icon"`
 	// Website is where to learn what the software does.
 	Website string `json:"website"`
 	// Beta marks templates that are known to need extra care.
@@ -80,9 +78,17 @@ type Input struct {
 
 // catalogue is deliberately short. A template that is not kept working is worse
 // than no template, so each one here is something we can keep an eye on.
+//
+// Every image names a version. A floating tag is not a version: two deploys of
+// the same app would run different software, a rollback would restore a tag
+// rather than the thing that worked, and an upstream release would arrive on a
+// restart nobody asked for. Where upstream publishes a series tag that takes
+// patches without breaking changes — `1`, `6-apache`, `5-alpine` — that is what
+// is used; where it does not, an exact version is, and moving it forward is a
+// change to this file. A test refuses anything that ends in `latest`.
 var catalogue = []Template{
 	{
-		ID: "wordpress", Name: "WordPress", Category: "cms", Icon: "wordpress",
+		ID: "wordpress", Name: "WordPress", Category: "cms",
 		Description: "The blogging and content platform that runs a large share of the web.",
 		Website:     "https://wordpress.org",
 		Databases: []DatabaseSpec{
@@ -97,14 +103,14 @@ var catalogue = []Template{
 		Notes: "Open the site to finish the WordPress installer. The uploads folder is on a volume, so it survives redeploys.",
 	},
 	{
-		ID: "n8n", Name: "n8n", Category: "automation", Icon: "n8n",
+		ID: "n8n", Name: "n8n", Category: "automation",
 		Description: "Workflow automation you host yourself, with hundreds of integrations.",
 		Website:     "https://n8n.io",
 		Databases: []DatabaseSpec{
 			{Name: "n8n-db", Engine: "postgres", StorageGB: 5, LinkTo: "n8n", VarName: "DB_POSTGRESDB_URL"},
 		},
 		Services: []Service{{
-			Name: "n8n", Image: "n8nio/n8n:latest", Port: 5678, Public: true, HealthPath: "/healthz",
+			Name: "n8n", Image: "n8nio/n8n:1", Port: 5678, Public: true, HealthPath: "/healthz",
 			Variables: map[string]string{
 				"DB_TYPE":                               "postgresdb",
 				"N8N_PROTOCOL":                          "https",
@@ -120,7 +126,7 @@ var catalogue = []Template{
 		},
 	},
 	{
-		ID: "ghost", Name: "Ghost", Category: "cms", Icon: "ghost",
+		ID: "ghost", Name: "Ghost", Category: "cms",
 		Description: "A fast publishing platform for newsletters and blogs.",
 		Website:     "https://ghost.org",
 		Databases: []DatabaseSpec{
@@ -135,7 +141,7 @@ var catalogue = []Template{
 		Notes: "Set the mail settings in Ghost's admin area, or it cannot send member emails.",
 	},
 	{
-		ID: "uptime-kuma", Name: "Uptime Kuma", Category: "monitoring", Icon: "uptime-kuma",
+		ID: "uptime-kuma", Name: "Uptime Kuma", Category: "monitoring",
 		Description: "Watch your sites and services, and get told when one goes down.",
 		Website:     "https://uptime.kuma.pet",
 		Services: []Service{{
@@ -146,7 +152,7 @@ var catalogue = []Template{
 		Notes: "Uptime Kuma keeps its own SQLite database on the volume, so it runs as a single instance.",
 	},
 	{
-		ID: "plausible", Name: "Plausible Analytics", Category: "analytics", Icon: "plausible", Beta: true,
+		ID: "plausible", Name: "Plausible Analytics", Category: "analytics", Beta: true,
 		Description: "Privacy-friendly website analytics without cookies.",
 		Website:     "https://plausible.io",
 		Databases: []DatabaseSpec{
@@ -165,11 +171,11 @@ var catalogue = []Template{
 		Notes: "Plausible also needs ClickHouse for its event data. This template sets up the app and PostgreSQL; add ClickHouse yourself, or use the official Compose file, until the ClickHouse template lands.",
 	},
 	{
-		ID: "vaultwarden", Name: "Vaultwarden", Category: "productivity", Icon: "vaultwarden",
+		ID: "vaultwarden", Name: "Vaultwarden", Category: "productivity",
 		Description: "A lightweight password manager server compatible with Bitwarden clients.",
 		Website:     "https://github.com/dani-garcia/vaultwarden",
 		Services: []Service{{
-			Name: "vaultwarden", Image: "vaultwarden/server:latest", Port: 80, Public: true, HealthPath: "/alive",
+			Name: "vaultwarden", Image: "vaultwarden/server:1.37.3", Port: 80, Public: true, HealthPath: "/alive",
 			Variables:    map[string]string{"SIGNUPS_ALLOWED": "false", "WEBSOCKET_ENABLED": "true"},
 			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/data", SizeGB: 2}},
 			MemRequestMB: 64, MemLimitMB: 256, CPURequestM: 50, CPULimitM: 500,
@@ -181,14 +187,14 @@ var catalogue = []Template{
 		Notes: "Sign-ups are turned off. Use the admin page to invite the first user, then keep them off.",
 	},
 	{
-		ID: "umami", Name: "Umami", Category: "analytics", Icon: "umami",
+		ID: "umami", Name: "Umami", Category: "analytics",
 		Description: "Simple, self-hosted website analytics.",
 		Website:     "https://umami.is",
 		Databases: []DatabaseSpec{
 			{Name: "umami-db", Engine: "postgres", StorageGB: 5, LinkTo: "umami", VarName: "DATABASE_URL"},
 		},
 		Services: []Service{{
-			Name: "umami", Image: "ghcr.io/umami-software/umami:postgresql-latest", Port: 3000,
+			Name: "umami", Image: "ghcr.io/umami-software/umami:postgresql-v2.20", Port: 3000,
 			Public: true, HealthPath: "/api/heartbeat",
 			Variables:    map[string]string{"DATABASE_TYPE": "postgresql"},
 			MemRequestMB: 128, MemLimitMB: 512, CPURequestM: 50, CPULimitM: 500,
@@ -197,11 +203,11 @@ var catalogue = []Template{
 		Notes:  "The first sign-in is admin / umami. Change it immediately.",
 	},
 	{
-		ID: "minio", Name: "MinIO", Category: "storage", Icon: "minio",
+		ID: "minio", Name: "MinIO", Category: "storage",
 		Description: "S3-compatible object storage, useful as a backup target for Skifity itself.",
 		Website:     "https://min.io",
 		Services: []Service{{
-			Name: "minio", Image: "quay.io/minio/minio:latest", Port: 9001, Public: true,
+			Name: "minio", Image: "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z", Port: 9001, Public: true,
 			Variables:    map[string]string{"MINIO_BROWSER_REDIRECT_URL": ""},
 			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/data", SizeGB: 20}},
 			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,

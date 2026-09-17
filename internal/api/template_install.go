@@ -126,14 +126,22 @@ func (s *Server) installTemplate(
 		}
 		result.Databases = append(result.Databases, record)
 
-		if app, ok := created[spec.LinkTo]; ok {
-			varName := spec.VarName
-			if varName == "" {
-				varName = defaultVarNameFor(spec.Engine)
-			}
-			if err := s.databases.Link(r.Context(), record.ID, app.ID, varName); err != nil {
-				return result, err
-			}
+		// A link that names no service is the one mistake in a template that
+		// looks like success: the database is created, the link is skipped,
+		// and the app comes up without the variable it cannot run without.
+		// What the user sees is a crash loop and no reason for it.
+		app, ok := created[spec.LinkTo]
+		if !ok {
+			return result, fmt.Errorf(
+				"the %s template links the database %s to a service called %q, which it does not have",
+				tpl.ID, spec.Name, spec.LinkTo)
+		}
+		varName := spec.VarName
+		if varName == "" {
+			varName = defaultVarNameFor(spec.Engine)
+		}
+		if err := s.databases.Link(r.Context(), record.ID, app.ID, varName); err != nil {
+			return result, err
 		}
 	}
 

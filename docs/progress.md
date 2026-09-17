@@ -457,6 +457,36 @@ a page that had drifted.
   to a page that does not exist. It is reconciled, and a test now reads the
   flags out of the page and fails when no generated script passes one.
 
+## Phase 20 — the tooling, and the catalogue
+
+* **`make check` could not be run.** The README calls it "what CI runs" and it
+  failed twice on tooling rather than code: golangci-lint refuses a module whose
+  `go` directive is newer than the Go it was built with, and took the whole
+  suite down with it, so nothing here had ever been linted; and
+  `npm --prefix web exec -- tsc -b` keeps the directory it was called from, so
+  tsc looked for a tsconfig.json at the repository root. `scripts/lint-go.sh`
+  now builds the linter with this module's own toolchain, which cannot be out of
+  step with it, and CI runs the same script with `LINT_STRICT=1` so it can never
+  skip there. With the linter finally running it found eight things, all fixed,
+  including two doc comments left behind by a rename.
+* **The template catalogue had no tests, and a wrong template is silent.** A
+  database whose `link_to` names no service was created and then never linked,
+  so the app came up without the one variable it cannot run without and
+  crash-looped with nothing on screen saying why. That now fails the install.
+  The catalogue is checked for it, and for engines Skifity does not provision,
+  variable names a container could not carry, services that ask for more memory
+  than they are allowed, and templates nothing can open.
+* **Four templates ran `latest`.** n8n, Vaultwarden, Umami and MinIO. A floating
+  tag is not a version: two deploys of the same app run different software, a
+  rollback restores a tag rather than the thing that worked, and an upstream
+  release arrives on a restart nobody asked for — in a product whose whole point
+  is that a rollback works. All four are pinned, the card shows the version, and
+  a test refuses anything ending in `latest`.
+* **`Icon` was a field the UI never read.** It is gone, and the card shows what
+  the template installs instead.
+* **Templates had no documentation page.** `docs/templates.md`, served by the
+  panel like the rest.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

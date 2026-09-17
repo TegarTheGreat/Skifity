@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"skifity/internal/netguard"
 	"skifity/internal/version"
 )
 
@@ -76,7 +77,10 @@ type FileTree struct {
 //
 // Fifteen seconds: this runs while somebody is looking at a form, and a
 // provider that has not answered by then has effectively said no.
-var client = &http.Client{Timeout: 15 * time.Second}
+//
+// Guarded, because a Git connection's base URL is a setting and this request is
+// made by the panel's own process. See internal/netguard.
+var client = netguard.Client(15 * time.Second)
 
 // ReadTree lists a repository's files and reads the ones that matter.
 func ReadTree(ctx context.Context, req TreeRequest) (FileTree, error) {

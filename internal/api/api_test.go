@@ -1,0 +1,356 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"skifity/internal/auth"
+	"skifity/internal/config"
+	"skifity/internal/crypto"
+	"skifity/internal/events"
+	"skifity/internal/store"
+)
+
+// Tenant isolation, tested against the real router.
+//
+// Authorization lives in one place on purpose — authorizeTeam, authorizeApp and
+// their siblings — and "one place" is a claim rather than a fact until
+// something checks it. These run every request through the router the panel
+// actually serves, with a real database and a real keyring, so a handler that
+// reaches the store without going through one of those is a failing test rather
+// than a note in a review.
+//
+// The orchestrators are nil. Everything here is about who is allowed to ask,
+// which is decided before any of them is reached.
+
+type harness struct {
+	t      *testing.T
+	server *httptest.Server
+	db     *store.DB
+	auth   *auth.Service
+}
+
+func newHarness(t *testing.T) *harness {
+	t.Helper()
+
+	db, err := store.OpenMemory(t.Context())
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("init keyring: %v", err)
+	}
+
+	authService := auth.NewService(db, keyring, time.Hour, false)
+	server := New(Options{
+		Config:  config.Config{},
+		DB:      db,
+		Keyring: keyring,
+		Auth:    authService,
+		Hub:     events.NewHub(16),
+		Logger:  slog.New(slog.DiscardHandler),
+	})
+
+	h := &harness{t: t, db: db, auth: authService}
+	h.server = httptest.NewServer(server)
+	t.Cleanup(h.server.Close)
+	return h
+}
+
+// tenant is one team with a member, a token, and somewhere to put an app.
+type tenant struct {
+	user    store.User
+	team    store.Team
+	project store.Project
+	env     store.Environment
+	token   string
+}
+
+// newTenant creates a team nobody else is in.
+func (h *harness) newTenant(name string) tenant {
+	h.t.Helper()
+	ctx := h.t.Context()
+
+	user := store.User{Email: name + "@example.test", Name: name, PasswordHash: "x"}
+	if err := h.db.CreateUser(ctx, &user); err != nil {
+		h.t.Fatalf("create user: %v", err)
+	}
+	team := store.Team{Name: name, Slug: name}
+	if err := h.db.CreateTeam(ctx, &team); err != nil {
+		h.t.Fatalf("create team: %v", err)
+	}
+	if err := h.db.AddMember(ctx, team.ID, user.ID, store.RoleOwner); err != nil {
+		h.t.Fatalf("add member: %v", err)
+	}
+	project := store.Project{TeamID: team.ID, Name: name, Slug: name}
+	if err := h.db.CreateProject(ctx, &project); err != nil {
+		h.t.Fatalf("create project: %v", err)
+	}
+	env := store.Environment{
+		ProjectID: project.ID, Name: "production", Slug: "production",
+		Namespace: name + "-production",
+	}
+	if err := h.db.CreateEnvironment(ctx, &env); err != nil {
+		h.t.Fatalf("create environment: %v", err)
+	}
+
+	// A token bound to this team, which is the only shape the panel's form
+	// offers and the one the middleware enforces.
+	_, token, err := h.auth.CreateAPIToken(ctx, user.ID, team.ID, "test", "", 24*time.Hour)
+	if err != nil {
+		h.t.Fatalf("create token: %v", err)
+	}
+	return tenant{user: user, team: team, project: project, env: env, token: token}
+}
+
+// app creates an app in a tenant's environment.
+func (h *harness) app(owner tenant, name string) store.App {
+	h.t.Helper()
+	app := store.App{EnvironmentID: owner.env.ID, Name: name, Slug: name, Replicas: 1}
+	if err := h.db.CreateApp(h.t.Context(), &app); err != nil {
+		h.t.Fatalf("create app: %v", err)
+	}
+	return app
+}
+
+// do makes a request as a tenant and returns the status and body.
+func (h *harness) do(as tenant, method, path string, body any) (int, string) {
+	h.t.Helper()
+
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			h.t.Fatalf("encode body: %v", err)
+		}
+		reader = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), method, h.server.URL+path, reader)
+	if err != nil {
+		h.t.Fatalf("build request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if as.token != "" {
+		req.Header.Set("Authorization", "Bearer "+as.token)
+	}
+
+	resp, err := h.server.Client().Do(req)
+	if err != nil {
+		h.t.Fatalf("%s %s: %v", method, path, err)
+	}
+	defer resp.Body.Close()
+	answer, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(answer)
+}
+
+func TestOneTeamCannotReachAnother(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	other := h.newTenant("other")
+	theirApp := h.app(other, "web")
+
+	// Every shape of id the router accepts, asked for by the wrong team. The
+	// answer is 404 rather than 403 throughout: a 403 would confirm the thing
+	// exists, which is half of what somebody probing wants to know.
+	for _, path := range []string{
+		"/api/teams/" + other.team.ID,
+		"/api/teams/" + other.team.ID + "/projects",
+		"/api/teams/" + other.team.ID + "/servers",
+		"/api/teams/" + other.team.ID + "/audit",
+		"/api/teams/" + other.team.ID + "/git-sources",
+		"/api/teams/" + other.team.ID + "/notifications",
+		"/api/projects/" + other.project.ID,
+		"/api/projects/" + other.project.ID + "/environments",
+		"/api/projects/" + other.project.ID + "/variables",
+		"/api/environments/" + other.env.ID,
+		"/api/environments/" + other.env.ID + "/apps",
+		"/api/environments/" + other.env.ID + "/databases",
+		"/api/environments/" + other.env.ID + "/quota",
+		"/api/apps/" + theirApp.ID,
+		"/api/apps/" + theirApp.ID + "/status",
+		"/api/apps/" + theirApp.ID + "/variables",
+		"/api/apps/" + theirApp.ID + "/domains",
+		"/api/apps/" + theirApp.ID + "/volumes",
+		"/api/apps/" + theirApp.ID + "/deployments",
+		"/api/apps/" + theirApp.ID + "/scaling",
+		"/api/apps/" + theirApp.ID + "/advanced",
+		"/api/apps/" + theirApp.ID + "/jobs",
+	} {
+		if status, body := h.do(acme, http.MethodGet, path, nil); status != http.StatusNotFound {
+			t.Errorf("GET %s answered %d for another team, want 404\n%s", path, status, body)
+		}
+	}
+
+	// And the writes.
+	for _, w := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPatch, "/api/apps/" + theirApp.ID, map[string]any{"name": "taken"}},
+		{http.MethodDelete, "/api/apps/" + theirApp.ID, nil},
+		{http.MethodPost, "/api/apps/" + theirApp.ID + "/deploy", map[string]any{}},
+		{http.MethodPost, "/api/apps/" + theirApp.ID + "/restart", nil},
+		{http.MethodPost, "/api/apps/" + theirApp.ID + "/run", map[string]any{"command": "id"}},
+		{http.MethodPut, "/api/apps/" + theirApp.ID + "/variables", map[string]any{"key": "X", "value": "1"}},
+		{http.MethodPut, "/api/apps/" + theirApp.ID + "/scaling", map[string]any{"replicas": 9}},
+		{http.MethodPost, "/api/apps/" + theirApp.ID + "/domains", map[string]any{"hostname": "x.example.test"}},
+		{http.MethodPost, "/api/environments/" + other.env.ID + "/apps", map[string]any{"name": "sneaky", "image": "nginx"}},
+		{http.MethodPost, "/api/teams/" + other.team.ID + "/detect", map[string]any{"repo_url": "https://github.com/a/b"}},
+		{http.MethodDelete, "/api/environments/" + other.env.ID, nil},
+	} {
+		if status, body := h.do(acme, w.method, w.path, w.body); status != http.StatusNotFound {
+			t.Errorf("%s %s answered %d for another team, want 404\n%s", w.method, w.path, status, body)
+		}
+	}
+
+	// The same requests against their own team are not refused, or the test
+	// above would pass with authorization that refuses everybody.
+	if status, body := h.do(acme, http.MethodGet, "/api/teams/"+acme.team.ID, nil); status != http.StatusOK {
+		t.Fatalf("a team could not read itself: %d\n%s", status, body)
+	}
+}
+
+func TestUnlinkingADatabaseAuthorizesTheAppToo(t *testing.T) {
+	// Unlinking reaches into two resources, and only the database was checked.
+	// An app id from another team reached the manager, which removes no
+	// variable it does not own but does re-apply that app's configuration to
+	// the cluster: a rollout somebody else's team did not ask for.
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	other := h.newTenant("other")
+	theirApp := h.app(other, "web")
+
+	database := store.Database{
+		EnvironmentID: acme.env.ID, Name: "cache", Slug: "cache", Engine: "redis",
+	}
+	if err := h.db.CreateDatabase(t.Context(), &database); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+
+	status, body := h.do(acme, http.MethodDelete,
+		"/api/databases/"+database.ID+"/link/"+theirApp.ID, nil)
+	if status != http.StatusNotFound {
+		t.Fatalf("unlinking another team's app answered %d, want 404\n%s", status, body)
+	}
+
+	// Linking has always checked, and still does.
+	status, body = h.do(acme, http.MethodPost, "/api/databases/"+database.ID+"/link",
+		map[string]any{"app_id": theirApp.ID})
+	if status != http.StatusNotFound {
+		t.Fatalf("linking another team's app answered %d, want 404\n%s", status, body)
+	}
+}
+
+func TestATokenIsBoundToOneTeam(t *testing.T) {
+	// A token is issued for one team — the panel's form has no other option —
+	// and the binding is enforced in the middleware rather than per handler.
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	// The same person, in a second team, holding a token made for the first.
+	second := store.Team{Name: "second", Slug: "second"}
+	if err := h.db.CreateTeam(t.Context(), &second); err != nil {
+		t.Fatalf("create team: %v", err)
+	}
+	if err := h.db.AddMember(t.Context(), second.ID, acme.user.ID, store.RoleOwner); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
+
+	if status, body := h.do(acme, http.MethodGet, "/api/teams/"+second.ID, nil); status != http.StatusNotFound {
+		t.Fatalf("a token made for one team reached another: %d\n%s", status, body)
+	}
+	if status, _ := h.do(acme, http.MethodGet, "/api/teams/"+acme.team.ID, nil); status != http.StatusOK {
+		t.Fatal("the token cannot reach the team it was made for")
+	}
+}
+
+func TestAReadOnlyTokenCannotWrite(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	ownApp := h.app(acme, "web")
+
+	_, readOnly, err := h.auth.CreateAPIToken(t.Context(), acme.user.ID, acme.team.ID,
+		"read-only", auth.ScopeRead, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	reader := tenant{token: readOnly}
+
+	if status, body := h.do(reader, http.MethodGet, "/api/apps/"+ownApp.ID, nil); status != http.StatusOK {
+		t.Fatalf("a read-only token cannot read: %d\n%s", status, body)
+	}
+	// Every write, including the one that would issue a token without a scope.
+	for _, w := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodPatch, "/api/apps/" + ownApp.ID, map[string]any{"name": "renamed"}},
+		{http.MethodDelete, "/api/apps/" + ownApp.ID, nil},
+		{http.MethodPost, "/api/me/tokens", map[string]any{"name": "wider"}},
+	} {
+		if status, body := h.do(reader, w.method, w.path, w.body); status != http.StatusForbidden {
+			t.Errorf("%s %s with a read-only token answered %d, want 403\n%s",
+				w.method, w.path, status, body)
+		}
+	}
+}
+
+func TestNothingIsReachableWithoutCredentials(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	ownApp := h.app(acme, "web")
+	anonymous := tenant{}
+
+	for _, path := range []string{
+		"/api/me",
+		"/api/teams",
+		"/api/teams/" + acme.team.ID,
+		"/api/apps/" + ownApp.ID,
+		"/api/settings",
+		"/api/metrics",
+		"/api/security/recovery-key",
+	} {
+		status, body := h.do(anonymous, http.MethodGet, path, nil)
+		if status != http.StatusUnauthorized {
+			t.Errorf("GET %s answered %d without credentials, want 401\n%s", path, status, body)
+		}
+	}
+
+	// The handful that are open on purpose, so "401 everywhere" is not what
+	// this test is really asserting.
+	for _, path := range []string{"/api/health", "/api/ready", "/api/meta", "/api/setup/status"} {
+		if status, body := h.do(anonymous, http.MethodGet, path, nil); status != http.StatusOK {
+			t.Errorf("GET %s answered %d, want it open\n%s", path, status, body)
+		}
+	}
+}
+
+func TestAdminOnlyRoutesRefuseAnOrdinaryAccount(t *testing.T) {
+	// Settings, the master key and the upgrade are the panel's own, not a
+	// team's. Owning every team is not the same as administering the box.
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	for _, path := range []string{
+		"/api/settings",
+		"/api/components",
+		"/api/security/recovery-key",
+		"/api/upgrade",
+		"/api/metrics",
+	} {
+		if status, body := h.do(acme, http.MethodGet, path, nil); status != http.StatusForbidden {
+			t.Errorf("GET %s answered %d for a non-administrator, want 403\n%s", path, status, body)
+		}
+	}
+}

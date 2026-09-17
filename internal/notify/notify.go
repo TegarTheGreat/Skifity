@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"skifity/internal/netguard"
 	"skifity/internal/version"
 )
 
@@ -53,7 +54,11 @@ var AllEvents = []string{
 }
 
 // client is shared so notifications reuse connections and always time out.
-var client = &http.Client{Timeout: 15 * time.Second}
+//
+// Guarded, because a webhook address is a setting: a team administrator could
+// otherwise point it at the cloud metadata service and read the answer back out
+// of the error this returns. See internal/netguard.
+var client = netguard.Client(15 * time.Second)
 
 // ValidateConfig checks a channel's configuration before it is stored, so a typo
 // is caught while the person is still looking at the form.

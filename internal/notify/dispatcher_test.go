@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -192,4 +193,15 @@ func TestNilDispatcherIsSafe(t *testing.T) {
 	var d *Dispatcher
 	d.Notify(t.Context(), "team_1", EventDeployFailed, Message{Title: "no panic"})
 	d.Wait()
+}
+
+// TestMain lets these tests reach an httptest server.
+//
+// The shipped client refuses loopback on purpose — see internal/netguard,
+// which is where that behaviour is tested. Every server in this file listens on
+// 127.0.0.1, so without this the whole package would be testing the guard
+// rather than the protocol handling it is about.
+func TestMain(m *testing.M) {
+	client = &http.Client{Timeout: 5 * time.Second}
+	os.Exit(m.Run())
 }

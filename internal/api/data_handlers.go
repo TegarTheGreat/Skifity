@@ -140,19 +140,23 @@ func (s *Server) handleLinkDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.databases == nil {
-		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
-		return
-	}
 	var req linkDatabaseRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
 		return
 	}
 	// The app is authorized separately: linking reaches into two resources.
+	//
+	// Before the capability check below, not after. Telling somebody who may
+	// not touch this app whether managed databases are configured is a small
+	// thing to leak, and the order costs nothing.
 	app, _, err := s.authorizeAppID(r, req.AppID, store.RoleMember)
 	if err != nil {
 		writeError(w, r, err)
+		return
+	}
+	if s.databases == nil {
+		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
 		return
 	}
 	if app.EnvironmentID != record.EnvironmentID {
@@ -183,16 +187,26 @@ func (s *Server) handleUnlinkDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// The app is authorized separately, the way linking already did it, because
+	// unlinking reaches into two resources as well. Without this, an id from
+	// another team reached Unlink, which removes no variable it does not own
+	// but does re-apply that app's configuration to the cluster: a rollout
+	// somebody else's team did not ask for.
+	app, _, err := s.authorizeAppID(r, chi.URLParam(r, "appID"), store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
 	if s.databases == nil {
 		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
 		return
 	}
-	if err := s.databases.Unlink(r.Context(), record.ID, chi.URLParam(r, "appID")); err != nil {
+	if err := s.databases.Unlink(r.Context(), record.ID, app.ID); err != nil {
 		writeError(w, r, err)
 		return
 	}
 	teamID, _ := s.db.TeamIDForDatabase(r.Context(), record.ID)
-	s.audit(r, teamID, "database.unlinked", "database", record.ID, chi.URLParam(r, "appID"))
+	s.audit(r, teamID, "database.unlinked", "database", record.ID, app.Name)
 	writeOK(w)
 }
 

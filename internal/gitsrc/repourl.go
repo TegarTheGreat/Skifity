@@ -90,3 +90,44 @@ func defaultBaseURL(baseURL string) string {
 	}
 	return baseURL
 }
+
+// ValidateBaseURL checks the address of a self-hosted Git provider.
+//
+// It is stored by a team administrator and the panel's own process then makes
+// requests to it, so it goes through the same door a repository address does:
+// https, a host, and no credentials in it. internal/netguard refuses the
+// addresses that matter at connection time; this is the part that can say
+// something useful while somebody is still looking at the form.
+//
+// An empty value is allowed and means the hosted provider.
+func ValidateBaseURL(raw string) (string, error) {
+	raw = strings.TrimSuffix(strings.TrimSpace(raw), "/")
+	if raw == "" {
+		return "", nil
+	}
+	if len(raw) > 2048 {
+		return "", fmt.Errorf("that address is too long")
+	}
+	for _, r := range raw {
+		if r <= ' ' || r > '~' {
+			return "", fmt.Errorf("an address cannot contain spaces or control characters")
+		}
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("that is not a valid address")
+	}
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("the address of a Git server has to start with https://")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("leave the username and password out of the address; the token field is where credentials go")
+	}
+	if parsed.Hostname() == "" {
+		return "", fmt.Errorf("that address has no host")
+	}
+	// A path, a query or a fragment is never part of a provider's own address
+	// and would be carried into every API call built from it.
+	parsed.Path, parsed.RawQuery, parsed.Fragment = "", "", ""
+	return strings.TrimSuffix(parsed.String(), "/"), nil
+}

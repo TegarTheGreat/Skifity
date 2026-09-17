@@ -74,3 +74,44 @@ func TestSameHostDecidesWhereATokenGoes(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateBaseURLClosesTheSameDoor(t *testing.T) {
+	// A Git connection's base URL is stored by a team administrator and the
+	// panel's own process then makes requests to it, so it goes through the
+	// same door a repository address does.
+	refused := []string{
+		"http://git.example.test",                    // not https
+		"https://user:token@git.example.test",        // credentials belong in the token field
+		"https://",                                   // no host
+		"ftp://git.example.test",                     // not https
+		"https://git.example.test/\nX-Injected: yes", // a control character
+	}
+	for _, bad := range refused {
+		if _, err := ValidateBaseURL(bad); err == nil {
+			t.Errorf("%q was accepted as a Git server address", bad)
+		}
+	}
+
+	// Empty means the hosted provider, which is the ordinary case.
+	if got, err := ValidateBaseURL("  "); err != nil || got != "" {
+		t.Errorf("an empty address gave (%q, %v), want it accepted as the hosted provider", got, err)
+	}
+
+	// A self-hosted provider is the whole reason this field exists.
+	for raw, want := range map[string]string{
+		"https://git.example.test":        "https://git.example.test",
+		"https://git.example.test/":       "https://git.example.test",
+		"https://git.example.test:3000":   "https://git.example.test:3000",
+		"https://git.example.test/gitea/": "https://git.example.test",
+		"https://git.example.test?a=b":    "https://git.example.test",
+	} {
+		got, err := ValidateBaseURL(raw)
+		if err != nil {
+			t.Errorf("ValidateBaseURL(%q): %v", raw, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("ValidateBaseURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

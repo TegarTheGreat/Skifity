@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // These run against a real HTTP server speaking each provider's API, so the
@@ -225,4 +227,15 @@ func wrap(s string) string {
 	}
 	b.WriteString(s)
 	return b.String()
+}
+
+// TestMain lets these tests reach an httptest server.
+//
+// The shipped client refuses loopback on purpose — see internal/netguard,
+// which is where that behaviour is tested. Every server in this file listens on
+// 127.0.0.1, so without this the whole package would be testing the guard
+// rather than the protocol handling it is about.
+func TestMain(m *testing.M) {
+	client = &http.Client{Timeout: 5 * time.Second}
+	os.Exit(m.Run())
 }

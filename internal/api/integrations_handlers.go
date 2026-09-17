@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"skifity/internal/errdoc"
+	"skifity/internal/gitsrc"
 	"skifity/internal/notify"
 	"skifity/internal/store"
 	"skifity/internal/templates"
@@ -61,11 +62,19 @@ func (s *Server) handleCreateGitSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The panel's own process makes requests to this address, so it is checked
+	// here rather than trusted later.
+	baseURL, err := gitsrc.ValidateBaseURL(req.BaseURL)
+	if err != nil {
+		writeError(w, r, errdoc.BadRequest(capitalise(err.Error())+"."))
+		return
+	}
+
 	source := store.GitSource{
 		TeamID:  teamID,
 		Kind:    req.Kind,
 		Name:    defaultString(req.Name, req.Kind),
-		BaseURL: strings.TrimSuffix(strings.TrimSpace(req.BaseURL), "/"),
+		BaseURL: baseURL,
 		Account: strings.TrimSpace(req.Account),
 	}
 	if req.Token != "" {

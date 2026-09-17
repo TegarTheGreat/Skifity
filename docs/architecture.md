@@ -6,6 +6,51 @@ A single Go binary runs inside a k3s cluster, talks to the Kubernetes API for ev
 talks to SSH for everything that turns a bare VPS into a cluster member, and serves an embedded
 React panel that never says the word "pod".
 
+## Is Skifity the cluster, or a panel on top of one?
+
+A panel on top of one, and the installer that puts the one there. The
+distinction matters more than it sounds, so it is worth being exact.
+
+**The cluster is k3s**, installed from `get.k3s.io`. The API server, etcd,
+containerd, flannel, CoreDNS and the Traefik ingress are all k3s, and Skifity
+wrote none of them. Additional servers are k3s nodes joined over SSH.
+
+**Skifity is three things in one binary**: the installer that creates that
+cluster and joins servers to it, the panel and API that render Kubernetes
+objects and apply them, and its own record of what it has been asked for.
+
+**It is not a Kubernetes distribution.** It ships k3s.
+
+**It is not an operator.** It defines no CustomResourceDefinitions and runs no
+reconcile loop. It renders Deployments, Services, Ingresses and the rest, and
+applies them with server-side apply. `internal/watch` polls once a minute to
+notice what has changed for the worse and say so — it does not reconcile.
+
+**It is not in the request path.** Traffic to your apps goes ingress → Service →
+pod. The panel is not on that path and never has been, which is why the apps
+keep answering with the panel scaled to zero.
+
+Three consequences follow, and they are the whole trade:
+
+* **Nothing is locked in.** Your apps are ordinary Kubernetes objects in an
+  ordinary cluster. `kubectl` works. `skifity export` writes the manifests out.
+  Remove the panel and everything keeps running.
+* **Kubernetes does the hard parts.** Rescheduling, rolling updates, node
+  failure and autoscaling are k3s and its controllers, not panel code. A panel
+  that is restarting is not a panel that has stopped your apps.
+* **The panel is a single point of *change*, not of traffic.** Its state is one
+  SQLite file on one node's disk, mounted from the host, which is why the
+  Deployment is pinned to that node. Lose it and your apps keep serving while
+  you cannot deploy until it is restored. `docs/configuration.md` says what to
+  back up.
+
+It also holds `cluster-admin`, and `deploy/panel.yaml` says why rather than
+shipping a narrower role that quietly breaks: it creates a namespace per
+environment and installs components that define their own CRDs and ClusterRoles,
+and the right to create a ClusterRole is equivalent to cluster-admin anyway. The
+isolation that matters is between tenants, and that is enforced on the
+namespaces the panel creates.
+
 ## Layers
 
 ```mermaid
@@ -20,7 +65,7 @@ flowchart TB
         API["HTTP API (chi)"]
         AUTH["Auth: sessions, TOTP, API tokens, RBAC"]
         CRYPTO["Envelope encryption"]
-        STORE["SQLite (WAL) on a PVC"]
+        STORE["SQLite (WAL) on the node's disk"]
         EVENTS["SSE hub"]
         ORCH["Orchestrators: provision / build / deploy / database / backup"]
         KUBE["Kubernetes client (client-go)"]
@@ -164,7 +209,7 @@ kubeconfigs.
 
 | When | What |
 |---|---|
-| `install.sh` | k3s server, panel, cert-manager, the panel's PVC and master key |
+| `install.sh` | k3s server, the panel, cert-manager, and the panel's own directories on the host: its database and its master key |
 | First build | in-cluster registry + rootless BuildKit |
 | First PostgreSQL | CloudNativePG operator |
 | First Redis / MySQL | the matching chart |

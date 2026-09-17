@@ -686,8 +686,33 @@ Two things were wrong, and the second is worse:
 
 And the consequence nobody would have guessed from the summary line: because
 `govulncheck` runs before them, **the race-detector run, both smoke tests and
-the Playwright interface test have never executed on CI**. They pass here and
-have never passed there.
+the Playwright interface test had never executed on CI**. With the scan fixed
+they ran, and all of them passed — except one step that had never run anywhere,
+on any machine, and was broken in two ways.
+
+### `make image` had never worked
+
+Building the image needs a Docker daemon, and nothing here has one, so the whole
+target was unverified for as long as it existed. The first CI run that ever
+reached it failed twice over:
+
+* The frontend stage builds from `web/` alone, and the frontend build copies
+  `llms.txt` in from the repository root so the panel can serve it. The
+  Dockerfile never copied that file, so the build stopped on a missing file that
+  is right there in the repository.
+* `.dockerignore` excluded `docs`, which is a Go package — `docs/embed.go`
+  embeds the pages into the binary — so even past the first failure the backend
+  stage would have failed on a missing import.
+
+Both are the same shape as everything else in this log: a path nothing executes,
+so nothing contradicts it. `internal/buildctx` now holds two tests that read the
+Dockerfile and the ignore file rather than running Docker: every `//go:embed`
+path must survive the build context, and anything the frontend build reads from
+outside `web/` must be copied in.
+
+This is also the path the quick start tells somebody to use, since nothing is
+published — clone, `make image`, run the installer from inside the clone. It
+would not have worked for them either.
 
 ## Next tasks
 

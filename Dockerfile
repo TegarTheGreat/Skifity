@@ -10,6 +10,11 @@ WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
+# The build copies llms.txt in so the panel can serve it at /llms.txt, and it
+# lives at the repository root rather than inside web/. Without this line the
+# image build fails on a missing file — which it did, on every attempt, because
+# `make image` needs a Docker daemon and nothing here ever had one.
+COPY llms.txt /src/llms.txt
 RUN npm run build
 
 FROM golang:1.26-alpine AS backend

@@ -69,6 +69,8 @@ type JobSpec struct {
 	RailpackImage string
 	// RailpackFrontend is the BuildKit gateway frontend image.
 	RailpackFrontend string
+	// NixpacksImage generates a Dockerfile for the fallback builder.
+	NixpacksImage string
 
 	// Resources for the build pod.
 	CPURequestM  int
@@ -92,6 +94,9 @@ func (s *JobSpec) Defaults() {
 	}
 	if s.RailpackFrontend == "" {
 		s.RailpackFrontend = "ghcr.io/railwayapp/railpack-frontend:latest"
+	}
+	if s.NixpacksImage == "" {
+		s.NixpacksImage = "ghcr.io/railwayapp/nixpacks:latest"
 	}
 	if s.CPURequestM == 0 {
 		s.CPURequestM = 200
@@ -170,8 +175,15 @@ func BuildJob(s JobSpec) (*batchv1.Job, error) {
 	mounts := []corev1.VolumeMount{{Name: "workspace", MountPath: workspace}}
 
 	initContainers := []corev1.Container{cloneContainer(s, mounts)}
-	if s.Builder == BuilderRailpack {
+	switch s.Builder {
+	case BuilderRailpack:
 		initContainers = append(initContainers, prepareContainer(s, mounts))
+	case BuilderNixpacks:
+		// Without this the build reads a Dockerfile nothing wrote. The
+		// builder was selectable, the buildctl line pointed at
+		// .nixpacks/Dockerfile, and no step ever produced one, so every
+		// build with it chosen failed on a missing file.
+		initContainers = append(initContainers, nixpacksContainer(s, mounts))
 	}
 
 	buildContainer := corev1.Container{
@@ -330,6 +342,50 @@ func prepareContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
 	return corev1.Container{
 		Name:         "prepare",
 		Image:        s.RailpackImage,
+		Command:      []string{"/bin/sh", "-c"},
+		Args:         []string{b.String()},
+		VolumeMounts: mounts,
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("100m"),
+				corev1.ResourceMemory: resource.MustParse("256Mi"),
+			},
+			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("1Gi")},
+		},
+	}
+}
+
+// nixpacksContainer generates the Dockerfile the fallback builder builds.
+//
+// `nixpacks build --out` writes .nixpacks/Dockerfile and the files it needs,
+// and does not call Docker, which is the whole reason it can run here: the
+// build itself still happens in rootless BuildKit like every other builder.
+//
+// Railpack is the zero-config builder Skifity uses by default. This one is kept
+// because Railpack is young, and an app that will not build with it should have
+// somewhere to go that is not "write a Dockerfile".
+func nixpacksContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
+	context := workspace
+	if s.RootDir != "" {
+		context = workspace + "/" + strings.Trim(s.RootDir, "/")
+	}
+
+	var b strings.Builder
+	b.WriteString("set -e\n")
+	b.WriteString("echo '==> Working out how to build this repository'\n")
+	fmt.Fprintf(&b, "nixpacks build %q --out %s", context, workspace)
+	for _, pair := range sortedPairs(s.BuildArgs) {
+		// The same reason as railpack prepare: a framework that builds
+		// differently per environment needs these during detection, not only
+		// during the build.
+		fmt.Fprintf(&b, " --env %q", pair[0]+"="+pair[1])
+	}
+	b.WriteString("\n")
+	b.WriteString("echo '==> Build plan ready'\n")
+
+	return corev1.Container{
+		Name:         "prepare",
+		Image:        s.NixpacksImage,
 		Command:      []string{"/bin/sh", "-c"},
 		Args:         []string{b.String()},
 		VolumeMounts: mounts,

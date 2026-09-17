@@ -410,3 +410,41 @@ func refOf(value string) string {
 	}
 	return ""
 }
+
+func TestNixpacksWritesTheDockerfileItThenBuilds(t *testing.T) {
+	// The builder was selectable and the buildctl line pointed at
+	// .nixpacks/Dockerfile, and no step ever wrote one: every build with it
+	// chosen failed on a file that was never going to be there.
+	spec := baseJob()
+	spec.Builder = BuilderNixpacks
+	spec.BuildArgs = map[string]string{"NODE_ENV": "production"}
+	job, err := BuildJob(spec)
+	if err != nil {
+		t.Fatalf("BuildJob: %v", err)
+	}
+
+	if len(job.Spec.Template.Spec.InitContainers) < 2 {
+		t.Fatal("nothing runs before the build, so there is no Dockerfile to build")
+	}
+	prepare := job.Spec.Template.Spec.InitContainers[1]
+	if !strings.Contains(prepare.Args[0], "nixpacks build") {
+		t.Fatalf("the prepare step does not run nixpacks:\n%s", prepare.Args[0])
+	}
+	// --out is what makes it write the files instead of calling Docker, which
+	// is not available here and is the whole reason BuildKit does the build.
+	if !strings.Contains(prepare.Args[0], "--out /workspace") {
+		t.Fatalf("nixpacks is not told to write to the workspace:\n%s", prepare.Args[0])
+	}
+	if !strings.Contains(prepare.Args[0], `--env "NODE_ENV=production"`) {
+		t.Errorf("build variables do not reach the detection:\n%s", prepare.Args[0])
+	}
+	if prepare.Image == "" {
+		t.Error("the prepare step has no image to run in")
+	}
+
+	// And the build reads it from where it was written.
+	script := job.Spec.Template.Spec.Containers[0].Args[0]
+	if !strings.Contains(script, `--local "dockerfile=/workspace/.nixpacks"`) {
+		t.Errorf("the build does not read the generated Dockerfile:\n%s", script)
+	}
+}

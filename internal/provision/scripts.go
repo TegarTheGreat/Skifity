@@ -41,6 +41,28 @@ echo "arch=$(uname -m 2>/dev/null || echo unknown)"
 # systemd is required: k3s installs as a unit.
 if [ -d /run/systemd/system ]; then echo "has_systemd=yes"; else echo "has_systemd=no"; fi
 
+# The memory cgroup controller. Without it the kubelet will not start, and what
+# it says on the way out is about cgroups rather than about the thing to change.
+# Raspberry Pi OS ships with it off, which is the usual way somebody meets this.
+if [ -r /sys/fs/cgroup/cgroup.controllers ]; then
+  # cgroup v2: one file lists what is available.
+  if grep -qw memory /sys/fs/cgroup/cgroup.controllers; then
+    echo "has_memory_cgroup=yes"
+  else
+    echo "has_memory_cgroup=no"
+  fi
+elif [ -r /proc/cgroups ]; then
+  # cgroup v1: the last column is 1 when the controller is enabled.
+  if awk '$1 == "memory" && $4 == 1 {found=1} END {exit !found}' /proc/cgroups; then
+    echo "has_memory_cgroup=yes"
+  else
+    echo "has_memory_cgroup=no"
+  fi
+else
+  # Nothing to read means nothing to claim.
+  echo "has_memory_cgroup=unknown"
+fi
+
 # Cores, memory and free disk on the root filesystem.
 cores=$(nproc 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null || echo 0)
 echo "cpu_cores=${cores}"
@@ -139,10 +161,25 @@ echo "key_installed=yes"
 
 // FirewallScript opens the cluster ports to the other members only.
 //
-// It prefers ufw where it is active, because that is what the server's owner
-// will look at later, and falls back to iptables. Ports are opened per source
-// address rather than to the world: the pod network and the API server should
-// never be reachable from the internet.
+// Three firewalls, because a server has whichever one its distribution shipped
+// and none of them can be assumed. ufw on Ubuntu and Debian, firewalld on the
+// Red Hat family, and iptables when neither is running. Each is used the way
+// its own users would, so that what Skifity added is visible in the tool the
+// server's owner already looks at.
+//
+// firewalld was missing entirely, which mattered more than it sounds: it is the
+// default on AlmaLinux, Rocky, RHEL, CentOS and Fedora, active out of the box
+// on their cloud images, and every one of those is on the list of distributions
+// this product says it expects to work. The fallback path put rules in with
+// `iptables -I INPUT`, which firewalld discards on its next reload, and there is
+// no netfilter-persistent on those systems to survive a reboot either — so the
+// cluster's ports were open until something reloaded the firewall, and then
+// were not.
+//
+// Ports are opened per source address rather than to the world: the pod network
+// and the API server should never be reachable from the internet. The pod and
+// service networks are trusted by CIDR as well as by interface, which is what
+// k3s's own documentation asks for.
 func FirewallScript(memberIPs []string, controlPlane bool) string {
 	var rules strings.Builder
 	for _, port := range ClusterPorts {
@@ -161,33 +198,57 @@ func FirewallScript(memberIPs []string, controlPlane bool) string {
 	return fmt.Sprintf(`
 set -u
 
-HAS_UFW=no
+# k3s's own pod and service networks. Trusted wholesale, because the traffic
+# between pods is not on a fixed port and cannot be enumerated.
+POD_CIDR=%s
+SERVICE_CIDR=%s
+
+FIREWALL=none
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | head -n1 | grep -qi active; then
-  HAS_UFW=yes
+  FIREWALL=ufw
+elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -qi running; then
+  FIREWALL=firewalld
+elif command -v iptables >/dev/null 2>&1; then
+  FIREWALL=iptables
 fi
 
 allow_from() {
   ip="$1"; port="$2"; proto="$3"
-  if [ "$HAS_UFW" = yes ]; then
+  case "$FIREWALL" in
+  ufw)
     # ufw is idempotent: adding a rule twice keeps one.
     ufw allow from "$ip" to any port "$port" proto "$proto" >/dev/null 2>&1 || true
-  elif command -v iptables >/dev/null 2>&1; then
+    ;;
+  firewalld)
+    # A rich rule is the only way firewalld expresses "this port, from this
+    # address". --permanent survives a reload and a reboot, which is the whole
+    # reason this branch exists.
+    firewall-cmd --permanent --add-rich-rule="rule family=ipv4 source address=${ip}/32 port port=${port} protocol=${proto} accept" >/dev/null 2>&1 || true
+    ;;
+  iptables)
     # -C checks first, so this does not accumulate duplicate rules.
     if ! iptables -C INPUT -p "$proto" -s "$ip" --dport "$port" -j ACCEPT 2>/dev/null; then
       iptables -I INPUT -p "$proto" -s "$ip" --dport "$port" -j ACCEPT 2>/dev/null || true
     fi
-  fi
+    ;;
+  esac
 }
 
 allow_public() {
   port="$1"; proto="$2"
-  if [ "$HAS_UFW" = yes ]; then
+  case "$FIREWALL" in
+  ufw)
     ufw allow "$port"/"$proto" >/dev/null 2>&1 || true
-  elif command -v iptables >/dev/null 2>&1; then
+    ;;
+  firewalld)
+    firewall-cmd --permanent --add-port="${port}/${proto}" >/dev/null 2>&1 || true
+    ;;
+  iptables)
     if ! iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null; then
       iptables -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || true
     fi
-  fi
+    ;;
+  esac
 }
 
 %s
@@ -197,20 +258,42 @@ allow_public 443 tcp
 
 # Pods talk to each other over the cluster network; without this the CNI
 # traffic that is not on a fixed port is dropped.
-if [ "$HAS_UFW" = yes ]; then
+case "$FIREWALL" in
+ufw)
   ufw allow in on cni0 >/dev/null 2>&1 || true
   ufw allow in on flannel.1 >/dev/null 2>&1 || true
   ufw allow in on flannel-wg >/dev/null 2>&1 || true
-fi
+  ufw allow from "$POD_CIDR" to any >/dev/null 2>&1 || true
+  ufw allow from "$SERVICE_CIDR" to any >/dev/null 2>&1 || true
+  ;;
+firewalld)
+  firewall-cmd --permanent --zone=trusted --add-source="$POD_CIDR" >/dev/null 2>&1 || true
+  firewall-cmd --permanent --zone=trusted --add-source="$SERVICE_CIDR" >/dev/null 2>&1 || true
+  firewall-cmd --permanent --zone=trusted --add-interface=cni0 >/dev/null 2>&1 || true
+  firewall-cmd --permanent --zone=trusted --add-interface=flannel.1 >/dev/null 2>&1 || true
+  firewall-cmd --permanent --zone=trusted --add-interface=flannel-wg >/dev/null 2>&1 || true
+  # Nothing above is live until this, and --permanent alone is a rule nobody
+  # is applying.
+  firewall-cmd --reload >/dev/null 2>&1 || true
+  ;;
+iptables)
+  for cidr in "$POD_CIDR" "$SERVICE_CIDR"; do
+    if ! iptables -C INPUT -s "$cidr" -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT -s "$cidr" -j ACCEPT 2>/dev/null || true
+    fi
+  done
+  # Persist where the tooling exists, so a reboot does not undo this. ufw and
+  # firewalld persist on their own.
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save >/dev/null 2>&1 || true
+  elif command -v iptables-save >/dev/null 2>&1 && [ -d /etc/iptables ]; then
+    iptables-save >/etc/iptables/rules.v4 2>/dev/null || true
+  fi
+  ;;
+esac
 
-# Persist iptables rules where the tooling exists, so a reboot does not undo
-# this. ufw persists on its own.
-if [ "$HAS_UFW" = no ] && command -v netfilter-persistent >/dev/null 2>&1; then
-  netfilter-persistent save >/dev/null 2>&1 || true
-fi
-
-echo "firewall_configured=${HAS_UFW}"
-`, rules.String())
+echo "firewall_configured=${FIREWALL}"
+`, shellsafe.Quote(PodCIDR), shellsafe.Quote(ServiceCIDR), rules.String())
 }
 
 // serverArgs are the flags every control plane node has to agree on.

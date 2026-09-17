@@ -24,6 +24,19 @@ waiting for things to download.
 Adding a server checks all of this before touching the machine, and says which
 requirement was not met rather than failing partway through an install.
 
+Two things worth knowing before you pick a server:
+
+* **The firewall is configured for you**, whichever one the distribution ships:
+  ufw on Ubuntu and Debian, firewalld on the Red Hat family, plain iptables when
+  neither is running. The cluster ports are opened to the other servers only —
+  never to the internet — and the pod and service networks are trusted
+  wholesale, because traffic between pods is not on a fixed port.
+* **A Raspberry Pi needs one line changed first.** Raspberry Pi OS ships with
+  the memory cgroup switched off and the kubelet cannot start without it. Add
+  `cgroup_memory=1 cgroup_enable=memory` to the end of the single line in
+  `/boot/firmware/cmdline.txt` and reboot. The preflight checks this and says so
+  rather than letting k3s fail with a message about cgroups.
+
 **Your own machine**, for the `skifity` CLI and the MCP server — which are the
 same binary as the panel:
 

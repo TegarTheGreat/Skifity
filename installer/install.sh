@@ -161,9 +161,31 @@ preflight() {
 	if [ ! -d /run/systemd/system ]; then
 		fail \
 			"This server is not running systemd, and k3s installs itself as a systemd service." \
-			"Use a normal Ubuntu or Debian server. Containers without an init system, such as an unprivileged LXC or a Docker container, cannot run k3s this way."
+			"Use a normal Ubuntu or Debian server. Alpine and anything else on OpenRC will not work this way, and neither will a container with no init system, such as an unprivileged LXC or a Docker container."
 	fi
 	ok "systemd is running"
+
+	# The memory cgroup controller. The kubelet will not start without it, and
+	# what it prints on the way out is about cgroups rather than about the one
+	# line somebody has to change. Raspberry Pi OS ships with it switched off,
+	# and this installer supports arm64, so it is a path people will take.
+	memory_cgroup=unknown
+	if [ -r /sys/fs/cgroup/cgroup.controllers ]; then
+		grep -qw memory /sys/fs/cgroup/cgroup.controllers && memory_cgroup=yes || memory_cgroup=no
+	elif [ -r /proc/cgroups ]; then
+		awk '$1 == "memory" && $4 == 1 {found=1} END {exit !found}' /proc/cgroups &&
+			memory_cgroup=yes || memory_cgroup=no
+	fi
+	if [ "$memory_cgroup" = no ]; then
+		fail \
+			"The memory cgroup controller is switched off on this server, and the kubelet cannot start without it." \
+			"On Raspberry Pi OS and Ubuntu for the Pi, add this to the end of the single line in /boot/firmware/cmdline.txt and reboot:
+
+  cgroup_memory=1 cgroup_enable=memory
+
+On other systems, look for cgroup_disable=memory on the kernel command line."
+	fi
+	[ "$memory_cgroup" = yes ] && ok "The memory cgroup is enabled"
 
 	for port in 80 443 6443; do
 		if port_in_use "$port"; then

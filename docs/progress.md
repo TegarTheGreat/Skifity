@@ -1494,6 +1494,53 @@ and which architectures, for servers and for the CLI separately. `docs/faq.md`
 has the short version. It was knowledge somebody had to read three Go files to
 assemble.
 
+## Phase 39 — what the research said, against what the code did
+
+"Is every Linux distribution covered" was answered from memory in phase 38 and
+checked against k3s's own documentation afterwards. Two of the answers were
+wrong, and one of them was wrong in a way that would have taken a whole tier of
+supported distributions down.
+
+### firewalld did not exist anywhere in this repository
+
+The firewall step knew two firewalls: ufw, and iptables as a fallback. firewalld
+is the default on **AlmaLinux, Rocky, RHEL, CentOS and Fedora** — every one of
+which this product lists as expected-to-work — and it is active out of the box
+on their cloud images.
+
+What happened on such a server: no ufw, so the fallback put rules in with
+`iptables -I INPUT`. firewalld discards those on its next reload, and there is no
+`netfilter-persistent` on those systems to survive a reboot either. The cluster's
+ports were open until something touched the firewall, and then were not — which
+is the worst shape a bug can have, because it works when you test it.
+
+There are now three branches, each using its own tool the way its own users
+would, decided once: ufw, firewalld with `--permanent` rich rules and a
+`--reload`, iptables otherwise. And all three trust the pod and service networks
+by CIDR, which is what k3s's documentation asks for and what the ufw branch only
+half did with interface rules.
+
+### The memory cgroup, which the kubelet cannot start without
+
+k3s's requirements name it for Raspberry Pi OS, which ships with it off. Skifity
+builds for arm64, so that is a path people take — and what k3s says on the way
+out is about cgroups rather than about the one line in `cmdline.txt` to change.
+Both preflights check it now, on cgroup v1 and v2, and the refusal carries the
+line to add. Unknown is not treated as no: a server whose cgroups cannot be read
+is not refused on a guess.
+
+### And what the research confirmed rather than changed
+
+* **k3s's install script does support OpenRC**, so k3s on Alpine works. Skifity
+  does not, because it manages the service with `systemctl` — phase 38's
+  reasoning was right and the wording now says whose limitation it is.
+* The ports Skifity opens are exactly k3s's documented inbound list: 6443,
+  10250, 8472, 51820, 51821, and 2379–2380 on control plane servers.
+* `nm-cloud-setup` on RHEL was a real problem and its last affected release
+  reached end of life in May 2023; not worth a check.
+* armhf is supported by k3s and not by Skifity, which builds only 64-bit — and
+  the preflight already refuses it.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

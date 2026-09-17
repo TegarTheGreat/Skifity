@@ -28,6 +28,10 @@ type Preflight struct {
 	HasWireGuard bool `json:"has_wireguard"`
 	// HasSystemd is required: k3s installs as a systemd unit.
 	HasSystemd bool `json:"has_systemd"`
+	// MemoryCgroup is "yes", "no" or "unknown". The kubelet will not start
+	// without the memory controller, and it says so in terms of cgroups rather
+	// than in terms of the one line somebody has to change.
+	MemoryCgroup string `json:"memory_cgroup"`
 	// PortsInUse are the cluster ports something else is already listening on.
 	PortsInUse []int `json:"ports_in_use"`
 	// K3sInstalled reports whether this machine is already a node, which makes
@@ -72,6 +76,14 @@ type Problem struct {
 	// Fatal problems stop the process; others are warnings.
 	Fatal bool `json:"fatal"`
 }
+
+// The networks k3s gives pods and services, which are its defaults and which
+// Skifity does not override. The firewall has to trust them wholesale: traffic
+// between pods is not on a fixed port and cannot be enumerated.
+const (
+	PodCIDR     = "10.42.0.0/16"
+	ServiceCIDR = "10.43.0.0/16"
+)
 
 // ClusterPorts are the ports cluster members must reach on each other.
 var ClusterPorts = []struct {
@@ -125,6 +137,19 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 			Check:  "systemd",
 			Detail: "This server does not appear to use systemd.",
 			Fix:    "Skifity installs Kubernetes as a systemd service and manages it with systemctl. Use a distribution with systemd, such as Ubuntu 24.04 or Debian 12. Alpine and anything else on OpenRC will not work, and neither will a container without an init system — an unprivileged LXC or a Docker container, for instance.",
+			Fatal:  true,
+		})
+	}
+
+	// The kubelet refuses to start without the memory controller. Raspberry Pi
+	// OS ships with it off, and Skifity builds for arm64, so this is a real
+	// path rather than a theoretical one — and the error k3s gives is about
+	// cgroups, which is not the thing anybody would think to change.
+	if p.MemoryCgroup == "no" {
+		problems = append(problems, Problem{
+			Check:  "cgroups",
+			Detail: "The memory cgroup controller is switched off on this server.",
+			Fix:    "The kubelet cannot start without it. On Raspberry Pi OS and Ubuntu for the Pi, add `cgroup_memory=1 cgroup_enable=memory` to the end of the single line in /boot/firmware/cmdline.txt and reboot. On other systems, check the kernel command line for `cgroup_disable=memory`.",
 			Fatal:  true,
 		})
 	}
@@ -317,6 +342,8 @@ func ParsePreflight(output string) Preflight {
 			p.HasWireGuard = value == "yes"
 		case "has_systemd":
 			p.HasSystemd = value == "yes"
+		case "has_memory_cgroup":
+			p.MemoryCgroup = value
 		case "k3s_installed":
 			p.K3sInstalled = value == "yes"
 		case "conflicts":

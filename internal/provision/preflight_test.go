@@ -14,6 +14,7 @@ os_id=ubuntu
 kernel=6.8.0-45-generic
 arch=x86_64
 has_systemd=yes
+has_memory_cgroup=yes
 cpu_cores=2
 memory_mb=3936
 disk_gb=38
@@ -312,5 +313,35 @@ func TestEveryDistributionWeCallKnownWorkingActuallyPasses(t *testing.T) {
 		if Fatal(problems) {
 			t.Errorf("%s is listed as known-working and is refused: %+v", distro, problems)
 		}
+	}
+}
+
+// TestNoMemoryCgroupIsFatalAndSaysWhichLineToChange: the kubelet will not start
+// without the memory controller, and what it prints on the way out is about
+// cgroups — not about the one line in cmdline.txt somebody has to add. Raspberry
+// Pi OS ships with it off and Skifity builds for arm64, so this is a path
+// somebody will take.
+func TestNoMemoryCgroupIsFatalAndSaysWhichLineToChange(t *testing.T) {
+	p := ParsePreflight(realPreflightOutput)
+	p.MemoryCgroup = "no"
+	problems := Evaluate(p, DefaultRequirements(), false)
+	if !Fatal(problems) {
+		t.Fatalf("a server with no memory cgroup was accepted: %+v", problems)
+	}
+	var said string
+	for _, problem := range problems {
+		if problem.Check == "cgroups" {
+			said = problem.Fix
+		}
+	}
+	if !strings.Contains(said, "cgroup_memory=1") || !strings.Contains(said, "cmdline.txt") {
+		t.Errorf("the fix does not say what to change:\n%s", said)
+	}
+
+	// Unknown is not the same as no. A server whose cgroups cannot be read
+	// must not be refused on a guess.
+	p.MemoryCgroup = "unknown"
+	if Fatal(Evaluate(p, DefaultRequirements(), false)) {
+		t.Error("a server whose cgroups could not be read was refused, which is a guess rather than a check")
 	}
 }

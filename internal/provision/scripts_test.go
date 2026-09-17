@@ -94,6 +94,69 @@ func TestFirewallScriptIsIdempotent(t *testing.T) {
 	if !strings.Contains(script, "iptables -C INPUT") {
 		t.Fatal("the iptables path does not check before inserting, so retrying would add duplicate rules")
 	}
+	// ufw and firewalld are idempotent by design, but firewalld's rules are
+	// permanent ones, which is not the same as applied ones.
+	if !strings.Contains(script, "firewall-cmd --reload") {
+		t.Fatal("firewalld rules are added permanently and never reloaded, so none of them take effect")
+	}
+}
+
+// TestTheFirewallEveryRedHatServerActuallyHas: firewalld is the default on
+// AlmaLinux, Rocky, RHEL, CentOS and Fedora, active out of the box on their
+// cloud images, and every one of those is on the list of distributions this
+// product says it expects to work. It was not handled at all. The fallback put
+// rules in with `+"`iptables -I INPUT`"+`, which firewalld discards on its next
+// reload — and there is no netfilter-persistent on those systems either, so a
+// reboot lost them too. The ports were open until something touched the
+// firewall, and then were not.
+func TestTheFirewallEveryRedHatServerActuallyHas(t *testing.T) {
+	script := FirewallScript([]string{"203.0.113.10"}, true)
+
+	if !strings.Contains(script, "firewall-cmd --state") {
+		t.Fatal("nothing checks whether firewalld is the firewall on this server")
+	}
+	// Per source address, not to the world: a rich rule is the only way
+	// firewalld says that.
+	if !strings.Contains(script, "--add-rich-rule=") {
+		t.Error("the firewalld path has no way to open a port to one address, so it would have to open it to everybody")
+	}
+	if !strings.Contains(script, "--permanent") {
+		t.Error("firewalld rules are not permanent, so a reload or a reboot loses the cluster's ports")
+	}
+
+	// The pod and service networks are trusted wholesale, by every firewall.
+	// Traffic between pods is not on a fixed port and cannot be enumerated,
+	// and k3s's own documentation asks for exactly this.
+	for _, cidr := range []string{PodCIDR, ServiceCIDR} {
+		if !strings.Contains(script, cidr) {
+			t.Errorf("%s is not trusted, so pod traffic that is not on a listed port is dropped", cidr)
+		}
+	}
+	for _, want := range []string{
+		"--zone=trusted --add-source",  // firewalld
+		`ufw allow from "$POD_CIDR"`,   // ufw
+		`iptables -C INPUT -s "$cidr"`, // and the fallback
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("one of the three firewalls does not trust the cluster network: %s is missing", want)
+		}
+	}
+}
+
+// TestOneFirewallIsChosenNotThree: running ufw commands on a firewalld server
+// leaves rules in a tool nobody is looking at, and the reverse is worse — two
+// firewalls both half-configured is how a cluster becomes unreachable in a way
+// nobody can diagnose.
+func TestOneFirewallIsChosenNotThree(t *testing.T) {
+	script := FirewallScript([]string{"203.0.113.10"}, false)
+	if strings.Count(script, "FIREWALL=ufw") != 1 ||
+		strings.Count(script, "FIREWALL=firewalld") != 1 ||
+		strings.Count(script, "FIREWALL=iptables") != 1 {
+		t.Fatal("the three firewalls are not decided once, in one place")
+	}
+	if !strings.Contains(script, "echo \"firewall_configured=${FIREWALL}\"") {
+		t.Fatal("the script does not report which firewall it used, so a failure cannot be read afterwards")
+	}
 }
 
 func TestInstallKeyScriptIsIdempotent(t *testing.T) {

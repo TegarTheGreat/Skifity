@@ -132,12 +132,18 @@ def exists(image):
         host, repo = "registry-1.docker.io", (name if "/" in name else "library/" + name)
 
     service = {"registry-1.docker.io": "registry.docker.io"}.get(host, host)
+    # A tag can contain a colon-free timestamp; rpartition already split on the
+    # last colon, which is right, but an image with no tag at all leaves the
+    # name in `tag`. Guard it rather than asking for a manifest called "".
+    if not tag or "/" in tag:
+        return False
     headers = {"Accept": "application/vnd.oci.image.index.v1+json,"
                          "application/vnd.docker.distribution.manifest.list.v2+json,"
                          "application/vnd.docker.distribution.manifest.v2+json"}
     try:
         auth = {"registry-1.docker.io": "https://auth.docker.io/token",
                 "ghcr.io": "https://ghcr.io/token",
+                "lscr.io": "https://ghcr.io/token",
                 "quay.io": "https://quay.io/v2/auth"}.get(host)
         if auth:
             token = get(f"{auth}?scope=repository:{repo}:pull&service={service}").get("token")
@@ -147,6 +153,28 @@ def exists(image):
                                          headers=headers, method="HEAD")
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
             return response.status == 200
+    except urllib.error.HTTPError as err:
+        if err.code != 401:
+            return False
+        # Some registries answer 401 to an anonymous token request and then
+        # hand out a token from the header of the challenge. One retry with it.
+        challenge = err.headers.get("WWW-Authenticate", "")
+        realm = re.search(r'realm="([^"]+)"', challenge)
+        service_hint = re.search(r'service="([^"]+)"', challenge)
+        if not realm:
+            return False
+        try:
+            url = f"{realm.group(1)}?scope=repository:{repo}:pull"
+            if service_hint:
+                url += "&service=" + service_hint.group(1)
+            token = get(url).get("token") or get(url).get("access_token")
+            headers["Authorization"] = "Bearer " + token
+            request = urllib.request.Request(f"https://{host}/v2/{repo}/manifests/{tag}",
+                                             headers=headers, method="HEAD")
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                return response.status == 200
+        except Exception:
+            return False
     except Exception:
         return False
 

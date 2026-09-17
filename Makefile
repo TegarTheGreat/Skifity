@@ -86,7 +86,12 @@ audit: ## Report known vulnerabilities in the dependencies
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 	npm --prefix web audit --omit=dev --audit-level=high
 
-check: lint test ## What CI runs
+# `check` is the gate, and it has to contain everything CI can fail on, or it
+# is a gate with a hole in it. It had one: CI ran govulncheck and `check` did
+# not, so twenty-three runs went red on a step nothing local ever executed —
+# and because that step comes before them, the race detector, the smoke tests
+# and the interface test never ran on CI at all.
+check: lint test audit ## What CI runs
 
 smoke: backend ## Run the smoke tests against a freshly built binary
 	./test/smoke/panel.sh

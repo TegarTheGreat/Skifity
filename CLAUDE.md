@@ -60,7 +60,9 @@ test/smoke/         End-to-end shell tests that run a real panel.
 make build       Frontend and binary, in that order.
 make dev-api     The panel in dev mode, proxying the UI to Vite.
 make dev         The Vite dev server (a second terminal).
-make check       What CI runs: every linter, then the tests.
+make check       What CI runs: every linter, the tests, then the vulnerability
+                 scan. If it does not contain something CI fails on, it is a
+                 gate with a hole in it — that happened, see docs/progress.md.
 make smoke       Build and run the smoke tests against a real panel.
 make e2e         The Playwright interface test, against the real binary.
 make audit       Known vulnerabilities, Go and npm.

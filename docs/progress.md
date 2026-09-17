@@ -662,6 +662,33 @@ What this does not mean: none of these has been deployed, because nothing in
 this product has. What is checked is that each template is structurally sound
 and that its image exists.
 
+## Phase 23 — CI had been red on every commit
+
+Twenty-three runs, all of them red, back to the first. Nobody looked, including
+whoever wrote `make check`.
+
+The failure was one step: `govulncheck`. `go.mod` said `go 1.26.0`, CI's
+setup-go installs exactly what `go.mod` asks for, and Go 1.26.0 shipped with 21
+known standard-library vulnerabilities that 1.26.1 fixed — one of them reachable
+from `internal/notify`, which dials TLS to send mail. Locally the same command
+passed, because `go run …@latest` quietly switches to a newer toolchain and the
+scan then reports the newer standard library. The local answer and the CI answer
+were about two different Go versions.
+
+Two things were wrong, and the second is worse:
+
+* **The `go` directive named a version with known holes.** It now names a patch
+  release, so anyone building this gets a fixed standard library rather than
+  whichever one they happen to have.
+* **`make check` did not run the step that was failing.** It is documented as
+  "what CI runs" and it was not: no `audit`. A gate with a hole in it looks
+  exactly like a gate. `check` now includes it.
+
+And the consequence nobody would have guessed from the summary line: because
+`govulncheck` runs before them, **the race-detector run, both smoke tests and
+the Playwright interface test have never executed on CI**. They pass here and
+have never passed there.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

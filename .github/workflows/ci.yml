@@ -54,6 +54,12 @@ jobs:
       - name: Known vulnerabilities
         # govulncheck reports what the code actually reaches, so an unused
         # package in a dependency does not fail the build for everybody.
+        #
+        # It also reports the standard library, which is why go.mod names a
+        # patch release rather than go 1.26.0: setup-go installs exactly what
+        # go.mod asks for, and 1.26.0 shipped with 21 known vulnerabilities
+        # that 1.26.1 fixed. Bumping the language version is the fix; pinning
+        # an older toolchain here would only hide it.
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Test with the race detector

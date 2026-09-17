@@ -270,6 +270,13 @@
     "detected": "Ini sepertinya {{what}}.",
     "detectedMaybe": "Ini mungkin {{what}}. Tidak ada yang diisi otomatis — periksa kolom di bawah.",
     "detectedPartly": "Repositorinya besar, jadi hanya bagian atasnya yang dibaca.",
+    "composeFound": "Berkas Compose ini punya {{count}} layanan. Pilih layanan untuk aplikasi ini:",
+    "composeFound_other": "Berkas Compose ini punya {{count}} layanan. Pilih layanan untuk aplikasi ini:",
+    "composeBuilt": "dibangun dari repositori",
+    "composePort": "mendengarkan di {{port}}",
+    "composeVariables": "{{count}} variabel",
+    "composeVariables_other": "{{count}} variabel",
+    "composeRest": "Buat layanan lainnya dengan cara yang sama, di lingkungan ini. Mereka saling terhubung lewat nama, dan itulah yang menggantikan tautan di berkas Compose.",
     "builderStatic": "Berkas statis",
     "lastBackup": "Cadangan terakhir"
   },

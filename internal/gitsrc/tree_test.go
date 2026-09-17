@@ -239,3 +239,47 @@ func TestMain(m *testing.M) {
 	client = &http.Client{Timeout: 5 * time.Second}
 	os.Exit(m.Run())
 }
+
+// TestTheFilesTheAnswerDependsOnAreRead: the detector reads a Dockerfile for
+// its EXPOSE line and a Compose file for its services, and neither was in the
+// list of files fetched. Both were found in the tree and then read back as an
+// empty string, so the port was never detected and the services never appeared.
+func TestTheFilesTheAnswerDependsOnAreRead(t *testing.T) {
+	bodies := map[string]string{
+		"Dockerfile":         "FROM node:22\nEXPOSE 4000\n",
+		"docker-compose.yml": "services:\n  web:\n    build: .\n",
+		"package.json":       `{"dependencies":{"express":"4"}}`,
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/git/trees/") {
+			var entries []map[string]any
+			for name := range bodies {
+				entries = append(entries, map[string]any{"path": name, "type": "blob"})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"tree": entries})
+			return
+		}
+		for name, body := range bodies {
+			if strings.HasSuffix(r.URL.Path, "/contents/"+name) {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"encoding": "base64",
+					"content":  wrap(base64.StdEncoding.EncodeToString([]byte(body))),
+				})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	tree, err := ReadTree(t.Context(), TreeRequest{RepoURL: server.URL + "/acme/shop", Kind: "github", BaseURL: server.URL})
+	if err != nil {
+		t.Fatalf("ReadTree: %v", err)
+	}
+	for name, body := range bodies {
+		if tree.Contents[name] != body {
+			t.Errorf("%s was listed but read as %q", name, tree.Contents[name])
+		}
+	}
+}

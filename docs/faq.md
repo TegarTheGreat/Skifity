@@ -79,11 +79,22 @@ container images and ordinary Kubernetes objects.
 
 ## Does it support Docker Compose?
 
-Not yet, and this page used to say it did. A repository with a Compose file in
-it deploys like any other — the builder ignores the Compose file and builds the
-application — but there is no import that turns a Compose file into several
-apps and databases. It is on the list; until it is here, create the app and the
-databases it needs in the panel and link them.
+It reads one. Paste the repository address when you create an app and press
+"Check this repository": if there is a Compose file, Skifity lists the services
+it found — what each one runs, the port it listens on, the variables it sets —
+and you pick the service this app is. The form fills itself in from it, the
+variables come with it, and the app is created like any other.
+
+What it does not do is import the whole file in one action. Skifity runs one
+service per app, so several services means creating the app several times, once
+per service, in the same environment. There they reach each other by name, which
+is what the links in a Compose file become. A service that is really a database
+is better created as a managed database in the panel, which gets you backups.
+
+Whatever cannot carry over is named rather than dropped: `privileged`,
+`cap_add`, `devices`, host networking and `extends` are listed against the
+service they came from, because a conversion that half-works is worse than one
+that clearly needs attention.
 
 ## Can an AI assistant use it?
 

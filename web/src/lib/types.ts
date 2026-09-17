@@ -96,7 +96,7 @@ export type App = {
   environment_id: string
   name: string
   slug: string
-  source_type: "git" | "image" | "compose"
+  source_type: "git" | "image"
   git_source_id?: string
   repo_url: string
   branch: string
@@ -489,4 +489,21 @@ export type Detection = {
   notes?: string[]
   /** The repository was larger than the panel read. */
   truncated?: boolean
+  /** Services read from a Compose file. An app runs one of them. */
+  compose?: ComposeService[]
+  /** Parts of the Compose file that do not carry over. */
+  compose_warnings?: string[]
+}
+
+/** One service from a Compose file, as the panel would run it. */
+export type ComposeService = {
+  name: string
+  image?: string
+  build?: string
+  ports?: number[]
+  environment?: Record<string, string>
+  volumes?: string[]
+  depends_on?: string[]
+  /** Compose features with no equivalent here, named rather than dropped. */
+  unsupported?: string[]
 }

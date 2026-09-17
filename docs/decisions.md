@@ -117,6 +117,12 @@ rebuilding. Implemented in `internal/deploy`.
 **Decision.** Detection order: explicit setting > Dockerfile in the repo > Docker Compose > Railpack
 auto-detection > prebuilt image. Nixpacks stays selectable.
 
+Compose is in that order as a reader, not a builder. A Compose file describes several services and an
+app runs one, so finding one means reading it and offering its services to choose from, with what did
+not carry over named against the service it came from. There is no `compose` build, and `compose` is
+not a source an app can have: the choice produces an ordinary Git or image app. For a while it was
+one — the API accepted it, stored it, and then deployed the app as a Git app with no repository.
+
 **Reason.** Railpack is Railway's BuildKit-native successor to Nixpacks (Nixpacks is now
 maintenance-only) and produces much smaller images. A repo that ships a Dockerfile has already made a
 decision we should not override.

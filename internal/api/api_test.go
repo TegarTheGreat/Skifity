@@ -490,3 +490,82 @@ func TestAWorkerIsRemovableWhateverTheClusterSays(t *testing.T) {
 		}
 	}
 }
+
+// TestAnAppIsCreatedWithTheVariablesItWasGiven: a Compose service is mostly its
+// environment, and the form had nowhere to put it. Creating the app and then
+// setting the variables afterwards would start it once without them, which for
+// anything with a database URL means a first deploy that crashes.
+func TestAnAppIsCreatedWithTheVariablesItWasGiven(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name":      "shop",
+		"repo_url":  "https://github.com/acme/shop",
+		"variables": map[string]string{"DATABASE_URL": "postgres://db:5432/shop", "NODE_ENV": "production"},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create app: %d %s", status, body)
+	}
+	var created store.App
+	if err := json.Unmarshal([]byte(body), &created); err != nil {
+		t.Fatalf("decode app: %v", err)
+	}
+
+	rows, err := h.db.ListVariables(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("list variables: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("the app was created with %d variables, want 2", len(rows))
+	}
+	// And they are sealed like any other variable, not stored as they arrived.
+	for _, row := range rows {
+		if strings.Contains(row.Sealed, "postgres://") {
+			t.Fatalf("%s was stored in the clear", row.Variable.Key)
+		}
+		plaintext, err := h.keyring.Open(row.Sealed, variableContext(created.ID, row.Variable.Key))
+		if err != nil {
+			t.Fatalf("open %s: %v", row.Variable.Key, err)
+		}
+		if row.Variable.Key == "DATABASE_URL" && string(plaintext) != "postgres://db:5432/shop" {
+			t.Fatalf("DATABASE_URL came back as %q", plaintext)
+		}
+	}
+}
+
+// A key the cluster could not carry has to stop the request. An app that comes
+// up with half its configuration looks like a broken app, and the reason is
+// nowhere on screen.
+func TestAnAppIsNotCreatedWithAVariableTheClusterCannotCarry(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name":      "shop",
+		"repo_url":  "https://github.com/acme/shop",
+		"variables": map[string]string{"not a key": "x"},
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("an unusable variable name was accepted: %d %s", status, body)
+	}
+}
+
+// A Compose file is several services and an app runs one. The API used to
+// accept "compose" as a source, store it, and then deploy the app as a Git app
+// with no repository.
+func TestAnAppCannotBeCreatedFromAComposeFile(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name":        "stack",
+		"source_type": "compose",
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("an app was created from a Compose file: %d %s", status, body)
+	}
+	if !strings.Contains(body, "app per service") {
+		t.Errorf("the refusal does not say what to do instead: %s", body)
+	}
+}

@@ -3,10 +3,14 @@ package builder
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
+
+	"sigs.k8s.io/yaml"
 )
 
 // Builder names the strategy used to produce an image.
@@ -51,6 +55,14 @@ type Detection struct {
 	Confidence string `json:"confidence"`
 	// Notes explain the decision, which is what makes the guess reviewable.
 	Notes []string `json:"notes,omitempty"`
+	// Compose are the services read from a Compose file, when the repository
+	// has one. A Compose file describes several services and an app runs one,
+	// so this is a list to choose from rather than something to build: the form
+	// offers each service and fills itself in from the one that is picked.
+	Compose []ComposeService `json:"compose,omitempty"`
+	// ComposeWarnings are the parts of the Compose file that did not carry
+	// over, named rather than dropped quietly.
+	ComposeWarnings []string `json:"compose_warnings,omitempty"`
 }
 
 // Tree is the subset of a repository the detector needs: the list of paths, and
@@ -127,14 +139,25 @@ func Detect(tree Tree) Detection {
 	}
 
 	if compose := findCompose(tree); compose != "" {
-		return Detection{
+		d := Detection{
 			Builder: BuilderCompose, Confidence: "high", Language: "Docker Compose",
 			DockerfilePath: compose,
-			Notes: []string{
-				"Found " + compose + ".",
-				"Compose services become separate apps, and the links between them become variables.",
-			},
+			Notes:          []string{"Found " + compose + "."},
 		}
+		services, warnings, err := ParseCompose(tree.Read(compose))
+		switch {
+		case err != nil:
+			d.Notes = append(d.Notes, "It could not be read: "+err.Error()+".")
+		case len(services) == 0:
+			d.Notes = append(d.Notes, "No services were found in it.")
+		default:
+			d.Compose, d.ComposeWarnings = services, warnings
+			d.Notes = append(d.Notes,
+				"Skifity runs one service per app, so pick the service this app is. "+
+					"Create the others the same way, in the same environment, where they "+
+					"reach each other by name.")
+		}
+		return d
 	}
 
 	if d, ok := detectNode(tree); ok {
@@ -409,16 +432,33 @@ func portFromDockerfile(content string) int {
 
 // ComposeService is one service read from a Compose file.
 type ComposeService struct {
-	Name        string
-	Image       string
-	Build       string
-	Ports       []int
-	Environment map[string]string
-	Volumes     []string
-	DependsOn   []string
+	Name        string            `json:"name"`
+	Image       string            `json:"image,omitempty"`
+	Build       string            `json:"build,omitempty"`
+	Ports       []int             `json:"ports,omitempty"`
+	Environment map[string]string `json:"environment,omitempty"`
+	Volumes     []string          `json:"volumes,omitempty"`
+	DependsOn   []string          `json:"depends_on,omitempty"`
 	// Unsupported lists Compose features that do not carry over, so the
 	// conversion is honest about what it dropped.
-	Unsupported []string
+	Unsupported []string `json:"unsupported,omitempty"`
+}
+
+// ParseCompose reads a Compose file and converts it.
+//
+// Compose YAML is read through the same YAML-to-JSON path Kubernetes manifests
+// use, so numbers arrive as float64 and the conversion below sees one shape
+// whichever way a port or a variable was written.
+func ParseCompose(source string) ([]ComposeService, []string, error) {
+	if strings.TrimSpace(source) == "" {
+		return nil, nil, errors.New("the file is empty")
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal([]byte(source), &raw); err != nil {
+		return nil, nil, fmt.Errorf("this is not valid YAML: %w", err)
+	}
+	services, warnings := ConvertCompose(raw)
+	return services, warnings, nil
 }
 
 // ConvertCompose turns a parsed Compose file into services Skifity can run.

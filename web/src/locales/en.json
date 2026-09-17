@@ -278,6 +278,13 @@
     "detected": "This looks like {{what}}.",
     "detectedMaybe": "This might be {{what}}. Nothing was filled in — check the fields below.",
     "detectedPartly": "The repository is large, so only the top of it was read.",
+    "composeFound": "This Compose file has {{count}} service. Pick the one this app is:",
+    "composeFound_other": "This Compose file has {{count}} services. Pick the one this app is:",
+    "composeBuilt": "built from the repository",
+    "composePort": "listens on {{port}}",
+    "composeVariables": "{{count}} variable",
+    "composeVariables_other": "{{count}} variables",
+    "composeRest": "Create the other services the same way, in this environment. They reach each other by name, which is what the links in a Compose file become.",
     "builderStatic": "Static files",
     "lastBackup": "Last backup"
   },

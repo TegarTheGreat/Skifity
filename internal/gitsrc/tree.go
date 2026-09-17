@@ -39,10 +39,16 @@ const MaxTreeEntries = 4000
 // readableFiles are fetched in full, because their contents decide the answer:
 // a package.json says Next.js or Vite, a go.mod says nothing useful but a
 // requirements.txt says Django.
+// A Dockerfile is here because its EXPOSE line is where the port comes from,
+// and a Compose file because its services are what the panel offers to turn
+// into apps. Both were detected from the file list alone and then read as an
+// empty string, so neither answer was ever produced.
 var readableFiles = []string{
 	"package.json", "go.mod", "requirements.txt", "pyproject.toml",
 	"composer.json", "Gemfile", "Cargo.toml", "pom.xml", "build.gradle",
 	"deno.json", "bun.lockb", "Procfile",
+	"Dockerfile", "dockerfile", "docker/Dockerfile", "build/Dockerfile",
+	"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml",
 }
 
 // TreeRequest is a repository to look at.

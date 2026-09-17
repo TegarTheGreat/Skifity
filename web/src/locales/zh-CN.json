@@ -270,6 +270,13 @@
     "detected": "这看起来是 {{what}}。",
     "detectedMaybe": "这可能是 {{what}}。没有自动填写任何内容，请检查下面的字段。",
     "detectedPartly": "仓库较大，只读取了顶层内容。",
+    "composeFound": "这个 Compose 文件里有 {{count}} 个服务。选择这个应用对应的那一个：",
+    "composeFound_other": "这个 Compose 文件里有 {{count}} 个服务。选择这个应用对应的那一个：",
+    "composeBuilt": "从仓库构建",
+    "composePort": "监听 {{port}}",
+    "composeVariables": "{{count}} 个变量",
+    "composeVariables_other": "{{count}} 个变量",
+    "composeRest": "其余服务用同样的方式在这个环境里创建。它们通过名字互相访问，这就是 Compose 文件里的链接在这里的样子。",
     "builderStatic": "静态文件",
     "lastBackup": "上次备份"
   },

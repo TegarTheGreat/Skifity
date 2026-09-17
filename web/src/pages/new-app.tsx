@@ -22,7 +22,7 @@ import {
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { App, Deployment, Detection, GitSource } from "@/lib/types"
+import type { App, ComposeService, Deployment, Detection, GitSource } from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
 
 type SourceType = "git" | "image"
@@ -53,6 +53,11 @@ export function NewAppPage() {
   const [deployNow, setDeployNow] = useState(true)
   const [advanced, setAdvanced] = useState(false)
   const [gitSourceID, setGitSourceID] = useState("")
+  // The Compose service this app is, when the repository has a Compose file.
+  // A file describes several services and an app runs one, so this is a choice
+  // rather than an import: picking one fills the form in from it.
+  const [composeService, setComposeService] = useState("")
+  const [variables, setVariables] = useState<Record<string, string>>({})
 
   // A public repository needs no account. This picker only appears once one is
   // connected, so the common case stays a single field.
@@ -82,6 +87,10 @@ export function NewAppPage() {
       // statement rather than a question. Overwriting what somebody typed
       // because a heuristic disagreed is the behaviour that makes people stop
       // trusting a form.
+      if (found.compose && found.compose.length > 0) {
+        setComposeService("")
+        setVariables({})
+      }
       if (found.confidence !== "high") return
       if (!port && found.port) setPort(String(found.port))
       if (!healthPath && found.health_path) setHealthPath(found.health_path)
@@ -123,6 +132,7 @@ export function NewAppPage() {
         health_path: healthPath.trim(),
         start_command: startCommand.trim(),
         deploy: deployNow,
+        variables,
       }),
     onSuccess: (result) => {
       const app = "app" in result ? result.app : result
@@ -193,6 +203,29 @@ export function NewAppPage() {
 
                 {detect.error != null && <ErrorDisplay error={detect.error} compact />}
                 {found && <DetectionSummary detection={found} />}
+                {found?.compose && found.compose.length > 0 && (
+                  <ComposeServices
+                    services={found.compose}
+                    warnings={found.compose_warnings}
+                    chosen={composeService}
+                    onChoose={(service) => {
+                      setComposeService(service.name)
+                      setVariables(service.environment ?? {})
+                      if (!name.trim()) setName(service.name)
+                      setRootDir(normaliseContext(service.build))
+                      setPort(service.ports?.[0] ? String(service.ports[0]) : "")
+                      // A service with an image and nothing to build is a
+                      // prebuilt image, which is a different kind of app.
+                      if (service.image && !service.build) {
+                        setSourceType("image")
+                        setImage(service.image)
+                      } else {
+                        setSourceType("git")
+                        setImage("")
+                      }
+                    }}
+                  />
+                )}
                 {sources.length > 0 && (
                   <Field>
                     <FieldLabel htmlFor="git-source">
@@ -408,6 +441,93 @@ function SourceChoice({
  * anything lower is a question, and the fields below are left for the person to
  * answer. The notes are what make it reviewable rather than magic.
  */
+/**
+ * The services a Compose file describes, as things to create.
+ *
+ * Skifity runs one service per app, so this is a choice and not an import: the
+ * file is read, every service is listed with what carried over and what did
+ * not, and picking one fills the form in. The others are created the same way,
+ * in the same environment, where they reach each other by name — which is what
+ * the links in a Compose file become.
+ */
+function ComposeServices({
+  services,
+  warnings,
+  chosen,
+  onChoose,
+}: {
+  services: ComposeService[]
+  warnings?: string[]
+  chosen: string
+  onChoose: (service: ComposeService) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{t("apps.composeFound", { count: services.length })}</p>
+      <div className="grid gap-2">
+        {services.map((service) => {
+          const active = service.name === chosen
+          const details = [
+            service.image ? service.image : t("apps.composeBuilt"),
+            service.ports?.[0] ? t("apps.composePort", { port: service.ports[0] }) : "",
+            service.environment && Object.keys(service.environment).length > 0
+              ? t("apps.composeVariables", { count: Object.keys(service.environment).length })
+              : "",
+          ].filter(Boolean)
+
+          return (
+            <button
+              key={service.name}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onChoose(service)}
+              className={cn(
+                "rounded-lg border p-3 text-left transition-colors",
+                "focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-[3px]",
+                active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
+              )}
+            >
+              <span className="text-sm font-medium">{service.name}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {details.join(" · ")}
+              </span>
+              {service.unsupported && service.unsupported.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+                  {service.unsupported.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      {warnings && warnings.length > 0 && (
+        <ul className="space-y-0.5 text-xs text-muted-foreground">
+          {warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+      {chosen !== "" && <p className="text-xs text-muted-foreground">{t("apps.composeRest")}</p>}
+    </div>
+  )
+}
+
+/**
+ * A Compose build context as a root directory.
+ *
+ * "." and "./" mean the repository itself, which is an empty root directory
+ * here; anything else is the subdirectory, without the leading "./" that a
+ * Compose file usually writes.
+ */
+function normaliseContext(context?: string): string {
+  const trimmed = (context ?? "").trim().replace(/^\.\//, "").replace(/\/$/, "")
+  return trimmed === "." ? "" : trimmed
+}
+
 function DetectionSummary({ detection }: { detection: Detection }) {
   const { t } = useTranslation()
   const sure = detection.confidence === "high"

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -43,6 +44,12 @@ type createAppRequest struct {
 	StartCommand   string `json:"start_command,omitempty"`
 	ReleaseCommand string `json:"release_command,omitempty"`
 	Deploy         bool   `json:"deploy,omitempty"`
+	// Variables are set on the new app before its first deploy. This exists
+	// for the Compose form: a service's environment is most of what the file
+	// says, and creating the app and then losing it would make the import a
+	// list of names. Every value is sealed like any other variable, and none
+	// of them is audited.
+	Variables map[string]string `json:"variables,omitempty"`
 }
 
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
@@ -92,8 +99,18 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "compose":
+		// A Compose file describes several services and an app runs one, so
+		// "compose" was never a source an app could have: it was accepted,
+		// stored, and then deployed as a Git app with no repository. The form
+		// reads the file, offers the services, and creates an ordinary app from
+		// the one that is picked.
+		writeError(w, r, errdoc.BadRequest(
+			"A Compose file is several services, and an app runs one. "+
+				"Create an app per service: paste the repository address and Skifity "+
+				"offers the services it found."))
+		return
 	default:
-		writeError(w, r, errdoc.BadRequest("Source must be git, image or compose."))
+		writeError(w, r, errdoc.BadRequest("Source must be git or image."))
 		return
 	}
 
@@ -143,6 +160,12 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Before the first deploy, so the app never starts once without them.
+	if err := s.setInitialVariables(r, app, req.Variables); err != nil {
+		writeError(w, r, err)
+		return
+	}
+
 	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
 	s.audit(r, teamID, "app.created", "app", app.ID, app.Name)
 	s.hub.Publish(events.TeamTopic(teamID), "app.created", app)
@@ -160,6 +183,36 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusCreated, app)
+}
+
+// setInitialVariables stores the variables a new app was created with.
+//
+// They go through the same key sanitising and the same sealing as a variable
+// set by hand later; nothing here is a shortcut past either. A key the cluster
+// could not carry stops the request rather than being dropped, because an app
+// that starts without half its configuration looks like a broken app.
+func (s *Server) setInitialVariables(r *http.Request, app store.App, values map[string]string) error {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, raw := range keys {
+		key, err := kube.SanitiseEnvKey(raw)
+		if err != nil {
+			return errdoc.BadRequest(err.Error())
+		}
+		sealed, err := s.keyring.Seal([]byte(values[raw]), variableContext(app.ID, key))
+		if err != nil {
+			return err
+		}
+		variable := store.Variable{AppID: app.ID, Key: key}
+		if err := s.db.SetVariable(r.Context(), &variable, sealed); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) handleGetApp(w http.ResponseWriter, r *http.Request) {

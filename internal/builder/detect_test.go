@@ -63,6 +63,84 @@ func TestComposeBeatsLanguageDetection(t *testing.T) {
 	}
 }
 
+// TestComposeDetectionCarriesTheServices: the detector said "Docker Compose"
+// and stopped, while the converter that turns the file into services was
+// written, tested and called by nothing. What the panel showed was a label; the
+// services the person actually has to create were never read.
+func TestComposeDetectionCarriesTheServices(t *testing.T) {
+	d := Detect(tree(map[string]string{
+		"docker-compose.yml": `services:
+  web:
+    build: .
+    ports: ["8080:3000"]
+    environment:
+      NODE_ENV: production
+    depends_on: [db]
+  db:
+    image: postgres:16
+    privileged: true
+`,
+	}))
+	if len(d.Compose) != 2 {
+		t.Fatalf("the detector found %d services, want 2 (web and db)", len(d.Compose))
+	}
+	web := d.Compose[1]
+	if web.Name != "web" {
+		t.Fatalf("services are not in a stable order: %q came second", web.Name)
+	}
+	if len(web.Ports) != 1 || web.Ports[0] != 3000 {
+		t.Errorf("web listens on %v, want the container side 3000", web.Ports)
+	}
+	if web.Environment["NODE_ENV"] != "production" {
+		t.Errorf("web lost its environment: %v", web.Environment)
+	}
+	if len(web.DependsOn) != 1 || web.DependsOn[0] != "db" {
+		t.Errorf("web lost what it depends on: %v", web.DependsOn)
+	}
+	if d.Compose[0].Image != "postgres:16" {
+		t.Errorf("db runs %q, want postgres:16", d.Compose[0].Image)
+	}
+	// What cannot be carried over has to be said, not dropped.
+	if len(d.ComposeWarnings) == 0 {
+		t.Error("privileged: true was dropped without a word")
+	}
+	// And the note must not promise that any of this happens by itself.
+	for _, note := range d.Notes {
+		if strings.Contains(note, "become separate apps") {
+			t.Errorf("the note still promises an import that does not exist: %q", note)
+		}
+	}
+}
+
+// A Compose file the panel cannot read is still a Compose repository, and
+// saying so beats guessing the language from whatever else is lying around.
+func TestAnUnreadableComposeFileSaysSo(t *testing.T) {
+	d := Detect(tree(map[string]string{"compose.yaml": "services:\n  web:\n   - this: [is not"}))
+	if d.Builder != BuilderCompose {
+		t.Fatalf("builder is %q, want compose", d.Builder)
+	}
+	if len(d.Compose) != 0 {
+		t.Fatal("services were invented from a file that does not parse")
+	}
+	joined := strings.Join(d.Notes, " ")
+	if !strings.Contains(joined, "could not be read") {
+		t.Errorf("nothing says the file could not be read: %q", joined)
+	}
+}
+
+// A Compose file that the tree lists but never fetched used to reach the
+// converter as an empty string. Detection has to depend on the contents being
+// there, so a reader that stops fetching them fails here rather than in the UI.
+func TestComposeNeedsTheFileContents(t *testing.T) {
+	d := Detect(Tree{Files: []string{"compose.yaml"}, Contents: map[string]string{}})
+	if d.Builder != BuilderCompose {
+		t.Fatalf("builder is %q, want compose", d.Builder)
+	}
+	if len(d.Compose) != 0 {
+		t.Fatal("services appeared from a file with no contents")
+	}
+}
+
 func TestNodeFrameworks(t *testing.T) {
 	cases := []struct {
 		name      string

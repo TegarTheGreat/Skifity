@@ -546,8 +546,8 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 	}
 
 	var script string
-	switch {
-	case primaryIP == "":
+	switch primaryIP {
+	case "":
 		// Genuinely the first server: no cluster exists yet. The token is
 		// generated here and kept encrypted, so later servers can join without
 		// anyone reading it off a machine.

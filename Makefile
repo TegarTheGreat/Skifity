@@ -63,17 +63,17 @@ test-race: ## Run the Go tests with the race detector
 
 lint: lint-go lint-web i18n ## Run every linter
 
-lint-go: ## Vet the Go code, and run golangci-lint when it is installed
+lint-go: ## Vet the Go code, and run golangci-lint when it can read this module
 	go vet ./...
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint is not installed; ran go vet only"; \
-	fi
+	@./scripts/lint-go.sh
 
 lint-web: ## Lint and type-check the frontend
 	npm --prefix web run lint
-	npm --prefix web exec -- tsc -b
+	# `npm run` in the package directory, not `npm exec`: exec keeps the
+	# working directory it was called from, so tsc looked for a tsconfig.json
+	# at the repository root and `make check` failed on a file that is not
+	# supposed to exist.
+	npm --prefix web run typecheck
 
 i18n: ## Fail if any translation is missing in any language
 	npm --prefix web run check:i18n

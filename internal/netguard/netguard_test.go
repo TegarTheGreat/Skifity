@@ -56,8 +56,9 @@ func TestTheClientRefusesToReachTheMetadataService(t *testing.T) {
 	// name got there: a setting, a redirect, or a name that resolves to it.
 	client := Client(5 * time.Second)
 
-	_, err := client.Get("http://169.254.169.254/latest/meta-data/")
+	resp, err := client.Get("http://169.254.169.254/latest/meta-data/")
 	if err == nil {
+		resp.Body.Close()
 		t.Fatal("the panel connected to the cloud metadata service")
 	}
 	var blocked *Blocked
@@ -78,7 +79,8 @@ func TestTheClientStillReachesAnOrdinaryServer(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := Client(5 * time.Second).Get(server.URL); err == nil {
+	if resp, err := Client(5 * time.Second).Get(server.URL); err == nil {
+		resp.Body.Close()
 		t.Fatal("loopback was reachable, so the guard is not on the client at all")
 	}
 

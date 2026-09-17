@@ -180,11 +180,10 @@ func contains(values []int, v int) bool {
 	return false
 }
 
-// dueNow reports whether a schedule fires in the current minute.
+// DueNow reports whether a schedule fires in the minute now falls in.
 //
 // The scheduler runs once a minute and compares against the minute, so a backup
 // runs exactly once even if the tick is a few seconds late.
-// DueNow reports whether an expression matches a moment.
 func DueNow(expression string, now time.Time) bool {
 	schedule, err := ParseSchedule(expression)
 	if err != nil {

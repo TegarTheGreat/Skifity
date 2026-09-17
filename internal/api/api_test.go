@@ -522,13 +522,13 @@ func TestAnAppIsCreatedWithTheVariablesItWasGiven(t *testing.T) {
 	// And they are sealed like any other variable, not stored as they arrived.
 	for _, row := range rows {
 		if strings.Contains(row.Sealed, "postgres://") {
-			t.Fatalf("%s was stored in the clear", row.Variable.Key)
+			t.Fatalf("%s was stored in the clear", row.Key)
 		}
-		plaintext, err := h.keyring.Open(row.Sealed, variableContext(created.ID, row.Variable.Key))
+		plaintext, err := h.keyring.Open(row.Sealed, variableContext(created.ID, row.Key))
 		if err != nil {
-			t.Fatalf("open %s: %v", row.Variable.Key, err)
+			t.Fatalf("open %s: %v", row.Key, err)
 		}
-		if row.Variable.Key == "DATABASE_URL" && string(plaintext) != "postgres://db:5432/shop" {
+		if row.Key == "DATABASE_URL" && string(plaintext) != "postgres://db:5432/shop" {
 			t.Fatalf("DATABASE_URL came back as %q", plaintext)
 		}
 	}

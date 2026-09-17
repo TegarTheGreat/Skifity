@@ -9,6 +9,7 @@
     "build:only": "tsc -b && npm run clean && vite build",
     "preview": "vite preview",
     "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc -b",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "check:i18n": "node scripts/check-i18n.mjs",
     "test:e2e": "playwright test",

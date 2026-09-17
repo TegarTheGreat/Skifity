@@ -240,14 +240,15 @@ func resolveApp(ctx context.Context, client *Client, cfg Config, explicit string
 	}
 }
 
-// resolveTeam finds the team to work in.
+// ResolveTeam finds the team to work in.
 //
 // `skifity login` stores one, but a CLI authenticating from SKIFITY_TOKEN in a
 // CI job or an AI assistant's sandbox never logged in. Almost everybody has one
 // team, so asking which one is a question with a single possible answer.
-// ResolveTeam is exported because the MCP server needs exactly this: a token
-// created without a team, which is how CI and an assistant's sandbox are set
-// up, still has to find the one team it can act on.
+//
+// It is exported because the MCP server needs exactly this: a token created
+// without a team, which is how CI and an assistant's sandbox are set up, still
+// has to find the one team it can act on.
 func ResolveTeam(ctx context.Context, client *Client, cfg Config) (string, error) {
 	return resolveTeam(ctx, client, cfg)
 }

@@ -39,9 +39,14 @@ jobs:
             exit 1
           fi
 
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      # The same script `make lint-go` runs, so what CI checks and what a
+      # contributor can check are the same thing. LINT_STRICT=1 means it may
+      # not skip here: locally it explains itself and lets the rest of
+      # `make check` run, but a linter that quietly does not run is not one.
+      - name: Lint
+        env:
+          LINT_STRICT: "1"
+        run: ./scripts/lint-go.sh
 
       - name: Test
         run: go test ./...
@@ -84,7 +89,7 @@ jobs:
         run: npm run lint
 
       - name: Type-check
-        run: npx tsc -b
+        run: npm run typecheck
 
       - name: Build
         # build:only, not vite build: it also clears stale assets and copies

@@ -7,7 +7,7 @@ pass changed the conclusions, so what follows is the second pass.
 
 | Product | Orchestrator | Idle cost | Stars | State | Licence |
 |---|---|---|---|---|---|
-| Coolify | Docker / Swarm | 500 MB – 1.2 GB RAM, 5–7% CPU | ~51–59k | v4.0.0 stable **April 2026**, after four years of beta | Apache 2.0 |
+| Coolify | Docker (Swarm deprecated) | 500 MB – 1.2 GB RAM, 5–7% CPU | ~51–59k | v4.0.0 stable **April 2026**, after four years of beta | Apache 2.0 |
 | Dokploy | Docker Swarm | ~350 MB RAM, 0.8–1.5% CPU | ~26–36k | v0.28.x, **still pre-1.0** | Apache 2.0 + proprietary directories |
 | CapRover | Docker Swarm | light | ~13k | Stable since 2017, development slowed | Apache 2.0 |
 | Dokku | Docker + herokuish | very light | — | Mature, single host | MIT |
@@ -21,7 +21,8 @@ and workers, all running), no Kubernetes, and the security record below.
 
 **Dokploy** is the fastest-growing, and is lighter than Coolify by roughly 3x. It
 has **already adopted Railpack**, has **SSO/SAML**, which Coolify does not, and
-ships an AI Docker Compose generator. Multi-node stops at Swarm. Its licence is
+ships an AI Docker Compose generator. Multi-node stops at Swarm, and scaling
+stops at a Replicas field somebody sets by hand. Its licence is
 Apache 2.0 with proprietary directories carved out.
 
 **aaPanel is not in this category.** It is a cPanel/Plesk replacement — websites,
@@ -73,7 +74,7 @@ is not a bar any self-hosted panel has reached.
 * **Railway** — a visual canvas of services, variables shared across a project.
 * **Heroku** — detect the language and build with no Dockerfile.
 * **Cloudflare Workers** — scale-to-zero for idle apps.
-* **Coolify / Dokploy** — one-click templates, S3 backups, being genuinely self-hosted. Coolify's catalogue was the single most-cited reason people choose it, and at eight templates against 342 the gap was the largest we had. It is now 212, converted from that catalogue with every image resolved to a real version and verified against its registry, and the database wiring — which does not apply here — taken out. The catalogue is files rather than Go, which is how Coolify's got large in the first place.
+* **Coolify / Dokploy** — one-click templates, S3 backups, being genuinely self-hosted. Coolify's catalogue was the single most-cited reason people choose it, and at eight templates against 342 the gap was the largest we had. It is now 282, converted from that catalogue with every image resolved to a real version and verified against its registry, and the database wiring — which does not apply here — taken out. The catalogue is files rather than Go, which is how Coolify's got large in the first place.
 * **Kubernetes** — self-healing, rolling updates, rollback, node failover, for free.
 
 ## Where we are actually different
@@ -90,9 +91,38 @@ Ordered by how well the evidence supports it.
 2. **Footprint.** 35 MiB idle, measured, against Coolify's 500 MB–1.2 GB and
    Dokploy's ~350 MB. On the 1 GB VPS this category sells to, that is the
    difference between the panel being the problem and the panel being invisible.
-3. **Multi-node that is not Swarm.** Both leaders depend on Docker Swarm, which
-   is in maintenance. k3s gives rescheduling, node failure and rolling updates
-   as properties of the system rather than features of the panel.
+3. **Scaling is a property of the system, not a runbook.** This is stronger than
+   "multi-node that is not Swarm", and it is worth stating precisely because
+   the leaders' own documentation states the other side of it.
+
+   Coolify's scaling overview (read 2026-09-17) offers three paths: resize the
+   server, deploy the same image to several standalone servers, or put a
+   provider-managed load balancer in front. It says plainly: **"Coolify does not
+   create or manage that external load balancer for you"**, and lists what
+   remains the operator's: configuring the load balancer and its health checks,
+   securing traffic to it, keeping sessions and uploads available to every
+   instance, and **"monitoring capacity and deciding when to add or remove
+   servers"**. Two further limits: **an application with persistent storage
+   cannot use multi-server deployment at all**, and **Docker Swarm is now marked
+   Deprecated** — "continue only as a temporary legacy setup". Load balancing in
+   practice means hand-writing a Traefik file with the upstream IP addresses in
+   it. Dokploy's equivalent is a **Replicas** field: "set the number of instances
+   of your application that should be running".
+
+   Neither has autoscaling. Skifity has a HorizontalPodAutoscaler on a CPU or
+   memory target, scale-to-zero through KEDA with the ingress routed via its
+   interceptor so a sleeping app is woken rather than 503'd, and the HPA
+   suppressed when scale-to-zero is on so the two do not fight over one
+   Deployment. Rescheduling, node failure and rolling updates come from k3s
+   rather than from panel code.
+
+   And the list Coolify tells an operator to work through by hand before adding
+   a server — move sessions out of the container, share uploads, add a health
+   endpoint — is the list `ScalingReadiness` reads out of the app's own
+   configuration and reports, naming the variable that is wrong.
+
+   The honest limit is the same as everywhere else in this document: none of it
+   has run on a real cluster.
 4. **A config change does not rebuild.** The top Coolify complaint, answered by
    the build fingerprint (ADR-0007).
 5. **Built for assistants.** An MCP server in the same binary, and every failure
@@ -102,7 +132,7 @@ Ordered by how well the evidence supports it.
 
 * **Railpack is no longer a differentiator.** Dokploy already ships it.
 * **No SSO/SAML.** Dokploy has it.
-* **Templates: closed, but not by being better at templates.** 212 against 342, and ours are converted from theirs. What is genuinely ours is that every image names a version that was checked to exist, where more than half of Coolify's ship `latest`.
+* **Templates: closed, but not by being better at templates.** 282 against 342, and ours are converted from theirs. What is genuinely ours is that every image names a version that was checked to exist, where more than half of Coolify's ship `latest`.
 * **Kubernetes is a category mismatch, not only an advantage.** Comparison sites
   exclude k3s and Rancher from "self-hosted PaaS" as *"a different abstraction
   layer entirely"*, and one of the most-read 2026 guides is titled *"Best
@@ -130,3 +160,7 @@ Ordered by how well the evidence supports it.
 - https://resources.rework.com/tools/dev-tools/best-vercel-alternatives
 - https://medium.com/@allahverdiyev.tural/your-paas-bill-lied-to-you-the-real-cost-of-railway-render-fly-io-and-vercel-in-2026-8b74074014ce
 - https://www.aapanel.com/ and https://www.trustpilot.com/review/aapanel.com
+- https://coolify.io/docs/core/infrastructure/scaling/overview (read 2026-09-17)
+- https://coolify.io/docs/core/networking/proxy/traefik/load-balancing
+- https://docs.dokploy.com/docs/core/applications/advanced
+- https://northflank.com/blog/dokploy-vs-coolify

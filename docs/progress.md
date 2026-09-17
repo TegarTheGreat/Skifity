@@ -522,6 +522,14 @@ these four was that pattern as well.
   ordinary guard, that an admin may not remove an owner, had no test either and
   has one now.
 
+Two more in the same handler. Deleting a database asked which team it belonged
+to *after* the row was gone, so the deletion was recorded with no team — filed
+with the panel-wide events, which belong to no team by design, and shown in the
+audit log of every team that person is in rather than in the one whose database
+it was. And `dbsvc.Delete` removed the apps' database variables inside an
+`if err == nil`, so a query failure left apps holding a connection string to
+something that no longer exists, silently; it now says so.
+
 `internal/errdoc` also had no tests. The catalogue is the product's central
 promise — cause, impact and fix on every failure — and an entry missing one of
 those still compiles and still renders. A test now reads the file as source and

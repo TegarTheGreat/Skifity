@@ -438,6 +438,17 @@ func (h *harness) withCluster(c Cluster) {
 	})
 }
 
+// withDatabases rebuilds the harness's server with a database manager attached,
+// for the handlers that refuse to act without one.
+func (h *harness) withDatabases(m DatabaseManager) {
+	h.t.Helper()
+	h.server.Config.Handler = New(Options{
+		DB: h.db, Keyring: h.keyring, Auth: h.auth,
+		Hub: events.NewHub(16), Logger: slog.New(slog.DiscardHandler),
+		Databases: m,
+	})
+}
+
 func TestRemovingTheLastControlPlaneIsRefused(t *testing.T) {
 	// The guard used to count rows in one team's table. That is not how many
 	// nodes run the cluster: a panel installed by install.sh has no row for the

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -95,3 +96,53 @@ func TestAnAdminCannotRemoveAnOwner(t *testing.T) {
 // no test here, only the change: a failed read is now "not an owner" rather
 // than "carry on". A permission check that passes because a query failed is the
 // wrong way round even where nothing can currently make the query fail.
+
+// TestDeletingADatabaseIsAuditedAgainstItsTeam: which team a database belongs
+// to is resolved through the database's own row. Asking after the row is gone
+// returns nothing, so the deletion was recorded with no team at all — filed
+// with the panel-wide events, which belong to no team by design, and therefore
+// shown in the audit log of every team that person happens to be in.
+func TestDeletingADatabaseIsAuditedAgainstItsTeam(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	h.withDatabases(deletingDatabases{db: h.db})
+
+	record := store.Database{
+		EnvironmentID: acme.env.ID, Name: "shop-db", Slug: "shop-db",
+		Engine: "postgres", Status: "running",
+	}
+	if err := h.db.CreateDatabase(t.Context(), &record); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+
+	status, body := h.do(acme, http.MethodDelete, "/api/databases/"+record.ID, nil)
+	if status != http.StatusOK {
+		t.Fatalf("delete: %d %s", status, body)
+	}
+
+	events, err := h.db.ListAudit(t.Context(), acme.team.ID, "", "", 50)
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	for _, event := range events {
+		if event.Action != "database.deleted" || event.TargetID != record.ID {
+			continue
+		}
+		if event.TeamID != acme.team.ID {
+			t.Fatalf("the deletion was recorded against team %q, not %q", event.TeamID, acme.team.ID)
+		}
+		return
+	}
+	t.Fatalf("the team's audit log does not record the deletion: %+v", events)
+}
+
+// deletingDatabases is the smallest DatabaseManager that actually removes the
+// row, which is what makes the ordering above matter.
+type deletingDatabases struct {
+	DatabaseManager
+	db *store.DB
+}
+
+func (d deletingDatabases) Delete(ctx context.Context, databaseID string) error {
+	return d.db.DeleteDatabase(ctx, databaseID)
+}

@@ -109,6 +109,17 @@ func (s *Server) handleDeleteDatabase(w http.ResponseWriter, r *http.Request) {
 			WithStatus(http.StatusConflict))
 		return
 	}
+	// Which team this belongs to is resolved through the database's own row,
+	// so it has to be asked before that row is gone. It used to be asked
+	// afterwards, which meant the audit event for deleting a database — the one
+	// event nobody can afford to lose — was filed against no team at all, and
+	// the team's audit log never showed it.
+	teamID, err := s.db.TeamIDForDatabase(r.Context(), record.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+
 	if s.databases == nil {
 		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
 		return
@@ -117,7 +128,6 @@ func (s *Server) handleDeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	teamID, _ := s.db.TeamIDForDatabase(r.Context(), record.ID)
 	s.audit(r, teamID, "database.deleted", "database", record.ID, record.Name)
 	writeOK(w)
 }

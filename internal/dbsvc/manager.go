@@ -403,12 +403,24 @@ func (m *Manager) Delete(ctx context.Context, databaseID string) error {
 
 	// The apps that used it lose their variable, so they stop referring to
 	// something that no longer exists.
+	//
+	// A failure here is not fatal — the database still goes — but it leaves
+	// apps holding a connection string to nothing, so it is said out loud
+	// rather than swallowed.
 	links, err := m.db.ListLinksForDatabase(ctx, databaseID)
-	if err == nil {
-		for _, link := range links {
-			_ = m.db.DeleteVariable(ctx, link.AppID, link.VarName)
-			if m.deployer != nil {
-				_ = m.deployer.Sync(ctx, link.AppID)
+	if err != nil {
+		m.log.Warn("could not find the apps linked to this database; they keep a variable pointing at it",
+			"database", databaseID, "error", err)
+	}
+	for _, link := range links {
+		if err := m.db.DeleteVariable(ctx, link.AppID, link.VarName); err != nil {
+			m.log.Warn("could not remove a linked app's database variable",
+				"database", databaseID, "app", link.AppID, "error", err)
+		}
+		if m.deployer != nil {
+			if err := m.deployer.Sync(ctx, link.AppID); err != nil {
+				m.log.Warn("could not roll out the removal of a database variable",
+					"database", databaseID, "app", link.AppID, "error", err)
 			}
 		}
 	}

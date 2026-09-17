@@ -1,12 +1,21 @@
 import * as React from "react"
 import { cn } from "cn"
 
+/**
+ * min-w-0 is not decoration.
+ *
+ * A card is nearly always a grid or flex item, and such an item will not go
+ * below its min-content width unless it is told it may. A repository URL has no
+ * space in it, so one card of three made the whole page 747px wide on a 375px
+ * phone — and the truncate that was supposed to prevent exactly that never got
+ * the chance to apply.
+ */
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        "flex min-w-0 flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
         className
       )}
       {...props}

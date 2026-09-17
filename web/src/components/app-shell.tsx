@@ -96,7 +96,13 @@ export function AppShell() {
         {t("common.skipToContent")}
       </a>
       <AppSidebar />
-      <SidebarInset>
+      {/*
+        min-w-0 is load-bearing. A flex item's automatic minimum size is its
+        min-content width, so without this the inset refuses to be narrower
+        than the widest thing in the header — and the whole page scrolls
+        sideways by exactly that difference. It was 7px on a 768px tablet.
+      */}
+      <SidebarInset className="min-w-0">
         <Header onOpenPalette={() => setPaletteOpen(true)} />
         <main id="content" tabIndex={-1} className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
           {/*
@@ -297,15 +303,21 @@ function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
 
       <Crumbs />
 
+      {/*
+        The label appears at lg rather than sm because what decides whether it
+        fits is the space beside the sidebar, not the width of the window: at
+        768px the sidebar has already taken 256 of it.
+      */}
       <Button
         variant="outline"
         size="sm"
         onClick={onOpenPalette}
+        aria-label={t("nav.commandPalette")}
         className="ml-auto gap-2 text-muted-foreground"
       >
         <SearchIcon className="size-4" />
-        <span className="hidden sm:inline">{t("nav.commandPalette")}</span>
-        <KbdGroup className="hidden sm:flex">
+        <span className="hidden lg:inline">{t("nav.commandPalette")}</span>
+        <KbdGroup className="hidden lg:flex">
           <Kbd>⌘</Kbd>
           <Kbd>K</Kbd>
         </KbdGroup>

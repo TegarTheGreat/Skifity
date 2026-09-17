@@ -128,7 +128,16 @@ export function TemplatesPage() {
                     className="flex h-full flex-col transition-colors hover:border-primary/40"
                   >
                     <CardHeader>
-                      <div className="flex items-start gap-3">
+                      {/*
+                        min-w-0 on the row, not only on the text inside it.
+                        shadcn's CardHeader is a grid, and a grid item defaults
+                        to `min-width: auto`, which means "never narrower than
+                        my content" — so `truncate` further down never applied
+                        and "Calibre Web Automated Book Downloader" pushed the
+                        card 92px past the side of a 375px screen. Measured, not
+                        guessed: the row was 426px wide inside a 341px cell.
+                      */}
+                      <div className="flex min-w-0 items-start gap-3">
                         {/* The name is right beside it, so this is decoration
                             and a screen reader should skip it. */}
                         <span
@@ -138,7 +147,16 @@ export function TemplatesPage() {
                           {template.name.slice(0, 1).toUpperCase()}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
+                          {/*
+                            min-w-0 again, on the row as well as on its parent.
+                            A flex item will not shrink below its content unless
+                            every flex ancestor says it may, so without this the
+                            `truncate` below never applies: "Calibre Web
+                            Automated Book Downloader" pushed the card 92px past
+                            the side of a 375px screen, and the whole page moved
+                            sideways under a thumb that meant to scroll down.
+                          */}
+                          <div className="flex min-w-0 items-start justify-between gap-2">
                             <CardTitle className="truncate text-base">{template.name}</CardTitle>
                             {template.beta && (
                               <Badge variant="outline" className="text-[10px]">

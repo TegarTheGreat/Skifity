@@ -44,7 +44,12 @@ function BreadcrumbLink({
   return (
     <Comp
       data-slot="breadcrumb-link"
-      className={cn("transition-colors hover:text-foreground", className)}
+      // min-h-6: a breadcrumb is a link people follow back, and at the text's
+      // own height it is a 20px target on a phone — under the WCAG 2.2 minimum.
+      className={cn(
+        "inline-flex min-h-6 items-center transition-colors hover:text-foreground",
+        className
+      )}
       {...props}
     />
   )
@@ -57,7 +62,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
       role="link"
       aria-disabled="true"
       aria-current="page"
-      className={cn("font-normal text-foreground", className)}
+      className={cn("inline-flex min-h-6 items-center font-normal text-foreground", className)}
       {...props}
     />
   )

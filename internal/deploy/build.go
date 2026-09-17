@@ -26,6 +26,11 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 		return "", errdoc.ClusterUnreachable(nil)
 	}
 
+	// Held for the whole build, including the push. The registry sweep takes
+	// the same lock exclusively, so it never deletes a blob out from under a
+	// layer that is still being written.
+	defer d.cluster.BeginBuild()()
+
 	// The registry and the builder are installed on first use, which is what
 	// keeps a fresh install small.
 	d.appendLog(ctx, deployment.ID, "Preparing the builder.")

@@ -32,6 +32,12 @@ type Cluster struct {
 	// installMu serialises component installation, so two apps enabling
 	// scale-to-zero at the same moment do not both install KEDA.
 	installMu sync.Mutex
+
+	// registryMu keeps the registry sweep and a build apart. Builds hold it
+	// for reading, so any number run at once; the sweep holds it for writing,
+	// because deleting a blob while a push is in flight is the one thing the
+	// registry's own documentation says will corrupt an image.
+	registryMu sync.RWMutex
 }
 
 // New builds a Cluster.

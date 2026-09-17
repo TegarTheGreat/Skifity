@@ -116,7 +116,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 	go server.Background(background)
-	go runScheduler(background, backups, log)
+	go runScheduler(background, backups, clusterAdapter, log)
 	go watcher.Run(background)
 
 	httpServer := &http.Server{
@@ -264,7 +264,7 @@ func markInterruptedDeployments(ctx context.Context, db *store.DB, log *slog.Log
 }
 
 // runScheduler fires scheduled backups once a minute.
-func runScheduler(ctx context.Context, backups *backup.Manager, log *slog.Logger) {
+func runScheduler(ctx context.Context, backups *backup.Manager, c *cluster.Cluster, log *slog.Logger) {
 	// Align to the start of the next minute so a schedule of "0 3 * * *" fires
 	// at 03:00 rather than at whatever second the panel happened to start.
 	timer := time.NewTimer(time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)))
@@ -280,6 +280,12 @@ func runScheduler(ctx context.Context, backups *backup.Manager, log *slog.Logger
 	defer ticker.Stop()
 	for {
 		backups.RunScheduled(ctx)
+		// Maintenance is on the same minute tick rather than a timer of its
+		// own, because "due" has to survive a restart: a panel restarted daily
+		// would never reach a weekly timer, and the disk would fill anyway.
+		if c != nil {
+			c.MaintainRegistry(ctx)
+		}
 		select {
 		case <-ctx.Done():
 			return

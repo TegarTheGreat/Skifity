@@ -104,6 +104,46 @@ func (db *DB) SlugOwnerInEnvironment(ctx context.Context, envID, slug string) (s
 	return kind, nil
 }
 
+// ImagesWorthKeeping returns the images the panel must not delete, keyed by the
+// registry repository they live in.
+//
+// An image is worth keeping when something could still need it: the one an app
+// is running now, and the ones behind the deployments it could be rolled back
+// to. perApp bounds the second part, and should match the Deployment's
+// revision history, because a rollback further back than Kubernetes remembers
+// is not offered anyway.
+//
+// A repository with nothing in the result is an app that no longer exists, and
+// the sweep takes all of it.
+func (db *DB) ImagesWorthKeeping(ctx context.Context, perApp int) ([]string, error) {
+	if perApp < 1 {
+		perApp = 1
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT image FROM (
+			SELECT d.image AS image,
+			       ROW_NUMBER() OVER (PARTITION BY d.app_id ORDER BY d.number DESC) AS rn
+			FROM deployments d
+			WHERE d.image <> ''
+		) WHERE rn <= ?
+		UNION
+		SELECT image FROM apps WHERE image <> ''`, perApp)
+	if err != nil {
+		return nil, fmt.Errorf("list the images worth keeping: %w", err)
+	}
+	defer rows.Close()
+
+	out := []string{}
+	for rows.Next() {
+		var image string
+		if err := rows.Scan(&image); err != nil {
+			return nil, err
+		}
+		out = append(out, image)
+	}
+	return out, rows.Err()
+}
+
 // ListAppsByRepo finds every app built from a repository, which is how a webhook
 // knows what to deploy.
 func (db *DB) ListAppsByRepo(ctx context.Context, repoURL string) ([]App, error) {

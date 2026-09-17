@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -741,5 +742,67 @@ func TestAnAppAndADatabaseCannotShareAName(t *testing.T) {
 	}
 	if owner, err := db.SlugOwnerInEnvironment(ctx, other.ID, "cache"); err != nil || owner != "" {
 		t.Fatalf("a name used in another environment reported %q (%v), want it free", owner, err)
+	}
+}
+
+func TestImagesWorthKeepingBoundsTheHistory(t *testing.T) {
+	// The registry sweep deletes what is not in this list, so anything missing
+	// here is an image somebody could still want and will not have.
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web", Replicas: 1}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	for i := 1; i <= 15; i++ {
+		d := Deployment{AppID: app.ID, Image: fmt.Sprintf("registry:5000/acme-prod/web:v%d", i)}
+		if err := db.CreateDeployment(ctx, &d); err != nil {
+			t.Fatalf("CreateDeployment %d: %v", i, err)
+		}
+	}
+
+	keep, err := db.ImagesWorthKeeping(ctx, 10)
+	if err != nil {
+		t.Fatalf("ImagesWorthKeeping: %v", err)
+	}
+	if len(keep) != 10 {
+		t.Fatalf("%d images kept, want the last 10", len(keep))
+	}
+
+	held := map[string]bool{}
+	for _, image := range keep {
+		held[image] = true
+	}
+	// The newest is kept and the oldest is not: a rollback further back than
+	// the Deployment's own revision history is not offered, so the image for
+	// it would be kept for nobody.
+	if !held["registry:5000/acme-prod/web:v15"] {
+		t.Error("the newest image is not kept, so the running app's image would be deleted")
+	}
+	if held["registry:5000/acme-prod/web:v1"] {
+		t.Error("an image from further back than the rollback history is kept for nobody")
+	}
+
+	// An app's own current image is kept even when no deployment row carries
+	// it, which is the case for an app created from a prebuilt image.
+	other := App{EnvironmentID: env.ID, Name: "api", Slug: "api", Image: "nginx:1.27", Replicas: 1}
+	if err := db.CreateApp(ctx, &other); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+	keep, err = db.ImagesWorthKeeping(ctx, 10)
+	if err != nil {
+		t.Fatalf("ImagesWorthKeeping: %v", err)
+	}
+	found := false
+	for _, image := range keep {
+		if image == "nginx:1.27" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("an app's own image is not kept when no deployment row carries it")
 	}
 }

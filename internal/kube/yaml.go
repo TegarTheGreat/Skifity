@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -262,6 +263,40 @@ func (c *Client) WaitForDeployment(ctx context.Context, namespace, name string, 
 				return fmt.Errorf("%s/%s did not appear within %s: %w", namespace, name, timeout, err)
 			}
 			return fmt.Errorf("%s/%s has no ready instances after %s", namespace, name, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// WaitForJob blocks until a Job has either succeeded or failed.
+//
+// A Job is not a Deployment: it is not "ready", it finishes, and the difference
+// between finishing and failing is the whole answer the caller wants.
+func (c *Client) WaitForJob(ctx context.Context, namespace, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		job, err := c.clientset.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+		switch {
+		case err == nil && job.Status.Succeeded > 0:
+			return nil
+		case err == nil && job.Status.Failed > 0:
+			message := "it exited with an error"
+			for _, cond := range job.Status.Conditions {
+				if cond.Type == batchv1.JobFailed && cond.Message != "" {
+					message = cond.Message
+				}
+			}
+			return fmt.Errorf("%s/%s failed: %s", namespace, name, message)
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return fmt.Errorf("%s/%s did not appear within %s: %w", namespace, name, timeout, err)
+			}
+			return fmt.Errorf("%s/%s had not finished after %s", namespace, name, timeout)
 		}
 		select {
 		case <-ctx.Done():

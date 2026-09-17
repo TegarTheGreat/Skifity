@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 
 import { CommandPalette } from "@/components/command-palette"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -74,6 +75,7 @@ import type { Project, Server } from "@/lib/types"
  */
 export function AppShell() {
   const { paletteOpen, setPaletteOpen } = usePaletteShortcut()
+  const location = useLocation()
 
   return (
     <SidebarProvider>
@@ -81,7 +83,15 @@ export function AppShell() {
       <SidebarInset>
         <Header onOpenPalette={() => setPaletteOpen(true)} />
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-          <Outlet />
+          {/*
+            Inside the shell rather than around it, so a page that throws
+            leaves the sidebar, the header and the command palette working and
+            the person can simply go somewhere else. The path is the reset key:
+            navigating away is what clears it.
+          */}
+          <ErrorBoundary resetKey={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </SidebarInset>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

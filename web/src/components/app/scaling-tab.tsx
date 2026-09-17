@@ -175,6 +175,19 @@ export function ScalingTab({ app }: { app: App }) {
             />
           </label>
 
+          {/*
+            Said out loud rather than left for somebody to discover. An app that
+            can stop when idle is woken and scaled by the requests waiting for
+            it, so the CPU and memory targets above stop being what decides:
+            leaving two fields on screen that no longer do anything is the kind
+            of quiet lie this panel is meant not to tell.
+          */}
+          {form.autoscale && form.scale_to_zero && (
+            <p className="text-xs text-muted-foreground">
+              {t("scaling.scaleToZeroUsesRequests")}
+            </p>
+          )}
+
           <p className="text-xs text-muted-foreground">{t("scaling.spreadHelp")}</p>
 
           {save.error != null && <ErrorDisplay error={save.error} compact />}

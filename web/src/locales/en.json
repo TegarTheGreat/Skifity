@@ -546,7 +546,8 @@
       "productivity": "Productivity",
       "security": "Security",
       "storage": "Storage and files"
-    }
+    },
+    "installWhere": "Where to install it"
   },
   "settings": {
     "title": "Settings",

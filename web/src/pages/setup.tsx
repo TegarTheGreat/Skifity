@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CheckIcon, ClipboardIcon, DownloadIcon, KeyRoundIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -29,9 +29,27 @@ import type { Team, User } from "@/lib/types"
  * cannot be skipped by navigating away, because a panel whose master key exists
  * only on one disk is one failed disk away from every secret being unreadable.
  */
+/**
+ * setupTokenFromLink reads the token the installer put in the link it printed.
+ *
+ * The installer finishes with a URL and a forty-character token, and the first
+ * thing anybody does with a self-hosted panel is copy that token across by
+ * hand. The link carries it instead, in the fragment rather than the query
+ * string: a fragment is never sent to the server, so it cannot end up in an
+ * access log, a proxy, or a Referer header on the way to somewhere else.
+ *
+ * It is read once, during render, and taken out of the address bar immediately
+ * afterwards so a screen share or a bookmark does not keep it.
+ */
+function setupTokenFromLink(): string {
+  if (typeof window === "undefined") return ""
+  const fragment = window.location.hash.replace(/^#/, "")
+  return new URLSearchParams(fragment).get("token")?.trim() ?? ""
+}
+
 export function SetupPage({ onComplete }: { onComplete: () => void }) {
   const { t } = useTranslation()
-  const [token, setToken] = useState("")
+  const [token, setToken] = useState(setupTokenFromLink)
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
   const [password, setPassword] = useState("")
@@ -39,6 +57,14 @@ export function SetupPage({ onComplete }: { onComplete: () => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
+
+  // Only the address bar is touched here; the value itself was read during
+  // render, because state that follows other state is derived, not copied in.
+  useEffect(() => {
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search)
+    }
+  }, [])
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -96,7 +122,10 @@ export function SetupPage({ onComplete }: { onComplete: () => void }) {
                   value={token}
                   onChange={(event) => setToken(event.target.value)}
                   required
-                  autoFocus
+                  // The cursor belongs in the first field somebody still has to
+                  // fill in, which is this one only when the link did not
+                  // carry the token.
+                  autoFocus={token === ""}
                   autoComplete="off"
                   spellCheck={false}
                   className="font-mono"
@@ -113,6 +142,7 @@ export function SetupPage({ onComplete }: { onComplete: () => void }) {
                     id="name"
                     value={name}
                     onChange={(event) => setName(event.target.value)}
+                    autoFocus={token !== ""}
                     autoComplete="name"
                   />
                 </Field>

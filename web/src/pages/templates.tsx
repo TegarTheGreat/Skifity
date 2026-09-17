@@ -255,6 +255,7 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
   })
 
   const projectItems = useMemo(() => projects.data?.items ?? [], [projects.data])
+  // See below: `chosen` is what the form actually installs into.
   const environmentQueries = useQueries({
     queries: projectItems.map((project) => ({
       queryKey: ["environments", project.id],
@@ -272,10 +273,18 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
     return out
   }, [environmentQueries, projectItems])
 
+  // One click means one click. Almost every panel has exactly one environment —
+  // first-run setup makes it — and the form opened with the picker empty and
+  // the button greyed out, so "install" started with a decision that had one
+  // possible answer. Derived rather than copied into state by an effect: when
+  // there are several, nothing is picked for you, because installing into the
+  // wrong environment is not a mistake anybody notices straight away.
+  const chosen = environmentId || (environments.length === 1 ? environments[0].environment.id : "")
+
   const install = useMutation({
     mutationFn: () =>
       api.post<Installed>(`/api/templates/${template.id}/install`, {
-        environment_id: environmentId,
+        environment_id: chosen,
         name: name.trim(),
         // A generated value is filled in by the panel, so anything left empty
         // is sent empty rather than as an accidental literal.
@@ -294,7 +303,7 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
           : t("templates.installedNote"),
       )
       onClose()
-      const project = environments.find((entry) => entry.environment.id === environmentId)?.project
+      const project = environments.find((entry) => entry.environment.id === chosen)?.project
       // The notes ride along so the shell can show them where you land: they
       // are the steps Skifity cannot do for you, and a dialog you just closed
       // is the one place they are of no use.
@@ -324,11 +333,11 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
         >
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="install-environment">{t("projects.environments")}</FieldLabel>
+              <FieldLabel htmlFor="install-environment">{t("templates.installWhere")}</FieldLabel>
               {environments.length === 0 ? (
                 <FieldDescription>{t("projects.emptyHelp")}</FieldDescription>
               ) : (
-                <Select value={environmentId} onValueChange={setEnvironmentId}>
+                <Select value={chosen} onValueChange={setEnvironmentId}>
                   <SelectTrigger id="install-environment">
                     <SelectValue placeholder={t("projects.environments")} />
                   </SelectTrigger>
@@ -385,7 +394,7 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
             <Button type="button" variant="ghost" onClick={onClose}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!environmentId || install.isPending}>
+            <Button type="submit" disabled={!chosen || install.isPending}>
               {install.isPending && <Spinner />}
               {install.isPending ? t("templates.installing") : t("templates.install")}
             </Button>

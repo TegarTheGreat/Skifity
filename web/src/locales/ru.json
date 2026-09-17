@@ -572,7 +572,8 @@
       "productivity": "Продуктивность",
       "security": "Безопасность",
       "storage": "Хранилище и файлы"
-    }
+    },
+    "installWhere": "Куда установить"
   },
   "settings": {
     "title": "Настройки",

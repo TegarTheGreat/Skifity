@@ -548,7 +548,8 @@
       "productivity": "उत्पादकता",
       "security": "सुरक्षा",
       "storage": "भंडारण और फ़ाइलें"
-    }
+    },
+    "installWhere": "इसे कहाँ इंस्टॉल करें"
   },
   "settings": {
     "title": "सेटिंग्स",

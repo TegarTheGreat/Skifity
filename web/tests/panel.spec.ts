@@ -41,7 +41,16 @@ test("first-run setup creates an account and shows the recovery key once", async
   // With no account, every route is the setup screen.
   await expect(page.getByLabel(/setup token/i)).toBeVisible()
 
-  await page.getByLabel(/setup token/i).fill(setupToken())
+  // The installer prints a link with the token in it, because copying a
+  // forty-character string out of a terminal is the most annoying minute of
+  // installing anything. It travels in the fragment, which a browser never
+  // sends to a server, and the page takes it out of the address bar once it
+  // has read it — so a bookmark or a screen share does not keep it.
+  const token = setupToken()
+  await page.goto(`/setup#token=${token}`)
+  await expect(page.getByLabel(/setup token/i)).toHaveValue(token)
+  expect(new URL(page.url()).hash, "the token is still in the address bar").toBe("")
+
   await page.getByLabel(/^email$/i).fill(EMAIL)
   await page.getByLabel(/your name/i).fill("Owner")
   await page.getByLabel(/^password$/i).fill(PASSWORD)

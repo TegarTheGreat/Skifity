@@ -481,6 +481,29 @@ code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $MEMBER
 [ "$code" = "403" ] || fail "a member read the panel's settings, answering $code"
 pass "a member can use the panel and cannot run it"
 
+# --- the panel hands out its own binary -------------------------------------
+#
+# One file is the panel, the CLI and the MCP server, so the panel can serve the
+# thing somebody wants on their PATH. The installer fetches it from here rather
+# than from a releases page that does not exist, which is why this checks that
+# what comes back actually runs and is the same version.
+
+code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/cli/download")
+[ "$code" = "200" ] || fail "downloading the CLI answered $code before signing in, and the installer has no account yet"
+pass "the CLI can be downloaded before there is anybody to authenticate"
+
+curl -fsS "$BASE/api/cli/download" -o "$WORKDIR/skifity-downloaded" || fail "the CLI could not be downloaded"
+chmod +x "$WORKDIR/skifity-downloaded"
+DOWNLOADED=$("$WORKDIR/skifity-downloaded" version 2>/dev/null || true)
+RUNNING=$("$BINARY" version)
+[ -n "$DOWNLOADED" ] || fail "what the panel served does not run"
+[ "$DOWNLOADED" = "$RUNNING" ] || fail "the panel served $DOWNLOADED while running $RUNNING"
+pass "what it serves runs, and is the version the panel is running"
+
+curl -fsS "$BASE/api/meta" | grep -q '"cli_platform":"' \
+  || fail "the panel does not say which platform its binary is for"
+pass "the panel says which platform that binary is for"
+
 # Logging out must end the session.
 "$BINARY" logout >/dev/null
 printf '\nAll panel smoke checks passed.\n\n'

@@ -26,6 +26,12 @@ var openOnPurpose = map[string]string{
 	"POST /api/auth/login":  "signing in is how credentials are obtained",
 	"POST /api/auth/logout": "clearing a cookie nobody has is a no-op, not a secret",
 
+	// The CLI is the same binary as the panel. There is nothing in it that is
+	// not in the source, the installer fetches it before any account exists,
+	// and requiring a token to download the thing you obtain tokens with is a
+	// circle.
+	"GET /api/cli/download": "a public binary, needed before there is anybody to authenticate",
+
 	// A webhook is authenticated by the signature in its body against the
 	// secret of the source it names, not by a session: the sender is GitHub,
 	// which has no account here.

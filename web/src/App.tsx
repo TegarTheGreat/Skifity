@@ -93,6 +93,15 @@ export function App() {
             }
           />
           <Route path="activity" element={<ActivityPage />} />
+          {/*
+            The installer prints a link to /setup, and the gates above are what
+            serve that page — they are not routes. Once there is an account the
+            gates are gone, so the person who just finished setup was left on a
+            path with no route behind it, looking at "Not found". Same for
+            /login, which a browser will happily offer from history.
+          */}
+          <Route path="setup" element={<Navigate to="/" replace />} />
+          <Route path="login" element={<Navigate to="/" replace />} />
           <Route path="account" element={<AccountPage />} />
           <Route path="settings" element={<SettingsRoute />} />
           <Route path="*" element={<NotFoundPage />} />

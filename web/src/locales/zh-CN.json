@@ -536,7 +536,8 @@
       "productivity": "效率",
       "security": "安全",
       "storage": "存储与文件"
-    }
+    },
+    "installWhere": "装到哪里"
   },
   "settings": {
     "title": "设置",

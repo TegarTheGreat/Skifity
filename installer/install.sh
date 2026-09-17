@@ -20,6 +20,7 @@
 #   SKIFITY_CHANNEL       k3s channel (default: stable)
 #   SKIFITY_POD_NETWORK   wireguard-native or vxlan; default: wireguard-native
 #                         when the kernel has the module, vxlan otherwise
+#   SKIFITY_CLI_URL       where to get the CLI when the panel cannot serve it
 #   SKIFITY_SKIP_K3S      set to 1 when k3s is already installed and configured
 #   SKIFITY_ASSUME_YES    set to 1 to answer every prompt with yes
 #
@@ -424,7 +425,7 @@ choose_hostname() {
 		PANEL_HOST="$SKIFITY_DOMAIN"
 		PANEL_SCHEME="https"
 		ok "The panel will answer on $PANEL_HOST"
-		note "Point an A record for $PANEL_HOST at $PUBLIC_IP before opening it."
+		check_domain_points_here
 	else
 		# sslip.io resolves any address embedded in the name, so a brand new
 		# server has a working hostname without anybody buying a domain.
@@ -434,6 +435,34 @@ choose_hostname() {
 		note "Add your own domain later in Settings, and HTTPS is turned on for it automatically."
 	fi
 	PUBLIC_URL="${PANEL_SCHEME}://${PANEL_HOST}"
+}
+
+# check_domain_points_here says so, now, when the A record is missing.
+#
+# A certificate is issued by Let's Encrypt answering a challenge at this
+# hostname, so a record that does not point here means no certificate — and the
+# operator finds that out ten minutes later, in a cert-manager log, as a
+# browser warning on a page they cannot open. Saying it here costs one lookup.
+#
+# It warns rather than stops: DNS takes minutes to propagate and it is entirely
+# reasonable to install first and point the record afterwards.
+check_domain_points_here() {
+	have getent || {
+		note "Point an A record for $PANEL_HOST at $PUBLIC_IP before opening it."
+		return 0
+	}
+	resolved=$(getent ahostsv4 "$PANEL_HOST" 2>/dev/null | awk '{print $1}' | head -1)
+	if [ -z "$resolved" ]; then
+		warn "$PANEL_HOST does not resolve to anything yet."
+		note "Create an A record for $PANEL_HOST pointing at $PUBLIC_IP. Until it exists,"
+		note "Let's Encrypt cannot issue a certificate and the panel has no address to answer on."
+	elif [ "$resolved" != "$PUBLIC_IP" ]; then
+		warn "$PANEL_HOST resolves to $resolved, and this server is $PUBLIC_IP."
+		note "Point the A record at $PUBLIC_IP. Until it does, Let's Encrypt will refuse the"
+		note "certificate, because the challenge is answered by whatever is at $resolved."
+	else
+		ok "$PANEL_HOST already points at this server"
+	fi
 }
 
 install_cert_manager() {
@@ -535,36 +564,51 @@ If the image could not be pulled, check that ${IMAGE} exists and that this serve
 install_cli() {
 	step "Installing the command line tool"
 
-	# The panel's image is distroless: no shell, no cat, no tar, so the binary
-	# cannot be copied out of the running container. It is downloaded instead,
-	# at the same version the panel is running.
-	case "$ARCH" in
-	x86_64 | amd64) cli_arch=amd64 ;;
-	aarch64 | arm64) cli_arch=arm64 ;;
-	*) cli_arch="" ;;
-	esac
-
-	if [ -n "$cli_arch" ]; then
-		cli_url="${SKIFITY_CLI_BASE:-https://github.com/skifity/skifity/releases/latest/download}/skifity-linux-${cli_arch}"
-		[ "$VERSION" = "latest" ] ||
-			cli_url="${SKIFITY_CLI_BASE:-https://github.com/skifity/skifity/releases/download/v${VERSION}}/skifity-linux-${cli_arch}"
-		if curl -fsSL "$cli_url" -o /usr/local/bin/skifity.new 2>>"$LOG_FILE"; then
-			chmod 0755 /usr/local/bin/skifity.new
-			mv /usr/local/bin/skifity.new /usr/local/bin/skifity
-			ok "skifity is on your PATH"
-			return 0
-		fi
-		rm -f /usr/local/bin/skifity.new
+	# From the panel that is now running on this machine, not from a releases
+	# page. One binary is the panel, the CLI and the MCP server, so the file
+	# answering this request is the file we want on the PATH — always present,
+	# always the matching version, and it needs no internet at all. It used to
+	# be fetched from github.com/skifity/skifity, which does not exist, so
+	# every install ended with a warning and a link to nothing.
+	#
+	# The panel's image is distroless, so the binary cannot simply be copied
+	# out of the container: there is no shell, no cat and no tar in there.
+	port=$(kubectl -n "$NAMESPACE" get svc skifity-panel -o jsonpath='{.spec.ports[0].nodePort}' 2>>"$LOG_FILE" || true)
+	if [ -n "$port" ] &&
+		curl -fsS --max-time 120 "http://127.0.0.1:${port}/api/cli/download" -o /usr/local/bin/skifity.new 2>>"$LOG_FILE" &&
+		[ -s /usr/local/bin/skifity.new ]; then
+		chmod 0755 /usr/local/bin/skifity.new
+		mv /usr/local/bin/skifity.new /usr/local/bin/skifity
+		ok "skifity is on your PATH, from the panel itself"
+		return 0
 	fi
+	rm -f /usr/local/bin/skifity.new
 
-	warn "Could not download the command line tool; the panel itself is unaffected."
-	note "Get it later from https://github.com/skifity/skifity/releases, or use the panel."
+	# An override for an air-gapped install that mirrors the binaries itself.
+	if [ -n "${SKIFITY_CLI_URL:-}" ] &&
+		curl -fsSL --max-time 120 "$SKIFITY_CLI_URL" -o /usr/local/bin/skifity.new 2>>"$LOG_FILE" &&
+		[ -s /usr/local/bin/skifity.new ]; then
+		chmod 0755 /usr/local/bin/skifity.new
+		mv /usr/local/bin/skifity.new /usr/local/bin/skifity
+		ok "skifity is on your PATH, from ${SKIFITY_CLI_URL}"
+		return 0
+	fi
+	rm -f /usr/local/bin/skifity.new
+
+	warn "Could not install the command line tool; the panel itself is unaffected."
+	note "The panel serves it: curl -fsS ${PUBLIC_URL}/api/cli/download -o /usr/local/bin/skifity && chmod +x /usr/local/bin/skifity"
 }
 
 finish() {
 	printf '\n%s%sSkifity is installed.%s\n\n' "$BOLD" "$GREEN" "$RESET"
-	printf '  Open       %s%s/setup%s\n' "$BOLD" "$PUBLIC_URL" "$RESET"
-	printf '  Token      %s%s%s\n\n' "$BOLD" "$SETUP_TOKEN" "$RESET"
+	# The token travels in the fragment, not the query string: a fragment is
+	# never sent to the server, so opening this link cannot put the token into
+	# an access log, a proxy or a Referer header. The page fills the field in
+	# and clears the address bar.
+	printf '  %sOpen this and the token is already filled in:%s\n\n' "$BOLD" "$RESET"
+	printf '    %s%s/setup#token=%s%s\n\n' "$BOLD" "$PUBLIC_URL" "$SETUP_TOKEN" "$RESET"
+	printf '  Or open %s/setup and paste it:\n' "$PUBLIC_URL"
+	printf '    %s\n\n' "$SETUP_TOKEN"
 	printf '  The token is also at %s on this server.\n' "$CONFIG_DIR/setup-token"
 	printf '  It creates the first account and then stops working.\n\n'
 

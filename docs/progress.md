@@ -1397,6 +1397,58 @@ WireGuard fallback before it: the feature was the settings page.
 `verify.sh` now checks the first of these where it means something — a fresh
 install must list the machine it is running on, and must mark it adopted.
 
+## Phase 37 — the first command, and the first click
+
+### The link the installer prints now does the copying
+
+Every self-hosted install ends the same way: a URL, a forty-character token, and
+a minute of moving one into the other. The installer prints a link with the
+token in it instead. In the `#fragment`, deliberately — a fragment is never sent
+to a server, so opening it cannot put the token into an access log, a proxy or a
+`Referer` header on the way somewhere else. The page reads it during render and
+clears the address bar, so a bookmark or a screen share does not keep it. The
+plain URL and the token are still printed underneath.
+
+**Writing the test for that found an older bug.** The installer has always
+printed `<url>/setup`, and `/setup` is not a route: the setup screen is a gate
+in front of the router, so once an account exists the gate is gone and the path
+has nothing behind it. Everybody who followed the printed link finished first-run
+setup and landed on "Not found". `/setup` and `/login` now redirect to the
+overview.
+
+### The panel hands out its own binary
+
+One file is the panel, the CLI and the MCP server, so the file answering a
+request is the file somebody wants on their PATH. `GET /api/cli/download`
+streams it.
+
+The installer used to fetch the CLI from `github.com/skifity/skifity/releases`,
+which does not exist, so every install ended with "could not download the
+command line tool" and a link to nothing. It now asks the panel it has just
+started: always present, always the matching version — a CLI one release behind
+its panel is a confusing afternoon — and no internet needed at all.
+`SKIFITY_CLI_URL` remains for an air-gapped mirror. `make smoke` downloads it,
+runs it, and fails if the version differs from the panel's.
+
+### The domain nobody pointed yet
+
+`SKIFITY_DOMAIN` used to be taken at its word. A record that does not point at
+this server means Let's Encrypt cannot answer the challenge, and the operator
+learns that ten minutes later from a cert-manager log, as a browser warning on
+a page they cannot open. One `getent` lookup at install time says it now, with
+the address the record should have. A warning rather than a stop: installing
+first and pointing DNS afterwards is entirely reasonable.
+
+### One click meant one click and a decision
+
+The template install dialog opened with the environment picker empty and the
+button greyed out. Almost every panel has exactly one environment — setup makes
+it — so the one-click catalogue began with a choice that had a single possible
+answer. It is preselected when there is exactly one, derived during render
+rather than copied into state, and left empty when there are several, because
+installing into the wrong environment is not a mistake anybody notices
+straight away. The label said "Environments"; it now says where it is going.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

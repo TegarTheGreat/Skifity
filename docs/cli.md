@@ -3,6 +3,22 @@
 Three ways in, one API behind all of them. Anything the panel can do, a terminal
 or an assistant can do.
 
+## Getting it
+
+The installer puts it on the server it installs. Anywhere else, the panel serves
+the binary it is itself running:
+
+```sh
+curl -fsS https://panel.example.com/api/cli/download -o /usr/local/bin/skifity
+chmod +x /usr/local/bin/skifity
+```
+
+That is always the version the panel is running, which is the point — a CLI a
+release behind its panel is a confusing afternoon. It is built for whatever the
+panel runs on; `/api/meta` says which platform that is. For a different one,
+build it from the repository: the panel, the CLI and the MCP server are one
+binary, so `make build` produces all three.
+
 ## Signing in
 
 ```sh

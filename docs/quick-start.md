@@ -44,7 +44,16 @@ curl -fsSL https://get.skifity.io | sudo SKIFITY_DOMAIN=panel.example.com sh
 ```
 
 It checks the server first, installs Kubernetes, starts the panel, and finishes
-by printing two things: a URL and a setup token. Keep them.
+by printing a link. The link already has the setup token in it, so opening it is
+the whole of the next step — no copying a forty-character string across. The
+token is in the `#fragment`, which browsers never send to a server, and the page
+takes it out of the address bar as soon as it has read it. The plain URL and the
+token are printed underneath as well, for when the link is easier to retype than
+to click.
+
+It also puts `skifity`, the command line tool, on the server's PATH — served by
+the panel it has just started, so it is always the matching version and needs no
+internet at all.
 
 If it stops, it says what happened and what to do about it. The full log is at
 `/var/log/skifity-install.log`, and running the installer again is safe.
@@ -53,8 +62,8 @@ If it stops, it says what happened and what to do about it. The full log is at
 
 ![The setup screen, asking for the token and the first account](images/setup.png)
 
-Open the URL. Paste the setup token, choose an email address and a password,
-and name your team.
+Open the link. The token is already filled in; choose an email address and a
+password, and name your team.
 
 ![The recovery key screen, which cannot be passed without acknowledging it](images/recovery-key.png)
 

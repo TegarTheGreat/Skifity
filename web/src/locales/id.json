@@ -536,7 +536,8 @@
       "productivity": "Produktivitas",
       "security": "Keamanan",
       "storage": "Penyimpanan dan berkas"
-    }
+    },
+    "installWhere": "Dipasang di mana"
   },
   "settings": {
     "title": "Pengaturan",

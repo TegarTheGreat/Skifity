@@ -121,6 +121,9 @@ func (s *Server) routes() chi.Router {
 		api.Get("/health", s.handleHealth)
 		api.Get("/ready", s.handleReady)
 		api.Get("/meta", s.handleMeta)
+		// The panel hands out the binary it is itself running, which is also
+		// the CLI. See cli_handlers.go for why it is open.
+		api.Get("/cli/download", s.handleDownloadCLI)
 		api.Get("/setup/status", s.handleSetupStatus)
 		api.Post("/setup", s.handleSetupComplete)
 

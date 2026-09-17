@@ -486,6 +486,16 @@ a page that had drifted.
   the template installs instead.
 * **Templates had no documentation page.** `docs/templates.md`, served by the
   panel like the rest.
+* **The configuration file had three ways to be wrong quietly.** The struct's
+  toml tag said `kubeconfig_path` and the parser looked for `kubeconfig`, so a
+  file written from the struct was read, accepted and ignored. A `#` anywhere in
+  a value cut the value short, whether or not it was inside quotes, so a path
+  with a hash in it became a shorter path and what failed was whatever used it.
+  A quote that was never closed was accepted, taking the comment somebody
+  thought they were writing along with it. `internal/config` had no tests at
+  all; it has them now, and one of them derives the list of settings from the
+  struct and fails when any of them is missing from `docs/configuration.md` —
+  which two of them already were.
 
 ## Next tasks
 

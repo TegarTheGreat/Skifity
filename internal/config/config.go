@@ -34,7 +34,12 @@ type Config struct {
 	MasterKeyPath string `json:"master_key_path" toml:"master_key_path"`
 	// KubeconfigPath is empty when running inside the cluster, where the
 	// ServiceAccount token is used instead.
-	KubeconfigPath string `json:"kubeconfig_path" toml:"kubeconfig_path"`
+	//
+	// The file key is `kubeconfig`, not `kubeconfig_path`: a file's keys are
+	// the environment variable names lower-cased, the variable is
+	// SKIFITY_KUBECONFIG, and a tag naming a key the parser does not look for
+	// is a setting that is accepted, ignored, and never reported.
+	KubeconfigPath string `json:"kubeconfig_path" toml:"kubeconfig"`
 	// Namespace is the namespace the panel itself runs in.
 	Namespace string `json:"namespace" toml:"namespace"`
 	// LogLevel is one of debug, info, warn, error.
@@ -214,7 +219,8 @@ func truthy(v string) bool {
 }
 
 // parseSimpleTOML understands the flat `key = "value"` subset we need, plus
-// `#` comments. Pulling in a TOML dependency to read eight keys is not worth it.
+// `#` comments. Pulling in a TOML dependency to read a dozen keys is not worth
+// it.
 func parseSimpleTOML(src string) (map[string]string, error) {
 	out := map[string]string{}
 	for i, raw := range strings.Split(src, "\n") {
@@ -225,17 +231,53 @@ func parseSimpleTOML(src string) (map[string]string, error) {
 		if strings.HasPrefix(line, "[") {
 			return nil, fmt.Errorf("line %d: sections are not supported in the panel config file", i+1)
 		}
-		key, value, ok := strings.Cut(line, "=")
+		key, rest, ok := strings.Cut(line, "=")
 		if !ok {
 			return nil, fmt.Errorf("line %d: expected key = value", i+1)
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
-		value = strings.TrimSpace(value)
-		if idx := strings.Index(value, " #"); idx >= 0 {
-			value = strings.TrimSpace(value[:idx])
+		if key == "" {
+			return nil, fmt.Errorf("line %d: expected key = value", i+1)
 		}
-		value = strings.Trim(value, `"'`)
+		value, err := parseValue(strings.TrimSpace(rest))
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %w", i+1, err)
+		}
 		out[key] = value
 	}
 	return out, nil
+}
+
+// parseValue reads the right-hand side of one line.
+//
+// A quoted value ends at its closing quote and everything inside it is the
+// value, `#` included: this used to cut at the first " #" wherever it was, so a
+// path or a URL with a hash in it was silently shortened and what failed was
+// whatever used it, a long way from here. A value whose quote is never closed
+// is a mistake rather than a value, because the alternative is reading the rest
+// of the line — including the comment somebody thought they were writing.
+func parseValue(rest string) (string, error) {
+	if rest == "" {
+		return "", nil
+	}
+	if quote := rest[0]; quote == '"' || quote == '\'' {
+		end := strings.IndexByte(rest[1:], quote)
+		if end < 0 {
+			return "", fmt.Errorf("the value opens with %c and never closes it", quote)
+		}
+		value := rest[1 : end+1]
+		if after := strings.TrimSpace(rest[end+2:]); after != "" && !strings.HasPrefix(after, "#") {
+			return "", fmt.Errorf("there is %q after the closing quote", after)
+		}
+		return value, nil
+	}
+	// Unquoted: a comment can only start at whitespace, so a `#` in the middle
+	// of a bare word stays part of it.
+	if idx := strings.Index(rest, " #"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	if idx := strings.Index(rest, "\t#"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	return strings.TrimSpace(rest), nil
 }

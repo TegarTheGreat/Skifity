@@ -33,6 +33,8 @@ is a valid one.
 | `SKIFITY_SHUTDOWN_GRACE` | `20s` | How long in-flight requests get when stopping. |
 | `SKIFITY_DEV_MODE` | `false` | Serves the interface from a Vite dev server and relaxes cookie security. Development only. |
 | `SKIFITY_DEV_FRONTEND_URL` | `http://127.0.0.1:5173` | Where that dev server is. |
+| `SKIFITY_CLUSTER_TOKEN_PATH` | `/etc/skifity/cluster-token` | The k3s join token of the cluster the panel runs in, put there by the installer. A panel installed onto a server that already runs k3s cannot invent this, and a server added later has to join with it. |
+| `SKIFITY_POD_NETWORK` | empty | The pod network the installer started this cluster with, `wireguard-native` or `vxlan`. Recorded the first time the panel starts and used for every server added afterwards, because nodes on different backends join without an error and then never reach each other. Leave empty on a cluster the installer did not create, and set it under **Settings → Cluster** instead. |
 
 `.env.example` in the repository is the same list, with comments.
 

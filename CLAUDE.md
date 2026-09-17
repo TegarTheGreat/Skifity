@@ -44,7 +44,8 @@ internal/
   dbsvc/, backup/   Managed databases and their backups.
   cli/, mcpserver/  The CLI and the MCP server, both against the same API.
   manifests/        Renders the panel's own Kubernetes objects from deploy/.
-  settings/, templates/, notify/, gitsrc/, audit/, events/, logging/, config/
+  templates/        The one-click catalogue: catalogue/*.yaml, one per app.
+  settings/, notify/, gitsrc/, audit/, events/, logging/, config/, runsafe/
 web/                The frontend. Built into web/dist and embedded in the binary.
   docsite/          Renders docs/ into the panel, so the links in errors work.
 deploy/             The panel's own Kubernetes objects, with placeholders.

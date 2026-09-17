@@ -73,7 +73,7 @@ is not a bar any self-hosted panel has reached.
 * **Railway** — a visual canvas of services, variables shared across a project.
 * **Heroku** — detect the language and build with no Dockerfile.
 * **Cloudflare Workers** — scale-to-zero for idle apps.
-* **Coolify / Dokploy** — one-click templates, S3 backups, being genuinely self-hosted. Their catalogues are far larger than ours: Coolify ships 280+, Skifity ships eight. That gap is real, it is the single most-cited reason people choose Coolify, and it is a content problem rather than an engineering one.
+* **Coolify / Dokploy** — one-click templates, S3 backups, being genuinely self-hosted. Coolify's catalogue was the single most-cited reason people choose it, and at eight templates against 342 the gap was the largest we had. It is now 212, converted from that catalogue with every image resolved to a real version and verified against its registry, and the database wiring — which does not apply here — taken out. The catalogue is files rather than Go, which is how Coolify's got large in the first place.
 * **Kubernetes** — self-healing, rolling updates, rollback, node failover, for free.
 
 ## Where we are actually different
@@ -102,7 +102,7 @@ Ordered by how well the evidence supports it.
 
 * **Railpack is no longer a differentiator.** Dokploy already ships it.
 * **No SSO/SAML.** Dokploy has it.
-* **Eight templates against 280.** The reason people pick Coolify.
+* **Templates: closed, but not by being better at templates.** 212 against 342, and ours are converted from theirs. What is genuinely ours is that every image names a version that was checked to exist, where more than half of Coolify's ship `latest`.
 * **Kubernetes is a category mismatch, not only an advantage.** Comparison sites
   exclude k3s and Rancher from "self-hosted PaaS" as *"a different abstraction
   layer entirely"*, and one of the most-read 2026 guides is titled *"Best

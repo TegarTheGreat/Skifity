@@ -6,7 +6,76 @@
 // can be scaled, backed up and rolled back like any other.
 package templates
 
-import "strings"
+import (
+	"embed"
+	"fmt"
+	"io/fs"
+	"sort"
+	"strings"
+	"sync"
+
+	"sigs.k8s.io/yaml"
+)
+
+// The catalogue is data, not code.
+//
+// It started as a Go literal, which is fine for eight entries and impossible
+// for three hundred. Coolify's catalogue is the single most-cited reason people
+// choose it, and it got there because a template is a file somebody can add
+// without touching the product. So this is a directory of files, one per
+// template, read at startup and checked by the tests in this package.
+//
+// Every image names a version. A floating tag is not a version: two deploys of
+// the same app run different software, a rollback restores a tag rather than
+// the thing that worked, and an upstream release arrives on a restart nobody
+// asked for. Where upstream publishes a series tag that takes patches without
+// breaking changes, that is what is used; where it does not, an exact version
+// is, and moving it forward is a change to a file here. A test refuses anything
+// that ends in `latest`.
+//
+//go:embed catalogue/*.yaml
+var files embed.FS
+
+var (
+	once      sync.Once
+	catalogue []Template
+	loadErr   error
+)
+
+// load reads every file in the catalogue once.
+//
+// A file that cannot be read is a build-time mistake, not a runtime condition:
+// the tests in this package read the same directory and fail on it first.
+func load() {
+	entries, err := fs.ReadDir(files, "catalogue")
+	if err != nil {
+		loadErr = fmt.Errorf("read the template catalogue: %w", err)
+		return
+	}
+	for _, entry := range entries {
+		body, err := files.ReadFile("catalogue/" + entry.Name())
+		if err != nil {
+			loadErr = fmt.Errorf("read %s: %w", entry.Name(), err)
+			return
+		}
+		var template Template
+		if err := yaml.Unmarshal(body, &template); err != nil {
+			loadErr = fmt.Errorf("%s: %w", entry.Name(), err)
+			return
+		}
+		catalogue = append(catalogue, template)
+	}
+	// Sorted by name, because a directory listing is not an order anybody
+	// chose and the panel groups by category anyway.
+	sort.Slice(catalogue, func(i, j int) bool { return catalogue[i].Name < catalogue[j].Name })
+}
+
+// Err reports a catalogue that could not be read. The tests in this package
+// check it, so a broken file fails the build rather than the panel.
+func Err() error {
+	once.Do(load)
+	return loadErr
+}
 
 // Template is one installable application.
 type Template struct {
@@ -76,156 +145,15 @@ type Input struct {
 	Generate bool `json:"generate,omitempty"`
 }
 
-// catalogue is deliberately short. A template that is not kept working is worse
-// than no template, so each one here is something we can keep an eye on.
-//
-// Every image names a version. A floating tag is not a version: two deploys of
-// the same app would run different software, a rollback would restore a tag
-// rather than the thing that worked, and an upstream release would arrive on a
-// restart nobody asked for. Where upstream publishes a series tag that takes
-// patches without breaking changes — `1`, `6-apache`, `5-alpine` — that is what
-// is used; where it does not, an exact version is, and moving it forward is a
-// change to this file. A test refuses anything that ends in `latest`.
-var catalogue = []Template{
-	{
-		ID: "wordpress", Name: "WordPress", Category: "cms",
-		Description: "The blogging and content platform that runs a large share of the web.",
-		Website:     "https://wordpress.org",
-		Databases: []DatabaseSpec{
-			{Name: "wordpress-db", Engine: "mysql", StorageGB: 5, LinkTo: "wordpress", VarName: "WORDPRESS_DB_URL"},
-		},
-		Services: []Service{{
-			Name: "wordpress", Image: "wordpress:6-apache", Port: 80, Public: true,
-			HealthPath:   "/wp-admin/install.php",
-			Volumes:      []VolumeSpec{{Name: "content", MountPath: "/var/www/html/wp-content", SizeGB: 5}},
-			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,
-		}},
-		Notes: "Open the site to finish the WordPress installer. The uploads folder is on a volume, so it survives redeploys.",
-	},
-	{
-		ID: "n8n", Name: "n8n", Category: "automation",
-		Description: "Workflow automation you host yourself, with hundreds of integrations.",
-		Website:     "https://n8n.io",
-		Databases: []DatabaseSpec{
-			{Name: "n8n-db", Engine: "postgres", StorageGB: 5, LinkTo: "n8n", VarName: "DB_POSTGRESDB_URL"},
-		},
-		Services: []Service{{
-			Name: "n8n", Image: "n8nio/n8n:1", Port: 5678, Public: true, HealthPath: "/healthz",
-			Variables: map[string]string{
-				"DB_TYPE":                               "postgresdb",
-				"N8N_PROTOCOL":                          "https",
-				"GENERIC_TIMEZONE":                      "UTC",
-				"N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS": "true",
-			},
-			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/home/node/.n8n", SizeGB: 2}},
-			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,
-		}},
-		Inputs: []Input{
-			{Key: "N8N_ENCRYPTION_KEY", Label: "Encryption key", Secret: true, Generate: true,
-				Help: "n8n encrypts stored credentials with this. Losing it means losing them."},
-		},
-	},
-	{
-		ID: "ghost", Name: "Ghost", Category: "cms",
-		Description: "A fast publishing platform for newsletters and blogs.",
-		Website:     "https://ghost.org",
-		Databases: []DatabaseSpec{
-			{Name: "ghost-db", Engine: "mysql", StorageGB: 5, LinkTo: "ghost", VarName: "DATABASE_URL"},
-		},
-		Services: []Service{{
-			Name: "ghost", Image: "ghost:5-alpine", Port: 2368, Public: true, HealthPath: "/",
-			Variables:    map[string]string{"NODE_ENV": "production", "database__client": "mysql"},
-			Volumes:      []VolumeSpec{{Name: "content", MountPath: "/var/lib/ghost/content", SizeGB: 5}},
-			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,
-		}},
-		Notes: "Set the mail settings in Ghost's admin area, or it cannot send member emails.",
-	},
-	{
-		ID: "uptime-kuma", Name: "Uptime Kuma", Category: "monitoring",
-		Description: "Watch your sites and services, and get told when one goes down.",
-		Website:     "https://uptime.kuma.pet",
-		Services: []Service{{
-			Name: "uptime-kuma", Image: "louislam/uptime-kuma:1", Port: 3001, Public: true,
-			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/app/data", SizeGB: 2}},
-			MemRequestMB: 128, MemLimitMB: 512, CPURequestM: 50, CPULimitM: 500,
-		}},
-		Notes: "Uptime Kuma keeps its own SQLite database on the volume, so it runs as a single instance.",
-	},
-	{
-		ID: "plausible", Name: "Plausible Analytics", Category: "analytics", Beta: true,
-		Description: "Privacy-friendly website analytics without cookies.",
-		Website:     "https://plausible.io",
-		Databases: []DatabaseSpec{
-			{Name: "plausible-db", Engine: "postgres", StorageGB: 10, LinkTo: "plausible", VarName: "DATABASE_URL"},
-		},
-		Services: []Service{{
-			Name: "plausible", Image: "ghcr.io/plausible/community-edition:v2", Port: 8000, Public: true,
-			Variables:    map[string]string{"DISABLE_REGISTRATION": "invite_only"},
-			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,
-		}},
-		Inputs: []Input{
-			{Key: "SECRET_KEY_BASE", Label: "Secret key base", Secret: true, Generate: true},
-			{Key: "BASE_URL", Label: "Public URL", Required: true,
-				Help: "The address people will reach this at, including https://."},
-		},
-		Notes: "Plausible also needs ClickHouse for its event data. This template sets up the app and PostgreSQL; add ClickHouse yourself, or use the official Compose file, until the ClickHouse template lands.",
-	},
-	{
-		ID: "vaultwarden", Name: "Vaultwarden", Category: "productivity",
-		Description: "A lightweight password manager server compatible with Bitwarden clients.",
-		Website:     "https://github.com/dani-garcia/vaultwarden",
-		Services: []Service{{
-			Name: "vaultwarden", Image: "vaultwarden/server:1.37.3", Port: 80, Public: true, HealthPath: "/alive",
-			Variables:    map[string]string{"SIGNUPS_ALLOWED": "false", "WEBSOCKET_ENABLED": "true"},
-			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/data", SizeGB: 2}},
-			MemRequestMB: 64, MemLimitMB: 256, CPURequestM: 50, CPULimitM: 500,
-		}},
-		Inputs: []Input{
-			{Key: "ADMIN_TOKEN", Label: "Admin token", Secret: true, Generate: true,
-				Help: "Needed to reach the admin page at /admin."},
-		},
-		Notes: "Sign-ups are turned off. Use the admin page to invite the first user, then keep them off.",
-	},
-	{
-		ID: "umami", Name: "Umami", Category: "analytics",
-		Description: "Simple, self-hosted website analytics.",
-		Website:     "https://umami.is",
-		Databases: []DatabaseSpec{
-			{Name: "umami-db", Engine: "postgres", StorageGB: 5, LinkTo: "umami", VarName: "DATABASE_URL"},
-		},
-		Services: []Service{{
-			Name: "umami", Image: "ghcr.io/umami-software/umami:postgresql-v2.20", Port: 3000,
-			Public: true, HealthPath: "/api/heartbeat",
-			Variables:    map[string]string{"DATABASE_TYPE": "postgresql"},
-			MemRequestMB: 128, MemLimitMB: 512, CPURequestM: 50, CPULimitM: 500,
-		}},
-		Inputs: []Input{{Key: "APP_SECRET", Label: "App secret", Secret: true, Generate: true}},
-		Notes:  "The first sign-in is admin / umami. Change it immediately.",
-	},
-	{
-		ID: "minio", Name: "MinIO", Category: "storage",
-		Description: "S3-compatible object storage, useful as a backup target for Skifity itself.",
-		Website:     "https://min.io",
-		Services: []Service{{
-			Name: "minio", Image: "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z", Port: 9001, Public: true,
-			Variables:    map[string]string{"MINIO_BROWSER_REDIRECT_URL": ""},
-			Volumes:      []VolumeSpec{{Name: "data", MountPath: "/data", SizeGB: 20}},
-			MemRequestMB: 256, MemLimitMB: 1024, CPURequestM: 100, CPULimitM: 1000,
-		}},
-		Inputs: []Input{
-			{Key: "MINIO_ROOT_USER", Label: "Root user", Default: "skifity", Required: true},
-			{Key: "MINIO_ROOT_PASSWORD", Label: "Root password", Secret: true, Generate: true},
-		},
-		Notes: "Create a bucket, then point Settings, then Storage at this MinIO to back up your databases.",
-	},
-}
-
 // All returns the catalogue.
-func All() []Template { return catalogue }
+func All() []Template {
+	once.Do(load)
+	return catalogue
+}
 
 // Lookup finds a template by id.
 func Lookup(id string) (Template, bool) {
-	for _, t := range catalogue {
+	for _, t := range All() {
 		if t.ID == id {
 			return t, true
 		}
@@ -237,7 +165,7 @@ func Lookup(id string) (Template, bool) {
 func Categories() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, t := range catalogue {
+	for _, t := range All() {
 		if !seen[t.Category] {
 			seen[t.Category] = true
 			out = append(out, t.Category)
@@ -250,10 +178,10 @@ func Categories() []string {
 func Search(query string) []Template {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
-		return catalogue
+		return All()
 	}
 	var out []Template
-	for _, t := range catalogue {
+	for _, t := range All() {
 		haystack := strings.ToLower(t.Name + " " + t.Description + " " + t.Category)
 		if strings.Contains(haystack, query) {
 			out = append(out, t)

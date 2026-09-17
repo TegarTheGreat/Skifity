@@ -628,6 +628,40 @@ the conclusions rather than confirming them.
   people choose Coolify, and it is a content problem rather than an engineering
   one.
 
+## Phase 22 — the catalogue, closed
+
+Eight templates against Coolify's 342 was the largest gap we had, and the
+research said it was a content problem rather than an engineering one. It was
+both: a Go literal is fine for eight and impossible for three hundred, which is
+why Coolify's catalogue is files and grew by contribution.
+
+* **The catalogue is data now.** `internal/templates/catalogue`, one YAML file
+  per template, embedded at build time. Adding one touches no Go, and the
+  directory's README has the format and the two rules that are not obvious.
+* **212 templates**, up from eight. 204 were converted from Coolify's catalogue
+  by `hack/import_templates.py`, which is kept so the next batch is a re-run.
+* **Every image was resolved to a version and verified.** `hack/resolve_tags.py`
+  asks each registry for the tags, prefers a series tag that takes patches over
+  an exact pin, and then fetches the manifest to prove the tag exists. 225 of
+  269 single-service templates resolved; the 44 that did not were dropped rather
+  than shipped on `latest`. More than half of Coolify's own entries ship
+  `latest`.
+* **The database wiring was taken out, and that was a real bug.** A Compose file
+  points an app at a sibling container — `DB_HOST=mariadb` — and here the
+  database is a managed one that arrives as a connection string. The first
+  import carried those over, which would have produced apps that start, fail to
+  resolve a hostname nobody recognises, and crash-loop. Bookstack, GLPI,
+  Metabase, Redmine and Keycloak were all affected. A test now refuses any
+  variable that names a datastore and ends in an address.
+* **Nothing was shipped half-filled.** Templates with several application
+  services (72), no port (15), or no verifiable image (46) were dropped.
+* **The panel did not get heavier**: 34 MiB idle and 39.4 MiB of binary, against
+  35 MiB and 39.3 MiB before.
+
+What this does not mean: none of these has been deployed, because nothing in
+this product has. What is checked is that each template is structurally sound
+and that its image exists.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

@@ -1,0 +1,66 @@
+# The template catalogue
+
+One file per template. Add one by writing a file here; nothing in Go needs to
+change, and `make check` tells you whether it is right.
+
+```yaml
+id: example                      # a slug; it is in the URL
+name: Example
+description: One sentence, on a card.
+category: productivity           # groups it on the Templates page
+website: https://example.org     # https, and somewhere that explains the app
+services:
+  - name: example                # a slug; it becomes a Kubernetes object
+    image: example/app:2.4       # a version, never `latest` — see below
+    port: 8080
+    public: true                 # gets a domain; a worker would not
+    health_path: /healthz        # optional, and only if it really exists
+    variables:                   # what the app needs, not what wires it up
+      TZ: UTC
+    volumes:
+      - name: data
+        mount_path: /var/lib/example
+        size_gb: 5
+    mem_request_mb: 128
+    mem_limit_mb: 1024
+    cpu_request_m: 50
+    cpu_limit_m: 1000
+databases:                       # optional; created before the app starts
+  - name: example-db
+    engine: postgres             # postgres, mysql or redis
+    storage_gb: 5
+    link_to: example             # must name a service above
+    var_name: DATABASE_URL       # how the connection string arrives
+inputs:                          # optional; asked for at install time
+  - key: SECRET_KEY
+    label: Secret key
+    secret: true
+    generate: true               # filled with a random value when left empty
+notes: Anything that has to be done by hand afterwards.
+```
+
+## The two rules that are not obvious
+
+**Name a version.** `latest` is not a version: two deploys of the same app would
+run different software, a rollback would restore a tag rather than the thing
+that worked, and an upstream release would arrive on a restart nobody asked for.
+Use a series tag where upstream publishes one — `1`, `5-alpine`, `6-apache` —
+and an exact version where it does not. A test refuses anything ending in
+`latest`, and the image must exist: check before you commit.
+
+**Do not wire the database by hand.** A Compose file points services at each
+other by name (`DB_HOST=mariadb`). There is no sibling container here — the
+database is a managed one and arrives as the `var_name` above — so a variable
+like `DB_HOST`, `REDIS_PORT` or `MB_DB_URL` points at nothing and the app will
+crash-loop with a hostname nobody recognises. A test refuses those too.
+
+## What the tests check
+
+`go test ./internal/templates/` covers: unique ids that are already slugs, a
+description and an https website, at least one service somebody can open, ports
+in range, requests that do not exceed limits, variable names a container can
+carry, absolute mount paths, every `link_to` naming a real service, every engine
+one Skifity provisions, no floating tags, and no database wiring.
+
+Run `make check` before opening a pull request. A template that fails is not a
+template.

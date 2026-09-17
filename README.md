@@ -124,6 +124,21 @@ else. The panel is **35 MiB of resident memory idle**, measured, and does not
 drift. Certificates, the builder, the PostgreSQL operator and the rest install
 themselves the first time you use them, and each one says what it costs first.
 
+## Two hundred and twelve one-click applications
+
+WordPress, Ghost, Gitea, n8n, Vaultwarden, Metabase, BookStack, MinIO, Uptime
+Kuma and about two hundred more, grouped by what they are for.
+
+Every one of them **names a version**, and every version was fetched from its
+registry to prove it exists. That sounds like a detail until you roll back: an
+image on `latest` is not a version, so restoring it restores a tag rather than
+the thing that worked. More than half of the largest competing catalogue ships
+`latest`.
+
+A template is a file in [`internal/templates/catalogue`](internal/templates/catalogue),
+not Go, so adding one is a pull request anybody can write and `make check` tells
+you whether it is right.
+
 ## Documentation
 
 Also served by the panel itself, at `/docs`, from inside the binary — which is

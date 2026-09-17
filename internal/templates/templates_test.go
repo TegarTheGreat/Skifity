@@ -205,3 +205,49 @@ func TestSearchAndLookupFindWhatIsThere(t *testing.T) {
 		t.Error("there are no categories, and the page groups by them")
 	}
 }
+
+// TestNoTemplatePointsAtAContainerThatIsNotThere: a Compose file wires services
+// together by service name — DB_HOST=mariadb, REDIS_HOST=redis — and a template
+// converted from one carries those over unless something stops it. In Skifity
+// there is no sibling container to point at: the database is a managed one and
+// arrives as a URL through the link. An app given the old variables starts,
+// fails to resolve a hostname nobody recognises, and crash-loops.
+//
+// This caught bookstack, glpi, metabase, redmine and keycloak on the first
+// import, which is a fifth of the templates that bring a database.
+func TestNoTemplatePointsAtAContainerThatIsNotThere(t *testing.T) {
+	datastore := regexp.MustCompile(
+		`(^|_)(DB|DATABASE|POSTGRES|POSTGRESQL|PG|MYSQL|MARIADB|REDIS|VALKEY|KEYDB|MONGO|MONGODB|` +
+			`CACHE|QUEUE|BROKER|AMQP|RABBITMQ|ELASTIC|ELASTICSEARCH|MEILI|CLICKHOUSE)($|_)`)
+	address := regexp.MustCompile(`(^|_)(HOST|HOSTNAME|PORT|SERVER|ADDR|ADDRESS|URL|URI|DSN|CONNECTION|CONNECTIONSTRING)$`)
+
+	for _, tpl := range All() {
+		for _, svc := range tpl.Services {
+			for key, value := range svc.Variables {
+				upper := strings.ToUpper(key)
+				if datastore.MatchString(upper) && address.MatchString(upper) {
+					t.Errorf("%s/%s sets %s=%q; Skifity injects a connection string instead, "+
+						"and this points at a container that does not exist",
+						tpl.ID, svc.Name, key, value)
+				}
+				// A value the source file expected a shell to expand is not a
+				// value; it reaches the container as the literal text.
+				if strings.Contains(value, "$") {
+					t.Errorf("%s/%s sets %s=%q, which was never expanded", tpl.ID, svc.Name, key, value)
+				}
+			}
+		}
+	}
+}
+
+// The catalogue is read from files at startup. A file that does not parse is a
+// build-time mistake and has to fail here rather than at run time, where it
+// would be an empty Templates page and no reason for it.
+func TestTheCatalogueLoads(t *testing.T) {
+	if err := Err(); err != nil {
+		t.Fatalf("the catalogue could not be read: %v", err)
+	}
+	if len(All()) < 100 {
+		t.Fatalf("the catalogue has %d templates; the files are not being embedded", len(All()))
+	}
+}

@@ -386,3 +386,85 @@ func TestEveryListInATemplateIsAnArrayInJSON(t *testing.T) {
 		}
 	}
 }
+
+// The catalogue's logos.
+//
+// They are files on disk matched to templates by name, which is the kind of
+// arrangement that rots quietly: a template renamed leaves an orphan, and an
+// icon named slightly wrong is simply never shown and nobody notices.
+
+func TestEveryIconBelongsToATemplate(t *testing.T) {
+	entries, err := iconFiles.ReadDir("icons")
+	if err != nil {
+		t.Fatalf("read the icons: %v", err)
+	}
+	known := map[string]bool{}
+	for _, template := range All() {
+		known[template.ID] = true
+	}
+
+	orphans := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "README.md" {
+			continue
+		}
+		extension := name[strings.LastIndex(name, "."):]
+		if _, ok := IconContentTypes[extension]; !ok {
+			t.Errorf("%s is not a kind of picture the panel serves; it would be dead weight in the binary", name)
+			continue
+		}
+		id := strings.TrimSuffix(name, extension)
+		if !known[id] {
+			t.Errorf("%s belongs to no template, so it is bytes nobody will ever see", name)
+			orphans++
+		}
+	}
+	if orphans > 0 {
+		t.Log("a template renamed without its icon leaves one of these behind")
+	}
+}
+
+func TestATemplateWithAnIconCanServeIt(t *testing.T) {
+	withIcon := 0
+	for _, template := range All() {
+		if template.Icon == "" {
+			continue
+		}
+		withIcon++
+		body, contentType, ok := ReadIcon(template.ID)
+		if !ok {
+			t.Errorf("%s says it has an icon and the panel cannot read it", template.ID)
+			continue
+		}
+		if len(body) == 0 {
+			t.Errorf("%s has an empty icon file", template.ID)
+		}
+		if contentType == "" {
+			t.Errorf("%s would be served with no type, and a browser will not draw that", template.ID)
+		}
+	}
+	// Not a target to chase, a floor to notice falling through: the catalogue
+	// was three hundred grey letters and the point of this was that most of
+	// them stop being.
+	if withIcon < 150 {
+		t.Errorf("only %d templates have a logo; hack/fetch_icons.py is the thing that has stopped working", withIcon)
+	}
+	t.Logf("%d of %d templates have a logo", withIcon, len(All()))
+}
+
+func TestATemplateWithNoIconSaysSoRatherThanBreaking(t *testing.T) {
+	// The page draws a letter for these. What it must not get is a name it
+	// will put in an <img> tag that then 404s on every card.
+	for _, template := range All() {
+		if template.Icon != "" {
+			continue
+		}
+		if _, _, ok := ReadIcon(template.ID); ok {
+			t.Errorf("%s has no icon recorded and one can be read, so the page shows a letter for nothing", template.ID)
+		}
+	}
+	if _, _, ok := ReadIcon("a-template-that-does-not-exist"); ok {
+		t.Error("an icon was served for a template that does not exist")
+	}
+}

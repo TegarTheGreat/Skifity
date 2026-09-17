@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { BoxesIcon, ExternalLinkIcon, InfoIcon, SearchIcon } from "lucide-react"
+import { cn } from "cn"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
@@ -138,14 +139,7 @@ export function TemplatesPage() {
                         guessed: the row was 426px wide inside a 341px cell.
                       */}
                       <div className="flex min-w-0 items-start gap-3">
-                        {/* The name is right beside it, so this is decoration
-                            and a screen reader should skip it. */}
-                        <span
-                          aria-hidden
-                          className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted text-sm font-semibold text-muted-foreground"
-                        >
-                          {template.name.slice(0, 1).toUpperCase()}
-                        </span>
+                        <TemplateIcon template={template} />
                         <div className="min-w-0 flex-1">
                           {/*
                             min-w-0 again, on the row as well as on its parent.
@@ -233,6 +227,45 @@ function versionOf(image: string): string {
   const colon = image.lastIndexOf(":")
   if (colon < 0 || image.slice(colon).includes("/")) return image
   return image.slice(colon + 1)
+}
+
+/**
+ * A template's logo, or its first letter.
+ *
+ * The catalogue is the first page anybody opens and it was three hundred grey
+ * squares with a letter in them. The logos are served by the panel out of its
+ * own binary — not a CDN — so they work with no outbound network and tell
+ * nobody else which self-hosted apps somebody is browsing.
+ *
+ * The letter is not only the fallback for a template the collection has no logo
+ * for: it is also what is shown if the picture fails to load, which is why
+ * `onError` clears the flag rather than leaving a broken image icon on the card.
+ */
+function TemplateIcon({ template }: { template: Template }) {
+  const [broken, setBroken] = useState(false)
+  const shell =
+    "flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted text-sm font-semibold text-muted-foreground"
+
+  // The name is right beside it, so this is decoration and a screen reader
+  // should skip it in both shapes.
+  if (!template.icon || broken) {
+    return (
+      <span aria-hidden className={shell}>
+        {template.name.slice(0, 1).toUpperCase()}
+      </span>
+    )
+  }
+  return (
+    <span aria-hidden className={cn(shell, "overflow-hidden bg-background p-1.5")}>
+      <img
+        src={`/api/templates/${template.id}/icon`}
+        alt=""
+        loading="lazy"
+        className="size-full object-contain"
+        onError={() => setBroken(true)}
+      />
+    </span>
+  )
 }
 
 /** What POST /api/templates/{id}/install answers with. */

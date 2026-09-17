@@ -1541,6 +1541,40 @@ is not refused on a guess.
 * armhf is supported by k3s and not by Skifity, which builds only 64-bit — and
   the preflight already refuses it.
 
+## Phase 40 — the catalogue had no pictures
+
+Three hundred cards, each with a grey square and one letter in it. Every product
+in this category shows logos, and the catalogue is the single most-cited reason
+people choose one.
+
+**211 of the 282 templates now have one**, from
+[homarr-labs/dashboard-icons](https://github.com/homarr-labs/dashboard-icons) —
+the collection Homarr, Homepage and Dashy all draw on, and CC0-1.0, which is
+what makes vendoring it possible at all. The remaining 71 show the letter, which
+is what the fallback was always for.
+
+**They are committed, not fetched.** The panel's own policy says
+`img-src 'self'`, and pointing at a CDN would mean widening it, telling that CDN
+which self-hosted apps each user is browsing, leaving an offline install without
+pictures, and making somebody else's uptime a thing that makes this product look
+broken. 2.5 MB inside a 40 MB binary buys all four back. SVG where the
+collection has one and WebP where it does not: a 260 KB PNG drawn at 40 pixels
+is a waste nobody sees and everybody carries.
+
+Nothing in the YAML changed. An icon is a file named after the template it
+belongs to, so adding one is adding a file; the loader looks and fills in
+`Icon`, and `hack/fetch_icons.py --report` names the ones still missing.
+
+### And a measurement that lied, again
+
+The first check counted images that were `complete && naturalWidth > 0` and
+reported **200 of 211 broken**. They were not: `loading="lazy"` means an image
+below the fold has not been fetched, and counting that as failure is the same
+mistake as guessing at a layout instead of measuring it. Asking the endpoint for
+all 211 directly gives 0 failures, and that is what the interface test does now —
+it also checks that a template *without* a logo answers 404 rather than putting
+a broken image on every card.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

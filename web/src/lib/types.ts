@@ -372,6 +372,8 @@ export type Template = {
   category: string
   website: string
   beta?: boolean
+  /** The logo's file name, when the panel has one for this template. */
+  icon?: string
   services: { name: string; image: string; port: number; public: boolean }[]
   databases: { name: string; engine: string }[]
   inputs?: {

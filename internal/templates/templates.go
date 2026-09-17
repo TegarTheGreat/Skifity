@@ -36,6 +36,21 @@ import (
 //go:embed catalogue/*.yaml
 var files embed.FS
 
+// The logos, one per template, named after the template they belong to.
+//
+// A catalogue of 282 grey squares with a letter in them is a catalogue nobody
+// wants to look through, and every product in this category shows logos. They
+// are vendored rather than loaded from a CDN because the panel's own
+// Content-Security-Policy says `img-src 'self'`: pointing at somebody else's
+// server would mean widening it, telling that server which self-hosted apps
+// each user is browsing, and leaving an offline install without pictures.
+//
+// hack/fetch_icons.py refreshes them. See internal/templates/icons/README.md
+// for where they come from and under what licence.
+//
+//go:embed icons
+var iconFiles embed.FS
+
 var (
 	once      sync.Once
 	catalogue []Template
@@ -80,11 +95,58 @@ func load() {
 		if template.Services == nil {
 			template.Services = []Service{}
 		}
+		template.Icon = iconFor(template.ID)
 		catalogue = append(catalogue, template)
 	}
 	// Sorted by name, because a directory listing is not an order anybody
 	// chose and the panel groups by category anyway.
 	sort.Slice(catalogue, func(i, j int) bool { return catalogue[i].Name < catalogue[j].Name })
+}
+
+// iconExtensions are what the collection publishes, best first. An SVG is a few
+// kilobytes and scales; WebP is the fallback for a logo that only exists as a
+// bitmap.
+var iconExtensions = []string{".svg", ".webp"}
+
+// iconFor returns the file name of a template's logo, or "" when there is none.
+func iconFor(id string) string {
+	for _, extension := range iconExtensions {
+		name := id + extension
+		if _, err := fs.Stat(iconFiles, "icons/"+name); err == nil {
+			return name
+		}
+	}
+	return ""
+}
+
+// IconContentTypes maps an icon's extension to what it has to be served as.
+// A browser will not render an SVG sent as text/plain, and guessing from the
+// bytes is how an SVG becomes a download.
+var IconContentTypes = map[string]string{
+	".svg":  "image/svg+xml",
+	".webp": "image/webp",
+}
+
+// ReadIcon returns a template's logo and the type to serve it as.
+//
+// The name comes from the catalogue rather than from a request, so there is no
+// path to traverse — but it is checked anyway, because the one that is not
+// checked is the one that changes later.
+func ReadIcon(id string) (data []byte, contentType string, ok bool) {
+	template, found := Lookup(id)
+	if !found || template.Icon == "" {
+		return nil, "", false
+	}
+	extension := template.Icon[strings.LastIndex(template.Icon, "."):]
+	contentType, known := IconContentTypes[extension]
+	if !known {
+		return nil, "", false
+	}
+	body, err := iconFiles.ReadFile("icons/" + template.Icon)
+	if err != nil {
+		return nil, "", false
+	}
+	return body, contentType, true
 }
 
 // Err reports a catalogue that could not be read. The tests in this package
@@ -114,6 +176,11 @@ type Template struct {
 	// Notes are shown in the install dialog and again on the page the install
 	// lands on, for the steps we cannot automate.
 	Notes string `json:"notes,omitempty"`
+	// Icon is the file name of this template's logo, or empty when the
+	// collection has none for it. It is filled in by the loader from what is
+	// on disk rather than written in the YAML, so adding a logo is adding a
+	// file and nothing else.
+	Icon string `json:"icon,omitempty"`
 }
 
 // Service is one container in a template.

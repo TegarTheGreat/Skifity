@@ -147,6 +147,41 @@ test("every language is complete on the pages a new user sees", async ({ page })
 
 // Every error the panel can show links into this, and an operator whose panel
 // is broken may have no other browser and no way out to the internet.
+// The catalogue is the first page anybody browses, and it was three hundred
+// grey squares with a letter in them. The logos are served out of the binary,
+// so a broken one is a file missing from a build rather than a CDN having a bad
+// day — which is exactly the kind of thing that is never noticed until somebody
+// opens the page.
+test("every logo the catalogue claims is actually there", async ({ page }) => {
+  await signIn(page)
+
+  const cookies = await page.context().cookies()
+  const jar = cookies.map((c) => `${c.name}=${c.value}`).join("; ")
+  const headers = { Cookie: jar }
+
+  const list = await (await page.request.get("/api/templates", { headers })).json()
+  const withIcon = list.items.filter((template: { icon?: string }) => template.icon)
+  expect(withIcon.length, "no template has a logo, so hack/fetch_icons.py has stopped working")
+    .toBeGreaterThan(150)
+
+  const broken: string[] = []
+  for (const template of withIcon) {
+    const response = await page.request.get(`/api/templates/${template.id}/icon`, { headers })
+    if (!response.ok() || (await response.body()).length === 0) {
+      broken.push(`${template.id} answered ${response.status()}`)
+    }
+  }
+  expect(broken, "logos the catalogue promises and the panel cannot serve").toEqual([])
+
+  // And a template with no logo must not ask for one: an <img> pointing at a
+  // 404 on every card is worse than the letter it replaced.
+  const without = list.items.find((template: { icon?: string }) => !template.icon)
+  if (without) {
+    const response = await page.request.get(`/api/templates/${without.id}/icon`, { headers })
+    expect(response.status(), "a template with no logo served one anyway").toBe(404)
+  }
+})
+
 test("the documentation is served from the binary", async ({ page }) => {
   await page.goto("/docs/")
   await expect(page.getByRole("heading", { level: 1 })).toContainText("documentation")

@@ -284,6 +284,7 @@ func (s *Server) routes() chi.Router {
 			authed.Post("/operations/{operationID}/cancel", s.handleCancelOperation)
 
 			authed.Get("/templates", s.handleListTemplates)
+			authed.Get("/templates/{templateID}/icon", s.handleTemplateIcon)
 			authed.Post("/templates/{templateID}/install", s.handleInstallTemplate)
 
 			authed.Get("/events", s.handleEventStream)

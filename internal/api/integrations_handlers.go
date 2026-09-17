@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -267,6 +269,38 @@ func (s *Server) handleTestNotificationChannel(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 	writeList(w, templates.All())
+}
+
+// handleTemplateIcon serves a template's logo out of the binary.
+//
+// Out of the binary rather than from a CDN: the panel's own policy is
+// `img-src 'self'`, and a catalogue that loads its pictures from somebody
+// else's server tells that server which self-hosted apps each user is
+// browsing. It also means an install with no outbound network still has a
+// catalogue worth looking at.
+func (s *Server) handleTemplateIcon(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "templateID")
+	body, contentType, ok := templates.ReadIcon(id)
+	if !ok {
+		// Not an errdoc: the caller is an <img> tag, which cannot read one.
+		// The page draws the letter it drew before logos existed.
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	// A logo changes when somebody runs hack/fetch_icons.py and commits the
+	// result, which is a new build. A day is short enough that it is never a
+	// mystery and long enough that a catalogue of three hundred cards is not
+	// three hundred requests every time it is opened.
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	// It is an SVG from a third party, so it is served as a picture and never
+	// as a document: no script in it can run against this origin.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// ServeContent rather than Write: it answers a Range request and sets the
+	// length. The name is only what it would guess a type from, and the type
+	// is already set above.
+	http.ServeContent(w, r, id, time.Time{}, bytes.NewReader(body))
 }
 
 type installTemplateRequest struct {

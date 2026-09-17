@@ -51,6 +51,28 @@ func NotFound(kind, id string) *Problem {
 		With("kind", kind).With("id", id)
 }
 
+// NameTaken means an app or a database in the same environment already answers
+// to this name.
+//
+// The two share a namespace and both create a Service under their own name, so
+// this is a collision rather than a preference: the second one would take the
+// first one's address over, and removing either would take the other's Service
+// with it.
+func NameTaken(kind, name string) *Problem {
+	what := "An app"
+	if kind == "database" {
+		what = "A database"
+	}
+	return New("resource.name_taken", "That name is already used here").
+		WithCause("%s in this environment is already called %s, and an app and a database "+
+			"in one environment share an address.", what, name).
+		WithImpact("Nothing was created.").
+		WithFix("Pick a different name. Other environments are unaffected: the same name "+
+			"in staging and in production is fine.").
+		WithStatus(http.StatusConflict).
+		With("name", name).With("taken_by", kind)
+}
+
 // Conflict means a uniqueness rule or a state rule rejected the write.
 func Conflict(cause, fix string) *Problem {
 	return New("resource.conflict", "That name is already taken").

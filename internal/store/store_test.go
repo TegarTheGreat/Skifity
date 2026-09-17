@@ -696,3 +696,50 @@ func TestAnotherTeamsPeopleStayOutOfTheAuditLog(t *testing.T) {
 		}
 	}
 }
+
+func TestAnAppAndADatabaseCannotShareAName(t *testing.T) {
+	// They share a namespace and both render a Service under their slug, so
+	// two of them under one name is not two things side by side: the second
+	// takes the first's address over, and deleting either takes the other's
+	// Service with it.
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "Cache", Slug: "cache", Replicas: 1}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	owner, err := db.SlugOwnerInEnvironment(ctx, env.ID, "cache")
+	if err != nil {
+		t.Fatalf("SlugOwnerInEnvironment: %v", err)
+	}
+	if owner != "app" {
+		t.Fatalf("the name is held by %q, want app", owner)
+	}
+
+	// A free name says so.
+	if owner, err := db.SlugOwnerInEnvironment(ctx, env.ID, "queue"); err != nil || owner != "" {
+		t.Fatalf("an unused name reported %q (%v), want it free", owner, err)
+	}
+
+	// And the other direction.
+	data := Database{EnvironmentID: env.ID, Name: "Queue", Slug: "queue", Engine: "redis"}
+	if err := db.CreateDatabase(ctx, &data); err != nil {
+		t.Fatalf("CreateDatabase: %v", err)
+	}
+	if owner, err := db.SlugOwnerInEnvironment(ctx, env.ID, "queue"); err != nil || owner != "database" {
+		t.Fatalf("the name is held by %q (%v), want database", owner, err)
+	}
+
+	// Another environment is its own world: the same name in staging and in
+	// production has never been a problem, and refusing it would be.
+	other := Environment{ProjectID: env.ProjectID, Name: "Staging", Slug: "staging", Namespace: "acme-staging"}
+	if err := db.CreateEnvironment(ctx, &other); err != nil {
+		t.Fatalf("CreateEnvironment: %v", err)
+	}
+	if owner, err := db.SlugOwnerInEnvironment(ctx, other.ID, "cache"); err != nil || owner != "" {
+		t.Fatalf("a name used in another environment reported %q (%v), want it free", owner, err)
+	}
+}

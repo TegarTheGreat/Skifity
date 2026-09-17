@@ -56,10 +56,20 @@ func (m *Manager) Create(ctx context.Context, env store.Environment, req api.Cre
 	// so restrict it to characters that never need escaping.
 	password = strings.NewReplacer("-", "x", "_", "y").Replace(password)
 
+	// The same reason as on the app side: an app and a database in one
+	// environment share a namespace and both render a Service under their slug,
+	// so a second one under the same name takes the first one's address over.
+	slug := kube.Slugify(req.Name)
+	if owner, err := m.db.SlugOwnerInEnvironment(ctx, env.ID, slug); err != nil {
+		return store.Database{}, err
+	} else if owner != "" {
+		return store.Database{}, errdoc.NameTaken(owner, req.Name)
+	}
+
 	record := store.Database{
 		EnvironmentID: env.ID,
 		Name:          req.Name,
-		Slug:          kube.Slugify(req.Name),
+		Slug:          slug,
 		Engine:        req.Engine,
 		EngineVersion: req.Version,
 		Status:        "creating",

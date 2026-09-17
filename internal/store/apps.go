@@ -78,6 +78,32 @@ func (db *DB) ListAppsForProject(ctx context.Context, projectID string) ([]App, 
 		WHERE e.project_id = ? ORDER BY a.created_at`, projectID)
 }
 
+// SlugOwnerInEnvironment reports what already answers to a name in an
+// environment: "app", "database", or "" when the name is free.
+//
+// Apps and databases are unique among themselves and share a namespace, so
+// nothing stopped an app and a database in one environment from having the same
+// slug — and they do not merely sit next to each other, they collide. Both
+// render a Service under that name, and the panel applies with force, so
+// creating a Redis called "web" next to an app called "web" took the app's
+// Service over: its Ingress kept pointing at the name and the name now meant
+// Redis. Deleting either one then deleted the other's Service as well.
+func (db *DB) SlugOwnerInEnvironment(ctx context.Context, envID, slug string) (string, error) {
+	var kind string
+	err := db.QueryRowContext(ctx, `
+		SELECT 'app'      FROM apps      WHERE environment_id = ? AND slug = ?
+		UNION ALL
+		SELECT 'database' FROM databases WHERE environment_id = ? AND slug = ?
+		LIMIT 1`, envID, slug, envID, slug).Scan(&kind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("check whether %q is already taken: %w", slug, err)
+	}
+	return kind, nil
+}
+
 // ListAppsByRepo finds every app built from a repository, which is how a webhook
 // knows what to deploy.
 func (db *DB) ListAppsByRepo(ctx context.Context, repoURL string) ([]App, error) {

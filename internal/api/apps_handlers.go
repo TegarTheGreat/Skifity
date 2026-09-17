@@ -97,10 +97,22 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// An app and a database in one environment share a namespace, and both
+	// render a Service under their slug. Two of them under one name is not two
+	// things side by side: the second takes the first's Service over.
+	slug := kube.Slugify(name)
+	if owner, err := s.db.SlugOwnerInEnvironment(r.Context(), env.ID, slug); err != nil {
+		writeError(w, r, err)
+		return
+	} else if owner != "" {
+		writeError(w, r, errdoc.NameTaken(owner, name))
+		return
+	}
+
 	app := store.App{
 		EnvironmentID:  env.ID,
 		Name:           name,
-		Slug:           kube.Slugify(name),
+		Slug:           slug,
 		SourceType:     sourceType,
 		GitSourceID:    req.GitSourceID,
 		RepoURL:        repoURL,

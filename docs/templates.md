@@ -26,7 +26,7 @@ crash-loops until somebody redeploys it.
 
 ## What is in the catalogue
 
-**279 applications**, grouped by what they are for: productivity, developer
+**282 applications**, grouped by what they are for: productivity, developer
 tools, media, storage, publishing, communication, security, AI, analytics,
 monitoring, automation, finance and networking. WordPress, Ghost, n8n,
 Vaultwarden, Uptime Kuma, Plausible, Umami, MinIO, BookStack, Gitea, GitLab,
@@ -37,7 +37,7 @@ catalogue, which is the largest in this category and has been exercised by tens
 of thousands of installations — so the ports, the variables and the volumes come
 from somewhere that works rather than from guesswork.
 
-Thirty-seven install more than one app: a web app and its worker, or a service
+Thirty-eight install more than one app: a web app and its worker, or a service
 and its search index, or a stack of three or four. They land in the same
 environment and reach each other by name. A worker among them has no port at
 all, which is what Skifity gives an app that does not listen: no Service, no

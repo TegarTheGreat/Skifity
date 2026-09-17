@@ -69,7 +69,8 @@
     "more": "More",
     "toggleSidebar": "Show or hide the sidebar",
     "skipToContent": "Skip to content",
-    "breadcrumb": "Breadcrumb"
+    "breadcrumb": "Breadcrumb",
+    "dismiss": "Dismiss"
   },
   "nav": {
     "overview": "Overview",
@@ -512,7 +513,10 @@
     "category": "Category",
     "website": "Website",
     "installedNote": "Installed. It may take a minute to start.",
-    "search": "Search templates"
+    "installedApps_one": "Installed {{count}} app. It may take a minute to start.",
+    "installedApps_other": "Installed {{count}} apps. They may take a minute to start.",
+    "search": "Search templates",
+    "notesTitle": "Before this works"
   },
   "settings": {
     "title": "Settings",

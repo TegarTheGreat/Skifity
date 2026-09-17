@@ -1,7 +1,9 @@
 package templates
 
 import (
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -290,4 +292,60 @@ func TestTheCatalogueLoads(t *testing.T) {
 	if len(All()) < 100 {
 		t.Fatalf("the catalogue has %d templates; the files are not being embedded", len(All()))
 	}
+}
+
+// TestWhatWeSayWeShipIsWhatWeShip: the README and docs/templates.md both put a
+// number on this catalogue, and a number in prose is the first thing to go
+// stale. It said 219 while the directory held 279, and nothing anywhere failed.
+// Every count this repository states about the catalogue is checked here
+// against the catalogue.
+func TestWhatWeSayWeShipIsWhatWeShip(t *testing.T) {
+	total := len(All())
+	multi := 0
+	for _, tpl := range All() {
+		if len(tpl.Services) > 1 {
+			multi++
+		}
+	}
+
+	for _, page := range []string{"../../README.md", "../../docs/templates.md"} {
+		body, err := os.ReadFile(page)
+		if err != nil {
+			t.Fatalf("read %s: %v", page, err)
+		}
+		text := string(body)
+		// Each page states the total once, in digits, and says how many
+		// templates install more than one app — in digits or in words.
+		if !strings.Contains(text, strconv.Itoa(total)) {
+			t.Errorf("%s never says %d, and this catalogue holds %d templates", page, total, total)
+		}
+		if !strings.Contains(text, strconv.Itoa(multi)) &&
+			!strings.Contains(strings.ToLower(text), spell(multi)) {
+			t.Errorf("%s never says %d (or %q), and %d templates install more than one app",
+				page, multi, spell(multi), multi)
+		}
+	}
+}
+
+// spell writes a small number the way the prose does, in lower case, because
+// the caller lowers the page before looking. Only the tens this catalogue is
+// likely to reach: past that, the pages use digits.
+func spell(n int) string {
+	units := []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
+	tens := []string{"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"}
+	teens := []string{"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
+		"sixteen", "seventeen", "eighteen", "nineteen"}
+	switch {
+	case n < 10:
+		return units[n]
+	case n < 20:
+		return teens[n-10]
+	case n < 100:
+		word := tens[n/10]
+		if n%10 != 0 {
+			word += "-" + units[n%10]
+		}
+		return word
+	}
+	return strconv.Itoa(n)
 }

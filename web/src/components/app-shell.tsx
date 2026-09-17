@@ -9,6 +9,7 @@ import {
   ChevronsUpDownIcon,
   DatabaseIcon,
   FolderIcon,
+  InfoIcon,
   LayoutGridIcon,
   LogOutIcon,
   SearchIcon,
@@ -16,6 +17,7 @@ import {
   SettingsIcon,
   ShieldAlertIcon,
   UserIcon,
+  XIcon,
 } from "lucide-react"
 
 import { CommandPalette } from "@/components/command-palette"
@@ -23,6 +25,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Logo } from "@/components/logo"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -102,6 +105,7 @@ export function AppShell() {
             the person can simply go somewhere else. The path is the reset key:
             navigating away is what clears it.
           */}
+          <InstallNotes />
           <ErrorBoundary resetKey={location.pathname}>
             <Outlet />
           </ErrorBoundary>
@@ -109,6 +113,41 @@ export function AppShell() {
       </SidebarInset>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </SidebarProvider>
+  )
+}
+
+/**
+ * What a template said had to be done by hand, on the page it sent you to.
+ *
+ * A template's notes are the steps Skifity cannot do for you — a bucket that
+ * has to be created, a migration that has to be run, a shared directory that is
+ * two directories here. They were shown in the install dialog and nowhere else,
+ * so the one moment they matter — after installing, when the app is up and
+ * half-working — they were gone. Now the install carries them along in the
+ * navigation and this shows them until they are dismissed.
+ */
+function InstallNotes() {
+  const { t } = useTranslation()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const notes = (location.state as { installedNotes?: string } | null)?.installedNotes
+  if (!notes) return null
+  return (
+    <Alert className="mb-6">
+      <InfoIcon />
+      <AlertTitle>{t("templates.notesTitle")}</AlertTitle>
+      <AlertDescription>{notes}</AlertDescription>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute right-2 top-2"
+        aria-label={t("common.dismiss")}
+        // Replace rather than push: going back should not bring the note back.
+        onClick={() => navigate(location.pathname, { replace: true, state: null })}
+      >
+        <XIcon className="size-4" />
+      </Button>
+    </Alert>
   )
 }
 

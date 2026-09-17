@@ -124,12 +124,13 @@ else. The panel is **35 MiB of resident memory idle**, measured, and does not
 drift. Certificates, the builder, the PostgreSQL operator and the rest install
 themselves the first time you use them, and each one says what it costs first.
 
-## Two hundred and nineteen one-click applications
+## 282 one-click applications
 
-WordPress, Ghost, Gitea, n8n, Vaultwarden, Metabase, BookStack, MinIO, Uptime
-Kuma and about two hundred more, grouped by what they are for. Seven of them
-install more than one app — a web app and its worker, a service and its search
-index — which land in the same environment and reach each other by name.
+WordPress, Ghost, Gitea, GitLab, n8n, Vaultwarden, Metabase, BookStack, MinIO,
+Chatwoot, Uptime Kuma and about two hundred and seventy more, grouped by what
+they are for. Thirty-eight of them install more than one app — a web app and its
+worker, a service and its search index — which land in the same environment and
+reach each other by name.
 
 Every one of them **names a version**, and every version was fetched from its
 registry to prove it exists. That sounds like a detail until you roll back: an
@@ -152,13 +153,23 @@ no way out to the internet.
 | [Quick start](docs/quick-start.md) | Empty server to a running app |
 | [Concepts](docs/concepts.md) | What the words mean, and what they are underneath |
 | [Adding servers](docs/adding-servers.md) | The seven steps, and what to do when one fails |
+| [Templates](docs/templates.md) | What a one-click install does, and what it does not |
+| [Backups](docs/backups.md) | What is backed up, where it goes, and restoring |
 | [The CLI and AI assistants](docs/cli.md) | Terminal, API, MCP |
 | [Troubleshooting](docs/troubleshooting.md) | When something is wrong |
 | [Questions](docs/faq.md) | Including the ones with awkward answers |
 | [Configuration](docs/configuration.md) | Every setting, and what to back up |
 | [What it costs](docs/performance.md) | Memory and size, measured |
+
+Those ten are the ones the panel serves. Three more are for people working on
+Skifity rather than running it, so they stay in the repository:
+
+| | |
+|---|---|
 | [Architecture](docs/architecture.md) | How it fits together |
 | [Decisions](docs/decisions.md) | Why it is like this |
+| [Progress](docs/progress.md) | Where the work stands, including what has never run |
+| [Contributing](CONTRIBUTING.md) | The rules that are load-bearing |
 
 ## Building it yourself
 

@@ -62,7 +62,8 @@
     "more": "更多",
     "toggleSidebar": "显示或隐藏侧边栏",
     "skipToContent": "跳到主要内容",
-    "breadcrumb": "导航路径"
+    "breadcrumb": "导航路径",
+    "dismiss": "关闭"
   },
   "nav": {
     "overview": "总览",
@@ -503,7 +504,9 @@
     "category": "分类",
     "website": "官网",
     "installedNote": "已安装。启动可能需要一分钟。",
-    "search": "搜索模板"
+    "installedApps_other": "已安装 {{count}} 个应用。启动可能需要一分钟。",
+    "search": "搜索模板",
+    "notesTitle": "在它能用之前"
   },
   "settings": {
     "title": "设置",

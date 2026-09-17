@@ -816,7 +816,7 @@ A peer beats a healthcheck, because the peer's port is the one other apps have t
 reach: ZooKeeper's healthcheck talks to its admin server on 8080, which answers
 `ruok` and nothing ClickHouse wants.
 
-**279 templates**, up from 230 — 37 of them multi-service, up from seven. Three
+**282 templates**, up from 230 — 38 of them multi-service, up from seven. Three
 more fixes to the output rather than the converter:
 
 * **A worker keeps no port it did not declare.** A healthcheck that shells out,
@@ -830,13 +830,72 @@ more fixes to the output rather than the converter:
   `8211/udp` and Coolify's metadata says healthchecks listens on 80000. Both
   would have produced a domain that never answers.
 
-What remains dropped, and why it stays dropped: 8 stacks need the Docker socket,
-which cannot run under a restricted pod security policy; 4 are five to
-twenty-three services; 23 single-service and 20 multi-service images have no tag
-this could verify — a repository that 401s anonymously, a registry that only
-rate-limits, or a project that publishes nothing but `latest`. Shipping any of
-them means guessing, and the whole point of the previous phase was that guessing
-is worse than dropping.
+## Phase 26 — the unverified images, and what the catalogue says about itself
+
+Forty-three images could not be verified, which sounded like forty-three
+upstreams being careless. Four more bugs, one of them shipping:
+
+* **A reference with no tag has no tag.** `busybox` rpartitions to `("", "",
+  "busybox")`, and taking that as the tag made the resolver answer "already
+  pinned" for the most floating reference there is. Nothing reached the
+  catalogue — the writer's own gate refuses an image with no tag — but the
+  resolver was telling itself the opposite of the truth.
+* **A pinned tag still has to exist.** Coolify's Mealie template names
+  `3.17.0`; Mealie publishes `v3.17.0`. Trusting "already pinned" dropped a
+  template whose current release was one lookup away.
+* **The registry and the Hub API have different limits.** A manifest fetch
+  counts against Docker Hub's anonymous pull limit and an API call does not, so
+  a vanity host in front of Hub — docker.flipt.io, registry.rocket.chat,
+  cr.weaviate.io — could answer 429 forever while the tag was plainly there.
+  Asking the Hub API instead recovered Rocket.Chat, Weaviate and Flipt without
+  pulling anything.
+* **Nothing ever asked whether the catalogue was still true.** A tag that
+  existed at import can be deleted afterwards, and MinIO did exactly that to its
+  old RELEASE tags on Docker Hub. `hack/verify_catalogue.py` now asks every
+  registry about every image in the directory: 290 of 291 present, 0 gone, 1
+  rate-limited. It is not in `make check` — CI has no business depending on
+  Docker Hub being up, and the anonymous limit would make it flaky — so it is a
+  thing somebody runs before a release.
+
+**282 templates**, 38 of them multi-service.
+
+What stays dropped: 8 stacks need the Docker socket, which cannot run under a
+restricted pod security policy; 4 are five to twenty-three services; 36 images
+have no tag this could verify — `tiredofit/freescout` and `ghcr.io/ente-io/web`
+are gone or private, Prefect publishes only toolchain variants, and Excalidraw,
+Fizzy and label-studio publish nothing but branch builds. Shipping any of them
+means guessing, and the whole point of the previous phase was that guessing is
+worse than dropping.
+
+### The number in the prose was wrong, and nothing failed
+
+The README said 219 while the directory held 279. It had been wrong for two
+phases. Every count this repository states about the catalogue — in the README
+and in `docs/templates.md` — is now read back from the catalogue by a test, and
+it caught the next drift on the same afternoon.
+
+### Three things the panel did not say
+
+Thirty-eight multi-service templates made three gaps visible that seven had hidden:
+
+* **A card said `3210 · 6791 · 26.2.4.23 · postgres`.** Joining every service's
+  tag with a dot says nothing and looks like a fault. One app still shows its
+  version; a stack shows how many apps it is.
+* **Installing four apps ended on `/projects`**, with no sign of where they
+  went. It now lands on the app when there is one and on its project when there
+  are several, and says how many were made.
+* **A template's notes were shown before installing and never again.** They are
+  the steps Skifity cannot do for you — a bucket to create, a migration to run,
+  a shared directory that is two directories here — and the moment they matter
+  is after the install, not before it. The comment on the field said they
+  "appear after installation"; they did not. They do now, on the page the
+  install lands on, until dismissed.
+
+## The repository itself
+
+`CONTRIBUTING.md` and a pull request template, which a repository this size
+should have had from the start, and the README's documentation table now lists
+all ten pages the panel serves rather than eight.
 
 ## Next tasks
 

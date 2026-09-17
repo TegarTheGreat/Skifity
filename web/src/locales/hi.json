@@ -69,7 +69,8 @@
     "more": "और",
     "toggleSidebar": "साइडबार दिखाएँ या छिपाएँ",
     "skipToContent": "सामग्री पर जाएँ",
-    "breadcrumb": "पथ-सूची"
+    "breadcrumb": "पथ-सूची",
+    "dismiss": "हटाएँ"
   },
   "nav": {
     "overview": "अवलोकन",
@@ -514,7 +515,10 @@
     "category": "श्रेणी",
     "website": "वेबसाइट",
     "installedNote": "लग गया। शुरू होने में एक मिनट लग सकता है।",
-    "search": "टेम्पलेट खोजें"
+    "installedApps_one": "{{count}} ऐप लग गया। शुरू होने में एक मिनट लग सकता है।",
+    "installedApps_other": "{{count}} ऐप लग गए। शुरू होने में एक मिनट लग सकता है।",
+    "search": "टेम्पलेट खोजें",
+    "notesTitle": "इसके काम करने से पहले"
   },
   "settings": {
     "title": "सेटिंग्स",

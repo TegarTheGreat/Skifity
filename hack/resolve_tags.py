@@ -267,8 +267,11 @@ def resolve(image):
             image = ref
     if ref.startswith("lscr.io/linuxserver/"):
         ref = image = "linuxserver/" + ref.split("/")[-1]
+    # A reference with no tag has no tag. `busybox` rpartitions to ("", "",
+    # "busybox"), and taking that as the tag made this answer "already pinned"
+    # for the most floating reference there is.
     name, _, tag = ref.rpartition(":")
-    if "/" in tag:
+    if not name or "/" in tag:
         name, tag = ref, ""
     variant = ""
     for suffix in ("alpine", "slim", "apache", "fpm", "debian"):
@@ -282,7 +285,15 @@ def resolve(image):
     if head.isalpha() and head not in ("v", "version", "latest", "stable", "main", "master"):
         edition = head
     if is_pinned(tag):
-        return image, "already pinned"
+        # A tag that names a version still has to be a tag the registry has.
+        # Coolify's Mealie template says 3.17.0 and Mealie publishes v3.17.0,
+        # so taking "already pinned" at its word dropped a template whose
+        # newest release was one lookup away.
+        try:
+            if exists(image):
+                return image, "already pinned"
+        except Undetermined:
+            return image, "already pinned"
 
     tags, repo, ordered = tags_for(image)
     if edition:
@@ -293,6 +304,24 @@ def resolve(image):
     if not picked:
         return None, f"no versioned tag among {len(tags)} tags"
     return f"{repo}:{picked}", "resolved"
+
+
+def hub_has_tag(repo, tag):
+    """Ask Docker Hub's own API whether a tag is there.
+
+    The registry and the API are two different services with two different
+    limits: a manifest fetch counts against the anonymous pull limit and the
+    API does not. So when a Hub-backed registry answers 429 — and the vanity
+    hosts in front of Hub (docker.flipt.io, registry.rocket.chat, cr.weaviate.io)
+    all do, because they share its limit — this still answers the question,
+    without pulling anything.
+    """
+    if "/" not in repo:
+        repo = "library/" + repo
+    try:
+        return get(f"https://hub.docker.com/v2/repositories/{repo}/tags/{tag}").get("name") == tag
+    except Exception:
+        return False
 
 
 def exists(image):
@@ -317,6 +346,7 @@ def exists(image):
     headers = {"Accept": "application/vnd.oci.image.index.v1+json,"
                          "application/vnd.docker.distribution.manifest.list.v2+json,"
                          "application/vnd.docker.distribution.manifest.v2+json"}
+    hub = host == "registry-1.docker.io"
     for _ in range(2):
         try:
             request = urllib.request.Request(url, headers=headers, method="HEAD")
@@ -324,10 +354,16 @@ def exists(image):
                 return response.status == 200
         except urllib.error.HTTPError as err:
             if err.code in RETRY:
+                # `hub` is set once a challenge has named auth.docker.io, which
+                # is how a vanity host admits it is Docker Hub underneath.
+                if hub and hub_has_tag(repo, tag):
+                    return True
                 raise Undetermined(f"{host} answered {err.code}") from err
             if err.code != 401 or "Authorization" in headers:
                 return False
-            token = token_for(err.headers.get("WWW-Authenticate", ""), repo)
+            challenge = err.headers.get("WWW-Authenticate", "")
+            hub = hub or "auth.docker.io" in challenge
+            token = token_for(challenge, repo)
             if not token:
                 raise Undetermined(f"{host} would not hand out an anonymous token")
             headers["Authorization"] = "Bearer " + token

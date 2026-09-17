@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
@@ -131,7 +132,7 @@ export function TemplatesPage() {
                             )}
                           </div>
                           <p className="truncate text-xs text-muted-foreground">
-                            {installs(template)}
+                            {installs(template, t)}
                           </p>
                         </div>
                       </div>
@@ -167,13 +168,18 @@ export function TemplatesPage() {
 /**
  * What a template actually installs, in one line.
  *
- * The version matters enough to be on the card: every template names one, none
- * of them runs `latest`, and "WordPress" alone does not say which WordPress.
- * The databases are there because a template that brings one is a bigger thing
- * to install than a template that does not.
+ * For one app, the version: every template names one, none of them runs
+ * `latest`, and "WordPress" alone does not say which WordPress. For a stack,
+ * the count instead — joining four tags with a dot read as "3210 · 6791 ·
+ * 26.2.4.23 · postgres", which says nothing and looks like a fault. The
+ * databases stay either way, because a template that brings one is a bigger
+ * thing to install than a template that does not.
  */
-function installs(template: Template): string {
-  const parts = template.services.map((service) => versionOf(service.image))
+function installs(template: Template, t: TFunction): string {
+  const parts =
+    template.services.length === 1
+      ? [versionOf(template.services[0].image)]
+      : [t("common.app", { count: template.services.length })]
   for (const database of template.databases) parts.push(database.engine)
   return parts.join(" · ")
 }
@@ -189,6 +195,9 @@ function versionOf(image: string): string {
   if (colon < 0 || image.slice(colon).includes("/")) return image
   return image.slice(colon + 1)
 }
+
+/** What POST /api/templates/{id}/install answers with. */
+type Installed = { apps: { id: string }[]; databases: { id: string }[]; notes?: string }
 
 function InstallDialog({ template, onClose }: { template: Template; onClose: () => void }) {
   const { t } = useTranslation()
@@ -226,17 +235,34 @@ function InstallDialog({ template, onClose }: { template: Template; onClose: () 
 
   const install = useMutation({
     mutationFn: () =>
-      api.post(`/api/templates/${template.id}/install`, {
+      api.post<Installed>(`/api/templates/${template.id}/install`, {
         environment_id: environmentId,
         name: name.trim(),
         // A generated value is filled in by the panel, so anything left empty
         // is sent empty rather than as an accidental literal.
         values,
       }),
-    onSuccess: () => {
-      toast.success(t("templates.installedNote"))
+    // Land on the thing that was made, not on the list it is somewhere inside.
+    // One app has a page of its own; a stack does not, so its project is the
+    // nearest place that shows all of it at once. Sending everybody to
+    // /projects meant a four-app install finished with no sign of where it
+    // went.
+    onSuccess: (result) => {
+      const apps = result?.apps ?? []
+      toast.success(
+        apps.length > 1
+          ? t("templates.installedApps", { count: apps.length })
+          : t("templates.installedNote"),
+      )
       onClose()
-      navigate("/projects")
+      const project = environments.find((entry) => entry.environment.id === environmentId)?.project
+      // The notes ride along so the shell can show them where you land: they
+      // are the steps Skifity cannot do for you, and a dialog you just closed
+      // is the one place they are of no use.
+      const state = result?.notes ? { installedNotes: result.notes } : undefined
+      if (apps.length === 1) navigate(`/apps/${apps[0].id}`, { state })
+      else if (project) navigate(`/projects/${project.id}`, { state })
+      else navigate("/projects", { state })
     },
   })
 

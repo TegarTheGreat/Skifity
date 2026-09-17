@@ -94,7 +94,8 @@ type Template struct {
 	Databases []DatabaseSpec `json:"databases"`
 	// Inputs are asked for at install time, such as an admin email.
 	Inputs []Input `json:"inputs,omitempty"`
-	// Notes appear after installation, for the steps we cannot automate.
+	// Notes are shown in the install dialog and again on the page the install
+	// lands on, for the steps we cannot automate.
 	Notes string `json:"notes,omitempty"`
 }
 

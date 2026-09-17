@@ -75,6 +75,17 @@ func (d Definition) ResolvedKind() Kind {
 	return KindText
 }
 
+// Pod network backends. Every server in a cluster must agree: a node that
+// joins with a different one never exchanges a packet with the others, and
+// nothing reports that the flags disagree.
+const (
+	// FlannelWireGuard encrypts traffic between servers. The default.
+	FlannelWireGuard = "wireguard-native"
+	// FlannelVXLAN works on a kernel without the WireGuard module, and does
+	// not encrypt.
+	FlannelVXLAN = "vxlan"
+)
+
 // Groups, in the order the UI shows them.
 const (
 	GroupGeneral       = "general"
@@ -93,6 +104,7 @@ const (
 const (
 	KeyPanelURL          = "general.panel_url"
 	KeyK3sVersion        = "cluster.k3s_version"
+	KeyFlannelBackend    = "cluster.flannel_backend"
 	KeyPreviewTTLDays    = "cluster.preview_ttl_days"
 	KeyWildcardDomain    = "domains.wildcard"
 	KeyClusterIP         = "domains.cluster_ip"
@@ -168,6 +180,16 @@ var Definitions = []Definition{
 		Placeholder: "7",
 		Kind:        KindNumber,
 		Validate:    validateInt,
+	},
+	{
+		Key: KeyFlannelBackend, Label: "How servers talk to each other", Group: GroupCluster,
+		Help: "WireGuard encrypts traffic between your servers, which matters when they are " +
+			"with different providers. It needs the wireguard kernel module on every server. " +
+			"vxlan works everywhere and is not encrypted. Every server in a cluster has to use " +
+			"the same one, so change this before adding servers, not after.",
+		Kind:     KindChoice,
+		Options:  []string{FlannelWireGuard, FlannelVXLAN},
+		Validate: validateOneOf(FlannelWireGuard, FlannelVXLAN),
 	},
 	{
 		Key: KeyDeploymentHistory, Label: "Deployment records to keep, per app", Group: GroupCluster,

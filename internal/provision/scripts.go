@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"skifity/internal/kube"
+	"skifity/internal/settings"
 	"skifity/internal/shellsafe"
 )
 
@@ -215,17 +216,21 @@ echo "firewall_configured=${HAS_UFW}"
 // serverArgs are the flags every control plane node has to agree on.
 //
 // Not a matter of taste. --flannel-backend chooses how nodes reach each other,
-// and a node that joins without it defaults to vxlan while the first node is
-// on WireGuard: the two never exchange a packet, and the symptom is pods that
-// cannot reach pods on the other machine rather than anything saying "these do
-// not match". --secrets-encryption is the same shape of problem: a member that
-// disagrees writes Secrets the others cannot read.
+// and a node that joins with a different one never exchanges a packet with the
+// others: the symptom is pods that cannot reach pods on the other machine
+// rather than anything saying "these do not match". It is a cluster-wide
+// setting for exactly that reason, read once and passed to every node.
+// --secrets-encryption is the same shape of problem: a member that disagrees
+// writes Secrets the others cannot read.
 //
 // installer/install.sh starts the first node with exactly these, and a test
 // checks that the two lists have not drifted apart.
-func serverArgs(publicIP string) []string {
+func serverArgs(publicIP, backend string) []string {
+	if backend == "" {
+		backend = settings.FlannelWireGuard
+	}
 	return []string{
-		"--flannel-backend=wireguard-native",
+		"--flannel-backend=" + backend,
 		"--secrets-encryption",
 		"--write-kubeconfig-mode=0600",
 		fmt.Sprintf("--tls-san=%s", publicIP),
@@ -235,15 +240,20 @@ func serverArgs(publicIP string) []string {
 }
 
 // InstallServerScript installs the first control plane node.
-func InstallServerScript(version, token, publicIP string, extraArgs []string) string {
-	args := append([]string{"--cluster-init"}, serverArgs(publicIP)...)
+//
+// backend is the pod network every node in this cluster will use. It is decided
+// once, here, and every server that joins later is given the same one: a node
+// that joins with a different backend never exchanges a packet with the others,
+// and nothing reports that the flags disagree.
+func InstallServerScript(version, token, publicIP, backend string, extraArgs []string) string {
+	args := append([]string{"--cluster-init"}, serverArgs(publicIP, backend)...)
 	args = append(args, extraArgs...)
 	return installScript(version, token, "", strings.Join(args, " "), true)
 }
 
 // JoinServerScript joins another control plane node for high availability.
-func JoinServerScript(version, token, serverURL, publicIP string) string {
-	args := append([]string{"--server", serverURL}, serverArgs(publicIP)...)
+func JoinServerScript(version, token, serverURL, publicIP, backend string) string {
+	args := append([]string{"--server", serverURL}, serverArgs(publicIP, backend)...)
 	return installScript(version, token, "", strings.Join(args, " "), true)
 }
 

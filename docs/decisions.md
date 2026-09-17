@@ -43,11 +43,18 @@ than a migration.
 **Context.** Users combine cheap VPSes from different providers, so pod traffic crosses the public
 internet unencrypted with the default vxlan backend.
 
-**Decision.** `--flannel-backend=wireguard-native`, with preflight detection of the `wireguard` kernel
-module and an explicit fallback to vxlan with a warning shown in the panel.
+**Decision.** `--flannel-backend=wireguard-native`, chosen once for the whole cluster and stored in
+`cluster.flannel_backend`. The installer picks it on the first node, falling back to `vxlan` with a
+visible warning when the kernel has no `wireguard` module, and passes its choice to the panel
+(`SKIFITY_POD_NETWORK`), which records it. Every server added afterwards is installed with the
+recorded backend, and preflight refuses a server whose kernel cannot run it.
 
-**Consequences.** Some minimal kernels lack the module; the fallback keeps those usable but flags the
-security downgrade instead of hiding it.
+**Consequences.** Some minimal kernels lack the module. That is a choice made once, on the first
+node, where there is nothing yet to disagree with — not a per-server fallback: nodes on different
+backends join without any error and then never exchange a packet, so a server that cannot match the
+cluster is refused with the two fixes that work (install `wireguard-tools`, or move the whole cluster
+to vxlan). Changing the setting on a running cluster only affects servers added after it, which the
+setting's help text says.
 
 ---
 

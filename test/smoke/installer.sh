@@ -85,6 +85,7 @@ PUBLIC_URL="https://panel.example.test"
 CONFIG_DIR="/etc/skifity"
 DATA_DIR="/var/lib/skifity"
 ISSUER="skifity-letsencrypt"
+POD_NETWORK=""
 
 for manifest in panel.yaml ingress.yaml ingress-tls.yaml; do
   if render "deploy/$manifest" >"$WORKDIR/$manifest" 2>"$WORKDIR/render.err"; then
@@ -110,6 +111,28 @@ grep -q "image: $IMAGE" "$WORKDIR/panel.yaml" &&
 grep -q "kubernetes.io/hostname: $NODE_NAME" "$WORKDIR/panel.yaml" &&
   t_pass "the panel is pinned to the node holding its data" ||
   t_fail "the rendered Deployment is not pinned to $NODE_NAME"
+
+# The installer chooses the pod network on the first node; the panel installs
+# every server after that and can only match a choice it was handed. A node on
+# the other backend joins without an error and then reaches nothing.
+POD_NETWORK="vxlan"
+render "deploy/panel.yaml" >"$WORKDIR/panel-vxlan.yaml" 2>/dev/null
+if grep -q 'value: "vxlan"' "$WORKDIR/panel-vxlan.yaml"; then
+  t_pass "the pod network the installer chose is handed to the panel"
+else
+  t_fail "the rendered Deployment does not tell the panel which pod network this cluster uses"
+fi
+POD_NETWORK=""
+
+# And the choice itself: WireGuard when the kernel can do it, vxlan when it
+# cannot, never a silent default that half the cluster disagrees with.
+if grep -q 'flannel-backend=${POD_NETWORK}' "$ROOT/installer/install.sh" &&
+  grep -q 'POD_NETWORK="wireguard-native"' "$ROOT/installer/install.sh" &&
+  grep -q 'POD_NETWORK="vxlan"' "$ROOT/installer/install.sh"; then
+  t_pass "the first node is installed with the pod network the kernel supports"
+else
+  t_fail "install.sh no longer picks the pod network from the kernel"
+fi
 
 grep -q "host: $PANEL_HOST" "$WORKDIR/ingress.yaml" &&
   t_pass "the route uses the chosen hostname" ||

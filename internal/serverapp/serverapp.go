@@ -55,6 +55,10 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	schemaVersion, _ := db.SchemaVersion(ctx)
 	log.Info("database ready", "path", cfg.DatabasePath, "schema_version", schemaVersion)
 
+	if err := seedPodNetwork(ctx, db, cfg, log); err != nil {
+		return err
+	}
+
 	hub := events.NewHub(256)
 	authService := auth.NewService(db, keyring, cfg.SessionTTL, !cfg.DevMode)
 
@@ -168,6 +172,32 @@ func watchCluster(c *cluster.Cluster) watch.Cluster {
 		return nil
 	}
 	return c
+}
+
+// seedPodNetwork records the pod network the installer started this cluster
+// with, once, so every server added later is installed with the same one.
+//
+// A node that joins a wireguard-native cluster with vxlan joins without error
+// and then never exchanges a packet with the others, so the panel cannot guess
+// and cannot leave it unset. It only ever writes the setting when there is
+// nothing there: after the first start the setting is the answer, including
+// when an operator has changed it.
+func seedPodNetwork(ctx context.Context, db *store.DB, cfg config.Config, log *slog.Logger) error {
+	if cfg.PodNetwork == "" {
+		return nil
+	}
+	current, _, err := db.GetSetting(ctx, settings.KeyFlannelBackend)
+	if err != nil {
+		return fmt.Errorf("read the pod network setting: %w", err)
+	}
+	if current != "" {
+		return nil
+	}
+	if err := db.SetSetting(ctx, settings.KeyFlannelBackend, cfg.PodNetwork, false, "system"); err != nil {
+		return fmt.Errorf("record the pod network setting: %w", err)
+	}
+	log.Info("recorded the pod network this cluster was installed with", "backend", cfg.PodNetwork)
+	return nil
 }
 
 // panelAddress works out how to link back into the panel from a notification.

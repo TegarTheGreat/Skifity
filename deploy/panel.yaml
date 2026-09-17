@@ -9,6 +9,7 @@
 #   __IMAGE__       the panel image, including its tag
 #   __NODE__        the node the panel is pinned to
 #   __PUBLIC_URL__  how people reach the panel, used for webhook URLs
+#   __POD_NETWORK__ the flannel backend this cluster was installed with
 #   __CONFIG_DIR__  the host directory holding the master key
 #   __DATA_DIR__    the host directory holding the database
 ---
@@ -122,6 +123,11 @@ spec:
               value: "__PUBLIC_URL__"
             - name: SKIFITY_LOG_FORMAT
               value: json
+            # The pod network the installer started this cluster with. The panel
+            # records it once and installs every server it adds later with the
+            # same one, because nodes that disagree never reach each other.
+            - name: SKIFITY_POD_NETWORK
+              value: "__POD_NETWORK__"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

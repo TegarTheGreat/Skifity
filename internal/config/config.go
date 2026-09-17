@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"skifity/internal/settings"
 	"skifity/internal/version"
 )
 
@@ -65,6 +66,15 @@ type Config struct {
 	// a server added later has to join with the token that cluster was started
 	// with, and the panel has no other way to learn it.
 	ClusterTokenPath string `json:"cluster_token_path" toml:"cluster_token_path"`
+	// PodNetwork is the flannel backend the cluster the panel runs in was
+	// started with, passed in by the installer.
+	//
+	// Every node in a cluster has to use the same one, and the panel cannot
+	// read the flags the first node was installed with. So the installer, which
+	// chose it, says what it chose; the panel stores that the first time it
+	// starts and every server it adds later is given the same backend. After
+	// that the setting is the answer and this is ignored.
+	PodNetwork string `json:"pod_network" toml:"pod_network"`
 }
 
 // Default returns the configuration used when nothing overrides it.
@@ -138,6 +148,7 @@ func (c *Config) applyEnv(lookup func(string) string) {
 	str("PUBLIC_URL", &c.PublicURL)
 	str("SETUP_TOKEN_PATH", &c.SetupTokenPath)
 	str("CLUSTER_TOKEN_PATH", &c.ClusterTokenPath)
+	str("POD_NETWORK", &c.PodNetwork)
 
 	if v := lookup(EnvPrefix + "DEV_MODE"); v != "" {
 		c.DevMode = truthy(v)
@@ -182,6 +193,11 @@ func (c *Config) Validate() error {
 	}
 	if c.PublicURL != "" && !strings.HasPrefix(c.PublicURL, "http://") && !strings.HasPrefix(c.PublicURL, "https://") {
 		return fmt.Errorf("public_url %q must start with http:// or https://", c.PublicURL)
+	}
+	switch c.PodNetwork {
+	case "", settings.FlannelWireGuard, settings.FlannelVXLAN:
+	default:
+		return fmt.Errorf("pod_network %q must be %s or %s", c.PodNetwork, settings.FlannelWireGuard, settings.FlannelVXLAN)
 	}
 	if c.SessionTTL < time.Minute {
 		return fmt.Errorf("session_ttl %s is shorter than a minute", c.SessionTTL)

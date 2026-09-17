@@ -18,6 +18,8 @@
 #   SKIFITY_ACME_EMAIL    the address Let's Encrypt sends expiry warnings to
 #   SKIFITY_ACME_STAGING  set to 1 to use Let's Encrypt's staging server
 #   SKIFITY_CHANNEL       k3s channel (default: stable)
+#   SKIFITY_POD_NETWORK   wireguard-native or vxlan; default: wireguard-native
+#                         when the kernel has the module, vxlan otherwise
 #   SKIFITY_SKIP_K3S      set to 1 when k3s is already installed and configured
 #   SKIFITY_ASSUME_YES    set to 1 to answer every prompt with yes
 #
@@ -34,6 +36,8 @@ DATA_DIR="/var/lib/skifity"
 LOG_FILE="/var/log/skifity-install.log"
 MANIFEST_DIR="/var/lib/skifity/manifests"
 K3S_CHANNEL="${SKIFITY_CHANNEL:-stable}"
+# The pod network. Decided in pick_pod_network below, unless it is set here.
+POD_NETWORK="${SKIFITY_POD_NETWORK:-}"
 KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
 ISSUER="skifity-letsencrypt"
 # The in-cluster registry built images are pushed to and pulled from. These
@@ -217,13 +221,11 @@ install_k3s() {
 		return 0
 	fi
 
+	pick_pod_network
+
 	note "This downloads and starts k3s, which takes a minute or two."
 	# --cluster-init starts embedded etcd even on one node, so a second and third
 	# control plane server can join later without rebuilding the cluster.
-	#
-	# WireGuard encrypts traffic between nodes. On a single server it costs
-	# nothing, and it means adding a server over the public internet later is
-	# not a change of security model.
 	curl -fsSL https://get.k3s.io >/tmp/skifity-k3s-install.sh 2>>"$LOG_FILE" || fail \
 		"Could not download the k3s installer from get.k3s.io." \
 		"Check that this server can reach the internet:
@@ -231,7 +233,7 @@ install_k3s() {
   curl -fsSL https://get.k3s.io | head"
 
 	INSTALL_K3S_CHANNEL="$K3S_CHANNEL" \
-		INSTALL_K3S_EXEC="server --cluster-init --flannel-backend=wireguard-native --write-kubeconfig-mode=0600 --secrets-encryption" \
+		INSTALL_K3S_EXEC="server --cluster-init --flannel-backend=${POD_NETWORK} --write-kubeconfig-mode=0600 --secrets-encryption" \
 		sh /tmp/skifity-k3s-install.sh >>"$LOG_FILE" 2>&1 || fail \
 		"k3s did not install." \
 		"The last lines of ${LOG_FILE} say why. The usual causes are no outbound network access to get.k3s.io, or a kernel without the modules k3s needs.
@@ -242,6 +244,34 @@ Try the download on its own to see the error:
 
 	rm -f /tmp/skifity-k3s-install.sh
 	ok "k3s installed"
+}
+
+# pick_pod_network decides how pods on different servers reach each other.
+#
+# WireGuard encrypts that traffic. On a single server it costs nothing, and it
+# means adding a server over the public internet later is not a change of
+# security model — so it is the default whenever the kernel can do it.
+#
+# The fallback is real, and it is only free here, on the first node: there is no
+# cluster yet to disagree with. Once this is chosen the panel is told about it
+# and installs every server added later the same way, because a node that joins
+# with the other backend joins without complaint and then never exchanges a
+# packet with the rest.
+pick_pod_network() {
+	if [ -n "$POD_NETWORK" ]; then
+		note "Pod network: ${POD_NETWORK} (SKIFITY_POD_NETWORK)"
+		return 0
+	fi
+	if modprobe wireguard 2>>"$LOG_FILE" || lsmod 2>/dev/null | grep -q '^wireguard' ||
+		[ -d /sys/module/wireguard ]; then
+		POD_NETWORK="wireguard-native"
+		note "Pod network: wireguard-native, so traffic between servers is encrypted"
+		return 0
+	fi
+	POD_NETWORK="vxlan"
+	note "This kernel has no WireGuard module, so the pod network will be vxlan."
+	note "Traffic between servers will not be encrypted. To get encryption,"
+	note "install it first and run this again:  apt-get install -y wireguard-tools"
 }
 
 # containerd runs on the host, not in the cluster. It cannot resolve the
@@ -453,6 +483,7 @@ render() {
 			-e "s|__NODE__|${NODE_NAME}|g" \
 			-e "s|__HOST__|${PANEL_HOST}|g" \
 			-e "s|__PUBLIC_URL__|${PUBLIC_URL}|g" \
+			-e "s|__POD_NETWORK__|${POD_NETWORK}|g" \
 			-e "s|__CONFIG_DIR__|${CONFIG_DIR}|g" \
 			-e "s|__DATA_DIR__|${DATA_DIR}|g" \
 			-e "s|__ISSUER__|${ISSUER}|g"

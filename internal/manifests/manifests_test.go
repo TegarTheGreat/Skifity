@@ -19,6 +19,7 @@ var values = map[string]string{
 	"IMAGE":       "ghcr.io/skifity/skifity:0.0.0-test",
 	"NODE":        "test-node-1",
 	"PUBLIC_URL":  "https://panel.example.test",
+	"POD_NETWORK": "wireguard-native",
 	"HOST":        "panel.example.test",
 	"CONFIG_DIR":  "/etc/skifity",
 	"DATA_DIR":    "/var/lib/skifity",

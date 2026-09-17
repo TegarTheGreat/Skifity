@@ -22,8 +22,12 @@ The panel shows these as they happen, and says what each one found.
 5. **Checking the network.** Both directions, before anything long-running
    starts. Without this step, a firewall in the provider's control panel shows
    up as a five-minute Kubernetes install that times out with no explanation.
-6. **Installing Kubernetes.** k3s joins the existing cluster. Traffic between
-   servers is encrypted with WireGuard.
+6. **Installing Kubernetes.** k3s joins the existing cluster, with the same pod
+   network as every other server. That is normally WireGuard, which encrypts
+   traffic between servers; a server whose kernel has no WireGuard module is
+   refused before this step rather than joined into a cluster it could not
+   reach. Settings -> Cluster -> "How servers talk to each other" shows which
+   network this cluster uses.
 7. **Joining the cluster.** The panel waits for the node to report ready.
 
 ## The password

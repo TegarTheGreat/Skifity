@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"skifity/internal/settings"
 )
 
 // Preflight is what the panel learned about a server before touching it.
@@ -35,11 +37,16 @@ type Preflight struct {
 	Warnings []string `json:"warnings"`
 }
 
-// Requirements are the minimums a server must meet.
+// Requirements are what a server must meet to join this cluster.
 type Requirements struct {
 	MinMemoryMB int
 	MinDiskGB   int
 	MinCPUCores int
+	// FlannelBackend is the pod network this cluster already uses. A server
+	// cannot join with a different one, so a kernel that cannot run the
+	// cluster's backend is a reason to stop rather than a warning. Empty means
+	// the default, which is WireGuard.
+	FlannelBackend string
 }
 
 // DefaultRequirements is what the panel enforces.
@@ -48,13 +55,13 @@ type Requirements struct {
 // kubelet starts evicting as soon as anything runs. The control plane node
 // needs more, which is checked separately.
 func DefaultRequirements() Requirements {
-	return Requirements{MinMemoryMB: 900, MinDiskGB: 8, MinCPUCores: 1}
+	return Requirements{MinMemoryMB: 900, MinDiskGB: 8, MinCPUCores: 1, FlannelBackend: settings.FlannelWireGuard}
 }
 
 // ControlPlaneRequirements are stricter, because etcd and the API server live
 // there too.
 func ControlPlaneRequirements() Requirements {
-	return Requirements{MinMemoryMB: 1800, MinDiskGB: 20, MinCPUCores: 2}
+	return Requirements{MinMemoryMB: 1800, MinDiskGB: 20, MinCPUCores: 2, FlannelBackend: settings.FlannelWireGuard}
 }
 
 // Problem is one reason a server cannot join, with the fix.
@@ -218,11 +225,18 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 		})
 	}
 
-	if !p.HasWireGuard {
+	// There is no fallback here, and there used to be a message promising one.
+	// Every node in a cluster has to use the same pod network: a node that
+	// joins with vxlan while the others run wireguard-native joins without
+	// complaint and then never exchanges a packet with them. So when this
+	// cluster runs WireGuard, a kernel without the module stops the server
+	// being added, and the two fixes are the two that actually work.
+	if !p.HasWireGuard && wireGuardRequired(req) {
 		problems = append(problems, Problem{
 			Check:  "wireguard",
-			Detail: "This kernel does not have the WireGuard module.",
-			Fix:    "Traffic between your servers will use vxlan, which is not encrypted. If your servers are with different providers, install WireGuard first: apt-get install -y wireguard-tools",
+			Detail: "This kernel does not have the WireGuard module, and this cluster encrypts traffic between servers with WireGuard.",
+			Fix:    "Install it on this server: apt-get install -y wireguard-tools (then reboot if the module still does not load). If the kernel cannot have it at all, switch the whole cluster to vxlan in Settings -> Cluster -> Pod network, which turns that encryption off for every server.",
+			Fatal:  true,
 		})
 	}
 
@@ -235,6 +249,12 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	}
 
 	return problems
+}
+
+// wireGuardRequired reports whether this cluster's pod network needs the
+// WireGuard kernel module.
+func wireGuardRequired(req Requirements) bool {
+	return req.FlannelBackend == "" || req.FlannelBackend == settings.FlannelWireGuard
 }
 
 // Fatal reports whether any problem stops the server from being added.

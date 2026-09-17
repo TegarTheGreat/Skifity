@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
+	"skifity/internal/config"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -108,4 +110,66 @@ func seedApp(t *testing.T, db *store.DB) store.App {
 		t.Fatalf("create an app: %v", err)
 	}
 	return app
+}
+
+// The installer knows which pod network it started the cluster with and the
+// panel cannot find out any other way. If that never reaches the database, the
+// panel installs the second server with its own default, which on a cluster
+// that had to use vxlan is the wrong one — and a node on the wrong backend
+// joins without error and then reaches nothing.
+func TestThePodNetworkTheInstallerChoseIsRecordedOnce(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	cfg := config.Default()
+	cfg.PodNetwork = settings.FlannelVXLAN
+	if err := seedPodNetwork(ctx, db, cfg, log); err != nil {
+		t.Fatalf("seed the pod network: %v", err)
+	}
+	value, _, err := db.GetSetting(ctx, settings.KeyFlannelBackend)
+	if err != nil {
+		t.Fatalf("read the setting: %v", err)
+	}
+	if value != settings.FlannelVXLAN {
+		t.Fatalf("the pod network was recorded as %q, want %q", value, settings.FlannelVXLAN)
+	}
+
+	// And an operator who changes it afterwards keeps their answer: the panel
+	// restarts with the same environment every time, so seeding on every start
+	// would undo the change silently.
+	if err := db.SetSetting(ctx, settings.KeyFlannelBackend, settings.FlannelWireGuard, false, "someone"); err != nil {
+		t.Fatalf("change the setting: %v", err)
+	}
+	if err := seedPodNetwork(ctx, db, cfg, log); err != nil {
+		t.Fatalf("seed the pod network again: %v", err)
+	}
+	value, _, err = db.GetSetting(ctx, settings.KeyFlannelBackend)
+	if err != nil {
+		t.Fatalf("read the setting: %v", err)
+	}
+	if value != settings.FlannelWireGuard {
+		t.Fatalf("a restart overwrote the operator's choice with %q", value)
+	}
+}
+
+// A pod network the panel does not understand is a typo that would otherwise
+// reach a k3s command line on a server, where it fails halfway through adding
+// it rather than before the panel starts.
+func TestAnUnknownPodNetworkStopsThePanelStarting(t *testing.T) {
+	cfg := config.Default()
+	cfg.PodNetwork = "wiregaurd-native"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("a misspelled pod network was accepted")
+	}
+	for _, valid := range []string{"", settings.FlannelWireGuard, settings.FlannelVXLAN} {
+		cfg.PodNetwork = valid
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("pod network %q was rejected: %v", valid, err)
+		}
+	}
 }

@@ -356,6 +356,7 @@ func (p *Provisioner) stepPreflight(ctx context.Context, state *addState) error 
 	if state.request.ControlPlane {
 		requirements = ControlPlaneRequirements()
 	}
+	requirements.FlannelBackend = p.flannelBackend(ctx)
 	problems := Evaluate(report, requirements, state.request.ControlPlane)
 
 	server, err := p.db.GetServer(ctx, state.serverID)
@@ -554,7 +555,7 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 		if err != nil {
 			return err
 		}
-		script = InstallServerScript(p.k3sVersion(ctx), token, publicIP, nil)
+		script = InstallServerScript(p.k3sVersion(ctx), token, publicIP, p.flannelBackend(ctx), nil)
 
 	default:
 		token, err := p.clusterToken(ctx, server.TeamID)
@@ -572,7 +573,7 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 			labels[version.LabelKey("size")] = kube.Slugify(state.request.Size)
 		}
 		if state.request.ControlPlane {
-			script = JoinServerScript(p.k3sVersion(ctx), token, state.serverURL, publicIP)
+			script = JoinServerScript(p.k3sVersion(ctx), token, state.serverURL, publicIP, p.flannelBackend(ctx))
 		} else {
 			script = JoinAgentScript(p.k3sVersion(ctx), token, state.serverURL, publicIP, labels)
 		}
@@ -772,6 +773,19 @@ func (p *Provisioner) rememberToken(ctx context.Context, token string) error {
 }
 
 // k3sVersion reads the pinned version, or empty for the stable channel.
+// flannelBackend returns the pod network every node in this cluster uses.
+//
+// It is one setting for the whole cluster rather than a per-server choice,
+// because nodes that disagree about the backend join without error and then
+// never exchange a packet.
+func (p *Provisioner) flannelBackend(ctx context.Context) string {
+	value, _, err := p.db.GetSetting(ctx, settings.KeyFlannelBackend)
+	if err != nil {
+		return settings.FlannelWireGuard
+	}
+	return value
+}
+
 func (p *Provisioner) k3sVersion(ctx context.Context) string {
 	value, _, err := p.db.GetSetting(ctx, settings.KeyK3sVersion)
 	if err != nil {

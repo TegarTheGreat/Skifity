@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"skifity/internal/settings"
 )
 
 // checkShellSyntax runs the generated script through `sh -n`, which parses it
@@ -48,9 +50,9 @@ func TestGeneratedScriptsAreValidShell(t *testing.T) {
 		FirewallScript([]string{"203.0.113.10", "203.0.113.11"}, true))
 	checkShellSyntax(t, "FirewallScript (no members)", FirewallScript(nil, false))
 	checkShellSyntax(t, "InstallServerScript",
-		InstallServerScript("v1.33.1+k3s1", "a-token", "203.0.113.10", nil))
+		InstallServerScript("v1.33.1+k3s1", "a-token", "203.0.113.10", "", nil))
 	checkShellSyntax(t, "JoinServerScript",
-		JoinServerScript("", "a-token", "https://203.0.113.10:6443", "203.0.113.11"))
+		JoinServerScript("", "a-token", "https://203.0.113.10:6443", "203.0.113.11", ""))
 	checkShellSyntax(t, "JoinAgentScript",
 		JoinAgentScript("", "a-token", "https://203.0.113.10:6443", "203.0.113.12",
 			map[string]string{"skifity.io/location": "frankfurt", "skifity.io/size": "small"}))
@@ -109,7 +111,7 @@ func TestInstallKeyScriptIsIdempotent(t *testing.T) {
 }
 
 func TestInstallScriptsCarryTheRightFlags(t *testing.T) {
-	first := InstallServerScript("", "tok", "203.0.113.10", nil)
+	first := InstallServerScript("", "tok", "203.0.113.10", "", nil)
 	// --cluster-init is what makes the single node HA-ready later (ADR-0002).
 	if !strings.Contains(first, "--cluster-init") {
 		t.Fatal("the first server is installed without --cluster-init, so it could never be made highly available")
@@ -129,7 +131,7 @@ func TestInstallScriptsCarryTheRightFlags(t *testing.T) {
 		t.Fatal("no version and no channel were set")
 	}
 
-	pinned := InstallServerScript("v1.33.1+k3s1", "tok", "203.0.113.10", nil)
+	pinned := InstallServerScript("v1.33.1+k3s1", "tok", "203.0.113.10", "", nil)
 	if !strings.Contains(pinned, `INSTALL_K3S_VERSION='v1.33.1+k3s1'`) {
 		t.Fatal("the pinned version was ignored")
 	}
@@ -148,7 +150,7 @@ func TestInstallScriptsCarryTheRightFlags(t *testing.T) {
 		t.Fatal("the agent role was not set")
 	}
 
-	controlPlane := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.11")
+	controlPlane := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.11", "")
 	if !strings.Contains(controlPlane, `INSTALL_K3S_EXEC='server`) {
 		t.Fatal("a promoted server was not installed in server mode")
 	}
@@ -174,20 +176,36 @@ func TestAgentLabelsAreStable(t *testing.T) {
 // --flannel-backend defaults to vxlan while the first node is on WireGuard.
 // The two never exchange a packet, and nothing says the flags disagree: the
 // symptom is pods that cannot reach pods on the other machine.
+//
+// So whichever backend the cluster chose, every server has to be installed with
+// that one — including the cluster that had to choose vxlan, where getting this
+// wrong is just as fatal and the wrong answer is the default.
 func TestEveryServerAgreesOnHowNodesTalk(t *testing.T) {
-	first := InstallServerScript("", "tok", "203.0.113.10", nil)
-	joined := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.20")
+	for _, backend := range []string{settings.FlannelWireGuard, settings.FlannelVXLAN} {
+		first := InstallServerScript("", "tok", "203.0.113.10", backend, nil)
+		joined := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.20", backend)
 
-	for _, flag := range []string{
-		"--flannel-backend=wireguard-native",
-		"--secrets-encryption",
-		"--write-kubeconfig-mode=0600",
-	} {
-		if !strings.Contains(first, flag) {
-			t.Errorf("the first server is installed without %s", flag)
+		for _, flag := range []string{
+			"--flannel-backend=" + backend,
+			"--secrets-encryption",
+			"--write-kubeconfig-mode=0600",
+		} {
+			if !strings.Contains(first, flag) {
+				t.Errorf("the first server is installed without %s", flag)
+			}
+			if !strings.Contains(joined, flag) {
+				t.Errorf("a joining control plane node is installed without %s, so it disagrees with the first", flag)
+			}
 		}
-		if !strings.Contains(joined, flag) {
-			t.Errorf("a joining control plane node is installed without %s, so it disagrees with the first", flag)
+	}
+
+	// An unset backend is the cluster nobody chose for, and it has to land on
+	// the same answer everywhere rather than on each caller's idea of a default.
+	unsetFirst := InstallServerScript("", "tok", "203.0.113.10", "", nil)
+	unsetJoined := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.20", "")
+	for _, script := range []string{unsetFirst, unsetJoined} {
+		if !strings.Contains(script, "--flannel-backend="+settings.FlannelWireGuard) {
+			t.Errorf("an unset backend did not fall back to %s:\n%s", settings.FlannelWireGuard, script)
 		}
 	}
 }
@@ -202,11 +220,10 @@ func TestTheInstallerAndThePanelStartTheSameKindOfCluster(t *testing.T) {
 		t.Fatalf("read install.sh: %v", err)
 	}
 	installer := string(script)
-	panel := InstallServerScript("", "tok", "203.0.113.10", nil)
+	panel := InstallServerScript("", "tok", "203.0.113.10", "", nil)
 
 	for _, flag := range []string{
 		"--cluster-init",
-		"--flannel-backend=wireguard-native",
 		"--secrets-encryption",
 		"--write-kubeconfig-mode=0600",
 	} {
@@ -216,6 +233,32 @@ func TestTheInstallerAndThePanelStartTheSameKindOfCluster(t *testing.T) {
 		if !strings.Contains(panel, flag) {
 			t.Errorf("the panel no longer passes %s", flag)
 		}
+	}
+
+	// The pod network is the one flag the two are allowed to differ on, because
+	// the installer picks it from the kernel it is standing on. What is not
+	// allowed is picking it and keeping it: the panel installs every later
+	// server, and it can only match a choice it was told about.
+	if !strings.Contains(installer, "--flannel-backend=${POD_NETWORK}") {
+		t.Error("install.sh no longer installs the first node with the backend it picked")
+	}
+	for _, expected := range []string{
+		`POD_NETWORK="` + settings.FlannelWireGuard + `"`,
+		`POD_NETWORK="` + settings.FlannelVXLAN + `"`,
+		"__POD_NETWORK__",
+	} {
+		if !strings.Contains(installer, expected) {
+			t.Errorf("install.sh no longer contains %s, so the panel cannot learn which pod network this cluster uses", expected)
+		}
+	}
+
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "deploy", "panel.yaml"))
+	if err != nil {
+		t.Fatalf("read panel.yaml: %v", err)
+	}
+	if !strings.Contains(string(manifest), "SKIFITY_POD_NETWORK") ||
+		!strings.Contains(string(manifest), "__POD_NETWORK__") {
+		t.Error("the panel's own manifest does not carry the pod network the installer chose")
 	}
 }
 
@@ -234,7 +277,7 @@ func TestNothingATypedValueContainsBecomesACommand(t *testing.T) {
 		"InstallKeyScript":    InstallKeyScript("ssh-ed25519 AAAA test", hostile),
 		"FirewallScript":      FirewallScript([]string{hostile}, true),
 		"ConnectivityScript":  ConnectivityScript(hostile, 6443),
-		"InstallServerScript": InstallServerScript(hostile, hostile, "203.0.113.10", nil),
+		"InstallServerScript": InstallServerScript(hostile, hostile, "203.0.113.10", "", nil),
 		"JoinAgentScript":     JoinAgentScript("", hostile, hostile, "203.0.113.12", nil),
 	}
 	for name, script := range scripts {

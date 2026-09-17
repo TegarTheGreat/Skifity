@@ -3,6 +3,8 @@ package provision
 import (
 	"strings"
 	"testing"
+
+	"skifity/internal/settings"
 )
 
 // realPreflightOutput is what the script prints on a healthy Ubuntu server.
@@ -175,24 +177,54 @@ func TestExistingK3sIsNotAConflict(t *testing.T) {
 	}
 }
 
-func TestMissingWireGuardWarnsAboutEncryption(t *testing.T) {
+// TestMissingWireGuardStopsTheServerJoiningAWireGuardCluster: this used to be a
+// warning that promised a fallback — "traffic between your servers will use
+// vxlan" — and there was no fallback. The other nodes stay on wireguard-native,
+// this one comes up on vxlan, k3s reports nothing wrong, and its pods can reach
+// nothing. Refusing is the only honest answer, so the message is now the two
+// things that actually fix it.
+func TestMissingWireGuardStopsTheServerJoiningAWireGuardCluster(t *testing.T) {
 	p := ParsePreflight(realPreflightOutput)
 	p.HasWireGuard = false
 	problems := Evaluate(p, DefaultRequirements(), false)
-	if Fatal(problems) {
-		t.Fatal("a kernel without WireGuard was refused; vxlan still works")
-	}
-	found := false
-	for _, problem := range problems {
-		if problem.Check == "wireguard" {
-			found = true
-			if !strings.Contains(problem.Detail+problem.Fix, "not encrypted") {
-				t.Fatalf("the warning does not say the traffic will be unencrypted: %q %q", problem.Detail, problem.Fix)
-			}
+
+	var problem Problem
+	for _, candidate := range problems {
+		if candidate.Check == "wireguard" {
+			problem = candidate
 		}
 	}
-	if !found {
-		t.Fatal("no warning about unencrypted pod traffic")
+	if problem.Check == "" {
+		t.Fatal("a kernel without WireGuard was accepted into a WireGuard cluster without a word")
+	}
+	if !problem.Fatal {
+		t.Fatal("a kernel without WireGuard was only warned about; the server would join and never reach the others")
+	}
+	if !strings.Contains(problem.Fix, "wireguard-tools") {
+		t.Errorf("the fix does not say how to install the module: %q", problem.Fix)
+	}
+	if !strings.Contains(problem.Fix, "vxlan") {
+		t.Errorf("the fix does not offer the other way out, changing the whole cluster: %q", problem.Fix)
+	}
+	if strings.Contains(problem.Fix, "will use vxlan") {
+		t.Errorf("the fix still promises a fallback that does not happen: %q", problem.Fix)
+	}
+}
+
+// TestMissingWireGuardIsFineOnAVXLANCluster: the module only matters because of
+// what the rest of the cluster runs. A cluster that already chose vxlan has
+// nothing to disagree with, and refusing the server there would be refusing it
+// for no reason.
+func TestMissingWireGuardIsFineOnAVXLANCluster(t *testing.T) {
+	p := ParsePreflight(realPreflightOutput)
+	p.HasWireGuard = false
+	req := DefaultRequirements()
+	req.FlannelBackend = settings.FlannelVXLAN
+
+	for _, problem := range Evaluate(p, req, false) {
+		if problem.Check == "wireguard" {
+			t.Fatalf("a vxlan cluster still complained about the WireGuard module: %q", problem.Detail)
+		}
 	}
 }
 

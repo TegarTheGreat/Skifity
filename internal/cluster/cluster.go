@@ -352,6 +352,35 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 // ClusterIssuerName is the cert-manager ClusterIssuer the panel creates.
 const ClusterIssuerName = "skifity-letsencrypt"
 
+// ControlPlaneCount is how many nodes actually run the cluster.
+//
+// Read from the cluster rather than counted in the panel's own table, because
+// those are two different numbers. A panel installed by install.sh runs in a
+// cluster it has no server row for, and on a panel with more than one team the
+// rows are split between them — so counting rows undercounts by at least one
+// and is scoped to the wrong thing. Both directions matter here: too low
+// refuses a removal that is safe, too high permits one that is not.
+func (c *Cluster) ControlPlaneCount(ctx context.Context) (int, error) {
+	summary, err := c.client.Summary(ctx)
+	if err != nil {
+		if kube.IsUnreachable(err) {
+			return 0, errdoc.ClusterUnreachable(err)
+		}
+		return 0, err
+	}
+	count := 0
+	for _, node := range summary.Nodes {
+		for _, role := range node.Roles {
+			// k3s labels its own; "master" is what an older cluster called it.
+			if role == "control-plane" || role == "master" {
+				count++
+				break
+			}
+		}
+	}
+	return count, nil
+}
+
 // QuotaUsage reports how much of an environment's ceiling is in use.
 func (c *Cluster) QuotaUsage(ctx context.Context, namespace string) (api.EnvironmentQuota, error) {
 	raw, err := c.client.QuotaUsage(ctx, namespace)

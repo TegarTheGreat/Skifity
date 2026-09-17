@@ -108,6 +108,9 @@ type Cluster interface {
 	ComponentStatus(ctx context.Context, name string) (store.ClusterComponent, error)
 	// QuotaUsage reports how much of an environment's limits are in use.
 	QuotaUsage(ctx context.Context, namespace string) (EnvironmentQuota, error)
+	// ControlPlaneCount is how many nodes actually run the cluster, which is
+	// not the same as how many rows the panel has for one team.
+	ControlPlaneCount(ctx context.Context) (int, error)
 }
 
 // EnvironmentQuota is how much of an environment's ceiling is in use.

@@ -153,26 +153,42 @@ func (s *Server) handleRemoveServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.provisioner == nil {
-		writeError(w, r, errdoc.NotConfigured("Server management", "the panel's cluster connection"))
-		return
-	}
-
 	// Removing a control plane node can break etcd quorum, which takes the
 	// whole cluster down. Refuse before touching anything.
+	//
+	// Counted from the cluster, not from the panel's own table. Those are
+	// different numbers: a panel installed by install.sh runs in a cluster it
+	// has no server row for, and on a panel with more than one team the rows
+	// are split between them. The old count was low by at least one and scoped
+	// to one team, which refused removals that were safe and — when it reached
+	// zero — permitted the one that ends the cluster.
 	if server.Role == "control-plane" {
-		count, err := s.db.CountControlPlanes(r.Context(), server.TeamID)
-		if err != nil {
-			writeError(w, r, err)
+		if s.cluster == nil {
+			writeError(w, r, errdoc.ControlPlaneUnverifiable())
 			return
 		}
-		remaining := count - 1
-		if remaining == 1 || remaining == 2 {
+		count, err := s.cluster.ControlPlaneCount(r.Context())
+		if err != nil {
+			// Not the underlying error: "the cluster is unreachable" is true
+			// and does not say why it stops this particular action.
+			writeError(w, r, errdoc.ControlPlaneUnverifiable())
+			return
+		}
+		switch remaining := count - 1; {
+		case remaining <= 0:
+			// The end of the cluster, and of the panel reporting it.
+			writeError(w, r, errdoc.LastControlPlane())
+			return
+		case remaining < 3:
 			writeError(w, r, errdoc.QuorumRisk(remaining))
 			return
 		}
 	}
 
+	if s.provisioner == nil {
+		writeError(w, r, errdoc.NotConfigured("Server management", "the panel's cluster connection"))
+		return
+	}
 	op, err := s.provisioner.RemoveServer(r.Context(), server.ID, queryBool(r, "wipe"))
 	if err != nil {
 		writeError(w, r, err)

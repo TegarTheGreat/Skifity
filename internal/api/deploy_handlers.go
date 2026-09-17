@@ -25,16 +25,18 @@ func (s *Server) handleDeployApp(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.deployer == nil {
-		writeError(w, r, errdoc.NotConfigured("Deployments", "the panel's cluster connection"))
-		return
-	}
 	var req deployRequestBody
 	if r.ContentLength > 0 {
 		if err := decodeJSON(w, r, &req); err != nil {
 			writeError(w, r, err)
 			return
 		}
+	}
+	// After the body is read, so a malformed request is reported as one
+	// whether or not the cluster is wired up.
+	if s.deployer == nil {
+		writeError(w, r, errdoc.NotConfigured("Deployments", "the panel's cluster connection"))
+		return
 	}
 	deployment, err := s.deployer.Deploy(r.Context(), DeployRequest{
 		AppID:     app.ID,

@@ -31,10 +31,6 @@ func (s *Server) handleCreateDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.databases == nil {
-		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
-		return
-	}
 	var req CreateDatabaseRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
@@ -48,6 +44,13 @@ func (s *Server) handleCreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Name) == "" {
 		writeError(w, r, errdoc.BadRequest("A database needs a name."))
+		return
+	}
+	// After the request is checked, not before: somebody fixing a typo should
+	// not then discover that databases are not configured, and a check that
+	// only runs on a configured panel cannot be tested without one.
+	if s.databases == nil {
+		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -33,10 +34,11 @@ import (
 // which is decided before any of them is reached.
 
 type harness struct {
-	t      *testing.T
-	server *httptest.Server
-	db     *store.DB
-	auth   *auth.Service
+	t       *testing.T
+	server  *httptest.Server
+	db      *store.DB
+	auth    *auth.Service
+	keyring *crypto.Keyring
 }
 
 func newHarness(t *testing.T) *harness {
@@ -63,7 +65,7 @@ func newHarness(t *testing.T) *harness {
 		Logger:  slog.New(slog.DiscardHandler),
 	})
 
-	h := &harness{t: t, db: db, auth: authService}
+	h := &harness{t: t, db: db, auth: authService, keyring: keyring}
 	h.server = httptest.NewServer(server)
 	t.Cleanup(h.server.Close)
 	return h
@@ -387,6 +389,104 @@ func TestAServerAccountNameIsRefusedIfItIsNotOne(t *testing.T) {
 			map[string]any{"host": "203.0.113.10", "ssh_user": name, "password": "x"})
 		if strings.Contains(body, "not a valid account name") {
 			t.Errorf("ssh_user %q was refused as a bad name\n%s", name, body)
+		}
+	}
+}
+
+// fakeCluster answers only what the removal guard asks. Everything else in the
+// Cluster port is unreachable from these tests and says so if it is reached.
+type fakeCluster struct {
+	Cluster
+	controlPlanes int
+	err           error
+}
+
+func (f fakeCluster) ControlPlaneCount(context.Context) (int, error) {
+	return f.controlPlanes, f.err
+}
+
+// withCluster rebuilds the harness's server with a cluster attached.
+func (h *harness) withCluster(c Cluster) {
+	h.t.Helper()
+	h.server.Config.Handler = New(Options{
+		DB: h.db, Keyring: h.keyring, Auth: h.auth,
+		Hub: events.NewHub(16), Logger: slog.New(slog.DiscardHandler),
+		Cluster: c,
+	})
+}
+
+func TestRemovingTheLastControlPlaneIsRefused(t *testing.T) {
+	// The guard used to count rows in one team's table. That is not how many
+	// nodes run the cluster: a panel installed by install.sh has no row for the
+	// node it runs on, and a panel with two teams splits the rest between them.
+	// The number was low, so it refused safe removals — and when it reached
+	// zero it permitted the one that deletes Kubernetes, every app, and the
+	// panel answering the request.
+	cases := []struct {
+		name          string
+		controlPlanes int
+		err           error
+		wantCode      string
+	}{
+		{"the only one", 1, nil, "cluster.last_control_plane"},
+		{"two would leave one", 2, nil, "cluster.quorum_risk"},
+		{"three would leave two", 3, nil, "cluster.quorum_risk"},
+		// Four leaves three, which is a working, fault-tolerant cluster. The
+		// old count refused this.
+		{"four leaves a healthy three", 4, nil, ""},
+		// If the cluster cannot say, the panel cannot prove it is safe.
+		{"unreachable", 0, errors.New("no route to host"), "cluster.control_plane_unverifiable"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHarness(t)
+			acme := h.newTenant("acme")
+			h.withCluster(fakeCluster{controlPlanes: c.controlPlanes, err: c.err})
+
+			server := store.Server{
+				TeamID: acme.team.ID, Name: "node-1", Host: "203.0.113.10",
+				SSHPort: 22, SSHUser: "root", Role: "control-plane",
+			}
+			if err := h.db.CreateServer(t.Context(), &server); err != nil {
+				t.Fatalf("create server: %v", err)
+			}
+
+			_, body := h.do(acme, http.MethodDelete, "/api/servers/"+server.ID, nil)
+			if c.wantCode == "" {
+				if strings.Contains(body, "cluster.quorum_risk") ||
+					strings.Contains(body, "cluster.last_control_plane") {
+					t.Fatalf("a safe removal was refused\n%s", body)
+				}
+				return
+			}
+			if !strings.Contains(body, c.wantCode) {
+				t.Fatalf("want %s\n%s", c.wantCode, body)
+			}
+		})
+	}
+}
+
+func TestAWorkerIsRemovableWhateverTheClusterSays(t *testing.T) {
+	// The guard is about the nodes that run the cluster. A worker is not one,
+	// and a cluster that cannot be reached is not a reason to keep a dead
+	// worker in the list.
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	h.withCluster(fakeCluster{err: errors.New("no route to host")})
+
+	server := store.Server{
+		TeamID: acme.team.ID, Name: "worker-1", Host: "203.0.113.20",
+		SSHPort: 22, SSHUser: "root", Role: "worker",
+	}
+	if err := h.db.CreateServer(t.Context(), &server); err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	_, body := h.do(acme, http.MethodDelete, "/api/servers/"+server.ID, nil)
+	for _, refusal := range []string{"cluster.quorum_risk", "cluster.last_control_plane", "cluster.control_plane_unverifiable"} {
+		if strings.Contains(body, refusal) {
+			t.Fatalf("a worker was refused by the control plane guard\n%s", body)
 		}
 	}
 }

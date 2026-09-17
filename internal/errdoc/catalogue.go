@@ -334,6 +334,34 @@ func QuorumRisk(remaining int) *Problem {
 		With("remaining_control_planes", itoa(remaining))
 }
 
+// LastControlPlane refuses to remove the server the cluster is running on.
+//
+// A different sentence from QuorumRisk, because it is a different event: that
+// one risks the cluster surviving a later failure, this one ends it now, along
+// with the panel saying so.
+func LastControlPlane() *Problem {
+	return New("cluster.last_control_plane", "This is the only server running the cluster").
+		WithCause("Removing it would delete the last control plane node. Kubernetes, every " +
+			"app on it, and this panel run there.").
+		WithImpact("Nothing was changed.").
+		WithFix("Add another server and promote it to control plane first. To take the whole " +
+			"cluster down deliberately, run the uninstaller on the server itself.").
+		WithDocs("/docs/adding-servers#control-plane-servers").
+		WithStatus(http.StatusConflict)
+}
+
+// ControlPlaneUnverifiable refuses a removal the panel cannot prove is safe.
+func ControlPlaneUnverifiable() *Problem {
+	return New("cluster.control_plane_unverifiable", "The cluster cannot be asked how many servers run it").
+		WithCause("Removing a control plane server is only safe when the panel can see how " +
+			"many are left, and the Kubernetes API did not answer.").
+		WithImpact("Nothing was changed.").
+		WithFix("Wait for the cluster to be reachable and try again. A worker server can be " +
+			"removed either way.").
+		WithDocs("/docs/troubleshooting#the-cluster-is-unreachable").
+		WithStatus(http.StatusConflict)
+}
+
 // --- storage and backups ---
 
 // StorageNotConfigured reports a backup with nowhere to go.

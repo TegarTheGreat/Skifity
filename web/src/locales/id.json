@@ -266,7 +266,8 @@
     "detected": "Ini sepertinya {{what}}.",
     "detectedMaybe": "Ini mungkin {{what}}. Tidak ada yang diisi otomatis — periksa kolom di bawah.",
     "detectedPartly": "Repositorinya besar, jadi hanya bagian atasnya yang dibaca.",
-    "builderStatic": "Berkas statis"
+    "builderStatic": "Berkas statis",
+    "lastBackup": "Cadangan terakhir"
   },
   "deploy": {
     "title": "Deployment",
@@ -480,7 +481,8 @@
       "unknown": "Tidak diketahui"
     },
     "restoreStarted": "Pemulihan dimulai. Basis data tidak tersedia sampai proses selesai.",
-    "deleteWarning": "Semua tabel, baris, dan jadwal pencadangan ikut terhapus. Cadangan yang sudah ada di penyimpanan tetap tersimpan, tetapi panel tidak akan mengenalinya lagi."
+    "deleteWarning": "Semua tabel, baris, dan jadwal pencadangan ikut terhapus. Cadangan yang sudah ada di penyimpanan tetap tersimpan, tetapi panel tidak akan mengenalinya lagi.",
+    "backupStarted": "Pencadangan dimulai. Akan muncul di daftar setelah selesai."
   },
   "templates": {
     "title": "Template",

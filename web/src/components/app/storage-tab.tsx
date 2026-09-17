@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { HardDriveIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { DownloadIcon, HardDriveIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
-import { ErrorDisplay } from "@/components/error-display"
+import { ErrorDisplay, toProblem } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -21,7 +22,8 @@ import {
 } from "@/components/ui/table"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { App, Volume } from "@/lib/types"
+import { formatRelative } from "@/lib/format"
+import type { App, Backup, Volume } from "@/lib/types"
 
 export function StorageTab({ app }: { app: App }) {
   const { t } = useTranslation()
@@ -149,7 +151,8 @@ export function StorageTab({ app }: { app: App }) {
                       <TableHead>{t("common.name")}</TableHead>
                       <TableHead>{t("apps.storage")}</TableHead>
                       <TableHead>{t("common.size")}</TableHead>
-                      <TableHead className="w-10" />
+                      <TableHead>{t("apps.lastBackup")}</TableHead>
+                      <TableHead className="w-24" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -160,16 +163,20 @@ export function StorageTab({ app }: { app: App }) {
                         </TableCell>
                         <TableCell className="font-mono text-xs">{volume.mount_path}</TableCell>
                         <TableCell className="tabular-nums">{volume.size_gb} GB</TableCell>
+                        <LastBackup appID={app.id} volumeID={volume.id} />
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t("common.delete")}
-                            disabled={remove.isPending}
-                            onClick={() => remove.mutate(volume.id)}
-                          >
-                            <Trash2Icon className="size-4 text-muted-foreground" />
-                          </Button>
+                          <div className="flex justify-end gap-1">
+                            <BackUpNow appID={app.id} volumeID={volume.id} />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t("common.delete")}
+                              disabled={remove.isPending}
+                              onClick={() => remove.mutate(volume.id)}
+                            >
+                              <Trash2Icon className="size-4 text-muted-foreground" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -183,5 +190,62 @@ export function StorageTab({ app }: { app: App }) {
 
       {remove.error != null && <ErrorDisplay error={remove.error} compact />}
     </div>
+  )
+}
+
+/**
+ * When this volume was last copied to storage.
+ *
+ * A volume with no backup says so rather than showing an empty cell: "never"
+ * is the thing somebody needs to see, and a blank column reads as a column
+ * that has not loaded.
+ */
+function LastBackup({ appID, volumeID }: { appID: string; volumeID: string }) {
+  const { t } = useTranslation()
+  const backups = useQuery({
+    queryKey: ["volume-backups", volumeID],
+    queryFn: () => api.get<List<Backup>>(`/api/apps/${appID}/volumes/${volumeID}/backups?limit=1`),
+  })
+
+  const latest = backups.data?.items?.[0]
+  return (
+    <TableCell className="text-xs text-muted-foreground">
+      {backups.isLoading ? (
+        <Skeleton className="h-4 w-20" />
+      ) : latest ? (
+        <span title={latest.status}>
+          {formatRelative(latest.created_at)}
+          {latest.status === "failed" && ` · ${t("databases.status.failed", { defaultValue: "failed" })}`}
+        </span>
+      ) : (
+        t("common.never")
+      )}
+    </TableCell>
+  )
+}
+
+/** Copies a volume to storage now. */
+function BackUpNow({ appID, volumeID }: { appID: string; volumeID: string }) {
+  const { t } = useTranslation()
+  const run = useMutation({
+    mutationFn: () => api.post(`/api/apps/${appID}/volumes/${volumeID}/backups`, {}),
+    onSuccess: () => {
+      toast.success(t("databases.backupStarted"))
+      void queryClient.invalidateQueries({ queryKey: ["volume-backups", volumeID] })
+    },
+    onError: (error) => toast.error(toProblem(error)?.title ?? t("errors.somethingWentWrong")),
+  })
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={t("databases.backupNow")}
+      title={t("databases.backupNow")}
+      disabled={run.isPending}
+      onClick={() => run.mutate()}
+    >
+      {run.isPending ? <Spinner /> : <DownloadIcon className="size-4 text-muted-foreground" />}
+    </Button>
   )
 }

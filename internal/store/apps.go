@@ -529,6 +529,23 @@ func (db *DB) ListVolumes(ctx context.Context, appID string) ([]Volume, error) {
 	return out, rows.Err()
 }
 
+// GetVolume looks one volume up by id.
+func (db *DB) GetVolume(ctx context.Context, id string) (Volume, error) {
+	var v Volume
+	var created string
+	err := db.QueryRowContext(ctx, `SELECT id, app_id, name, mount_path, size_gb, storage_class, created_at
+		FROM volumes WHERE id = ?`, id).
+		Scan(&v.ID, &v.AppID, &v.Name, &v.MountPath, &v.SizeGB, &v.StorageClass, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Volume{}, ErrNotFound
+	}
+	if err != nil {
+		return Volume{}, fmt.Errorf("read volume: %w", err)
+	}
+	v.CreatedAt, _ = ParseTime(created)
+	return v, nil
+}
+
 // DeleteVolume detaches a volume record. The PVC is removed separately so the
 // data can be kept deliberately.
 func (db *DB) DeleteVolume(ctx context.Context, appID, id string) error {

@@ -742,6 +742,57 @@ func (s *Server) handleCreateVolume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, volume)
 }
 
+// handleListVolumeBackups lists the copies of one volume.
+func (s *Server) handleListVolumeBackups(w http.ResponseWriter, r *http.Request) {
+	volume, _, err := s.authorizeVolume(r, store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	backups, err := s.db.ListBackups(r.Context(), "volume", volume.ID, queryInt(r, "limit", 50))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeList(w, backups)
+}
+
+// handleCreateVolumeBackup copies a volume to storage now.
+func (s *Server) handleCreateVolumeBackup(w http.ResponseWriter, r *http.Request) {
+	volume, app, err := s.authorizeVolume(r, store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if s.backups == nil {
+		writeError(w, r, errdoc.NotConfigured("Backups", "Settings, then Storage"))
+		return
+	}
+	backup, err := s.backups.Run(r.Context(), "volume", volume.ID, "manual")
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "backup.started", "volume", volume.ID, app.Name+" / "+volume.Name)
+	writeJSON(w, http.StatusAccepted, backup)
+}
+
+// authorizeVolume resolves a volume through its app, so a volume id from
+// another team cannot be reached by guessing it.
+func (s *Server) authorizeVolume(r *http.Request, required store.Role) (store.Volume, store.App, error) {
+	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), required)
+	if err != nil {
+		return store.Volume{}, store.App{}, err
+	}
+	volumeID := chi.URLParam(r, "volumeID")
+	volume, err := s.db.GetVolume(r.Context(), volumeID)
+	if err != nil || volume.AppID != app.ID {
+		return store.Volume{}, store.App{}, errdoc.NotFound("volume", volumeID)
+	}
+	return volume, app, nil
+}
+
 func (s *Server) handleDeleteVolume(w http.ResponseWriter, r *http.Request) {
 	app, _, err := s.authorizeApp(r, chi.URLParam(r, "appID"), store.RoleAdmin)
 	if err != nil {

@@ -266,7 +266,8 @@
     "detected": "这看起来是 {{what}}。",
     "detectedMaybe": "这可能是 {{what}}。没有自动填写任何内容，请检查下面的字段。",
     "detectedPartly": "仓库较大，只读取了顶层内容。",
-    "builderStatic": "静态文件"
+    "builderStatic": "静态文件",
+    "lastBackup": "上次备份"
   },
   "deploy": {
     "title": "部署记录",
@@ -480,7 +481,8 @@
       "unknown": "未知"
     },
     "restoreStarted": "恢复已开始。完成之前数据库不可用。",
-    "deleteWarning": "所有表、数据行和备份计划都会一并消失。存储中已有的备份会保留，但面板将不再知道它们。"
+    "deleteWarning": "所有表、数据行和备份计划都会一并消失。存储中已有的备份会保留，但面板将不再知道它们。",
+    "backupStarted": "备份已开始，完成后会出现在列表中。"
   },
   "templates": {
     "title": "模板",

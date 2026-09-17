@@ -46,11 +46,15 @@ func (m *Manager) Verify(ctx context.Context) error {
 
 // Run takes a backup now.
 func (m *Manager) Run(ctx context.Context, targetType, targetID, kind string) (store.Backup, error) {
-	if targetType != "database" {
-		return store.Backup{}, errdoc.BadRequest("Only databases can be backed up at the moment.")
-	}
 	if m.cluster == nil {
 		return store.Backup{}, errdoc.ClusterUnreachable(nil)
+	}
+	switch targetType {
+	case "database":
+	case "volume":
+		return m.runVolumeBackup(ctx, targetID, kind)
+	default:
+		return store.Backup{}, errdoc.BadRequest("Only databases and volumes can be backed up.")
 	}
 
 	record, err := m.db.GetDatabase(ctx, targetID)
@@ -158,18 +162,18 @@ func (m *Manager) run(ctx context.Context, storage *Storage, backup store.Backup
 	m.publish(ctx, record.ID)
 	m.log.Info("backup finished", "backup", backup.ID, "database", record.Name, "bytes", size)
 
-	m.applyRetention(ctx, storage, record.ID)
+	m.applyRetention(ctx, storage, "database", record.ID)
 }
 
 // applyRetention deletes backups beyond the configured count.
-func (m *Manager) applyRetention(ctx context.Context, storage *Storage, databaseID string) {
-	policy, err := m.db.GetBackupPolicy(ctx, "database", databaseID)
+func (m *Manager) applyRetention(ctx context.Context, storage *Storage, targetType, targetID string) {
+	policy, err := m.db.GetBackupPolicy(ctx, targetType, targetID)
 	if err != nil {
 		return
 	}
-	expired, err := m.db.ExpiredBackups(ctx, "database", databaseID, policy.Retention)
+	expired, err := m.db.ExpiredBackups(ctx, targetType, targetID, policy.Retention)
 	if err != nil {
-		m.log.Warn("could not list expired backups", "database", databaseID, "error", err)
+		m.log.Warn("could not list expired backups", targetType, targetID, "error", err)
 		return
 	}
 	for _, old := range expired {
@@ -454,4 +458,142 @@ func (m *Manager) notifyFailure(ctx context.Context, record store.Database, prob
 		Path:   "/databases/" + record.ID,
 		Fields: map[string]string{"Database": record.Name, "Reason": problem.Code},
 	})
+}
+
+// runVolumeBackup copies an app's volume to storage.
+//
+// The panel used to refuse, which was honest and still a gap: "back up your
+// database" is half an answer to somebody who has just lost a disk, and an
+// app's uploads had nowhere to go.
+func (m *Manager) runVolumeBackup(ctx context.Context, volumeID, kind string) (store.Backup, error) {
+	volume, err := m.db.GetVolume(ctx, volumeID)
+	if err != nil {
+		return store.Backup{}, err
+	}
+	app, err := m.db.GetApp(ctx, volume.AppID)
+	if err != nil {
+		return store.Backup{}, err
+	}
+	env, err := m.db.GetEnvironment(ctx, app.EnvironmentID)
+	if err != nil {
+		return store.Backup{}, err
+	}
+
+	storage, err := LoadStorage(ctx, m.db, m.keyring)
+	if err != nil {
+		return store.Backup{}, err
+	}
+
+	backup := store.Backup{
+		TargetType: "volume", TargetID: volumeID,
+		Status: "running", Kind: kind,
+	}
+	backup.Location = ObjectKey("volume", volumeID, app.Slug+"-"+volume.Name, time.Now())
+	if err := m.db.CreateBackup(ctx, &backup); err != nil {
+		return store.Backup{}, err
+	}
+
+	go m.runVolume(context.WithoutCancel(ctx), storage, backup, app, env, volume)
+	return backup, nil
+}
+
+func (m *Manager) runVolume(ctx context.Context, storage *Storage, backup store.Backup,
+	app store.App, env store.Environment, volume store.Volume,
+) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Hour)
+	defer cancel()
+
+	fail := func(err error) {
+		problem := errdoc.From(err)
+		m.log.Error("volume backup failed",
+			"backup", backup.ID, "volume", volume.ID, "app", app.ID, "error", err)
+		_ = m.db.FinishBackup(ctx, backup.ID, "failed", backup.Location, 0, problem.Error())
+		m.publish(ctx, app.ID)
+	}
+
+	presigned, err := storage.PresignPut(ctx, backup.Location)
+	if err != nil {
+		fail(err)
+		return
+	}
+
+	jobName := JobName("backup-"+app.Slug+"-"+volume.Name, backup.ID)
+	secretName := jobName + "-url"
+	defer func() {
+		if err := m.cluster.Client().Applier().Delete(ctx, "v1", "Secret", env.Namespace, secretName); err != nil {
+			m.log.Warn("could not remove the backup URL secret", "backup", backup.ID, "error", err)
+		}
+	}()
+
+	if err := m.cluster.Client().Applier().Apply(ctx,
+		URLSecret(secretName, env.Namespace, presigned)); err != nil {
+		fail(err)
+		return
+	}
+
+	job, err := BuildVolumeJob(VolumeJobSpec{
+		Name:         jobName,
+		Namespace:    env.Namespace,
+		ClaimName:    kube.ResourceName(app.Slug, volume.Name),
+		URLSecret:    secretName,
+		BackupID:     backup.ID,
+		CoLocateWith: m.coLocateWith(ctx, env.Namespace, app),
+	})
+	if err != nil {
+		fail(err)
+		return
+	}
+	_ = m.cluster.Client().Applier().Delete(ctx, "batch/v1", "Job", env.Namespace, jobName)
+	if err := m.cluster.Client().Applier().Apply(ctx, job); err != nil {
+		fail(err)
+		return
+	}
+
+	if err := m.waitForJob(ctx, env.Namespace, jobName); err != nil {
+		fail(err)
+		return
+	}
+
+	size, err := storage.Stat(ctx, backup.Location)
+	if err != nil {
+		m.log.Warn("could not read the backup's size", "backup", backup.ID, "error", err)
+	}
+	if err := m.db.FinishBackup(ctx, backup.ID, "succeeded", backup.Location, size, ""); err != nil {
+		m.log.Warn("could not record the finished backup", "backup", backup.ID, "error", err)
+	}
+	m.publish(ctx, app.ID)
+	m.log.Info("volume backup finished",
+		"backup", backup.ID, "app", app.Name, "volume", volume.Name, "bytes", size)
+
+	m.applyRetention(ctx, storage, "volume", volume.ID)
+}
+
+// coLocateWith returns the labels of the app's running pods, or nil.
+//
+// A volume is ReadWriteOnce: this pod and the app's pod must be on the same
+// node, and the scheduler only knows that if it is told. With the storage class
+// k3s ships the PersistentVolume carries its own node affinity and this changes
+// nothing; on a networked volume already attached elsewhere, without it the pod
+// sits in a Multi-Attach error until it times out.
+//
+// Nil when nothing is running, because an affinity to pods that do not exist
+// can never be satisfied and would leave the backup Pending forever.
+func (m *Manager) coLocateWith(ctx context.Context, namespace string, app store.App) map[string]string {
+	status, err := m.cluster.AppStatus(ctx, namespace, app.Slug)
+	if err != nil || len(status.Instances) == 0 {
+		return nil
+	}
+	running := false
+	for _, instance := range status.Instances {
+		if instance.Status == "Running" {
+			running = true
+		}
+	}
+	if !running {
+		return nil
+	}
+	return map[string]string{
+		"app.kubernetes.io/name":     app.Slug,
+		"app.kubernetes.io/instance": app.ID,
+	}
 }

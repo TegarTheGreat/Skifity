@@ -1,12 +1,7 @@
 # Backups
 
-Skifity backs up managed databases: PostgreSQL, MariaDB and Redis.
-
-**Volumes are not backed up yet.** An app that writes files to a volume keeps
-them as long as the volume exists, and the panel will refuse a backup of one
-rather than pretend. If those files matter, either keep the data in a managed
-database, which is backed up, or take the volume's snapshot with whatever your
-storage provides. This page will say otherwise when that changes.
+Skifity backs up managed databases — PostgreSQL, MariaDB and Redis — and the
+volumes your apps write files to.
 
 Nothing is backed up until you say where to put it.
 
@@ -86,3 +81,31 @@ should not be kept together.
 A backup of a database is useless without the master key that decrypts the
 credentials stored alongside it, so back that up somewhere else, once, and
 properly.
+
+
+## Volumes
+
+A volume backup is a compressed tar of everything on the volume, taken while the
+app keeps running. Take one from an app's **Storage** tab, or set a schedule the
+same way as for a database.
+
+The volume is mounted read-only for the copy. A backup that can write to the
+thing it is copying is one bug away from being what destroyed it.
+
+Two things follow from a volume being ReadWriteOnce, which is what Kubernetes
+calls a disk one server holds at a time:
+
+* The backup runs on the same server as the app, and is scheduled there
+  automatically. With the storage k3s ships this is already true of the volume
+  itself, so nothing about it is visible.
+* **A file being written while the copy runs may be caught half-written.** A
+  tar is not a snapshot. For an upload directory or a cache that is fine. For
+  something where a half-written file is worse than an old one — an embedded
+  database on a volume, for instance — stop the app, take the backup, start it
+  again, or keep that data in a managed database, where the dump is consistent
+  by construction.
+
+Restoring replaces the volume's contents entirely: it is "make it look like it
+did", not "merge this over what is there". The archive is read through once
+before anything is deleted, because unpacking a truncated archive over live data
+leaves half the old files and half the new, which is worse than either.

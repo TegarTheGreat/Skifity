@@ -274,7 +274,8 @@
     "detected": "This looks like {{what}}.",
     "detectedMaybe": "This might be {{what}}. Nothing was filled in — check the fields below.",
     "detectedPartly": "The repository is large, so only the top of it was read.",
-    "builderStatic": "Static files"
+    "builderStatic": "Static files",
+    "lastBackup": "Last backup"
   },
   "deploy": {
     "title": "Deployments",
@@ -489,7 +490,8 @@
       "unknown": "Unknown"
     },
     "restoreStarted": "Restore started. The database is unavailable until it finishes.",
-    "deleteWarning": "Every table, row and backup schedule goes with it. Existing backups in your storage are kept, but the panel will no longer know about them."
+    "deleteWarning": "Every table, row and backup schedule goes with it. Existing backups in your storage are kept, but the panel will no longer know about them.",
+    "backupStarted": "The backup has started. It will appear in the list when it finishes."
   },
   "templates": {
     "title": "Templates",

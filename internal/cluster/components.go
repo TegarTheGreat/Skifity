@@ -169,23 +169,12 @@ func (c *Cluster) EnsureClusterIssuer(ctx context.Context) error {
 		return err
 	}
 
-	middleware := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "traefik.io/v1alpha1",
-		"kind":       "Middleware",
-		"metadata": map[string]any{
-			"name":      "redirect-https",
-			"namespace": c.client.SystemNamespace(),
-			"labels":    map[string]any{"app.kubernetes.io/managed-by": version.Binary},
-		},
-		"spec": map[string]any{
-			"redirectScheme": map[string]any{"scheme": "https", "permanent": true},
-		},
-	}}
-	if err := c.client.Applier().Apply(ctx, middleware); err != nil {
-		// Traefik's CRDs are present on a default k3s, but a cluster with
-		// Traefik disabled should not fail certificate setup over this.
-		c.log.Warn("could not create the HTTPS redirect middleware", "error", err)
-	}
+	// The HTTPS redirect middleware used to be created here, once, in the
+	// panel's own namespace, and referenced by every app's Ingress. Traefik
+	// refuses a cross-namespace middleware reference unless allowCrossNamespace
+	// is turned on, and it is off by default — so the reference resolved to
+	// nothing and no app was ever redirected. It is rendered into each app's
+	// own namespace now, by EnsureNamespace.
 	return nil
 }
 

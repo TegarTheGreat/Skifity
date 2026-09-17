@@ -9,6 +9,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"skifity/internal/version"
@@ -321,4 +322,33 @@ func quantityValue(name corev1.ResourceName, q resource.Quantity) int64 {
 	default:
 		return q.Value()
 	}
+}
+
+// RedirectMiddleware is the name of the Traefik middleware that sends a plain
+// HTTP request to HTTPS.
+const RedirectMiddleware = "redirect-https"
+
+// BuildRedirectMiddleware renders that middleware into one namespace.
+//
+// One per namespace rather than one shared: Traefik refuses a cross-namespace
+// middleware reference unless allowCrossNamespace is turned on, and it is off
+// by default. A single copy in the panel's namespace, which is what this used
+// to be, was referenced by every app's Ingress and loaded by none of them.
+//
+// Unstructured because it is a Traefik CRD, which is not in client-go's scheme
+// and which a cluster running a different ingress controller will not have at
+// all.
+func BuildRedirectMiddleware(namespace string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "traefik.io/v1alpha1",
+		"kind":       "Middleware",
+		"metadata": map[string]any{
+			"name":      RedirectMiddleware,
+			"namespace": namespace,
+			"labels":    map[string]any{"app.kubernetes.io/managed-by": version.Binary},
+		},
+		"spec": map[string]any{
+			"redirectScheme": map[string]any{"scheme": "https", "permanent": true},
+		},
+	}}
 }

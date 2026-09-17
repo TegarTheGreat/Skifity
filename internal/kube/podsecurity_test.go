@@ -257,3 +257,35 @@ func TestARunJobIsConfinedLikeTheAppItRunsIn(t *testing.T) {
 		t.Error("a run must never be given a Kubernetes API token")
 	}
 }
+
+// Traefik refuses a cross-namespace middleware reference unless
+// allowCrossNamespace is turned on, and it is off by default — on k3s's bundled
+// Traefik included. The annotation used to name the panel's namespace, so the
+// reference resolved to nothing and plain HTTP was never redirected, with no
+// error anywhere: a middleware Traefik will not load is not a middleware
+// Traefik complains about.
+func TestTheRedirectMiddlewareIsInTheAppsOwnNamespace(t *testing.T) {
+	spec := AppSpec{
+		Name: "web", Namespace: "acme-shop-production", Image: "app:1", Port: 3000,
+		Replicas: 1, ClusterIssuer: "skifity",
+		Domains: []DomainSpec{{Hostname: "shop.example.com", Path: "/", TLS: true}},
+	}
+	ingress := BuildIngress(spec)
+	if ingress == nil {
+		t.Fatal("an app with a domain rendered no Ingress")
+	}
+	got := ingress.Annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+	want := "acme-shop-production-redirect-https@kubernetescrd"
+	if got != want {
+		t.Errorf("middleware reference = %q, want %q", got, want)
+	}
+
+	// And the middleware it names is rendered into that same namespace.
+	middleware := BuildRedirectMiddleware(spec.Namespace)
+	if ns := middleware.GetNamespace(); ns != spec.Namespace {
+		t.Errorf("the middleware was created in %q, not beside the app in %q", ns, spec.Namespace)
+	}
+	if name := middleware.GetName(); name != RedirectMiddleware {
+		t.Errorf("the middleware is named %q, and the annotation names %q", name, RedirectMiddleware)
+	}
+}

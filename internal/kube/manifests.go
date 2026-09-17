@@ -259,7 +259,17 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 		annotations["cert-manager.io/cluster-issuer"] = s.ClusterIssuer
 		// Traefik's redirect middleware is namespaced, and the one Skifity
 		// installs lives in the system namespace.
-		annotations["traefik.ingress.kubernetes.io/router.middlewares"] = "skifity-system-redirect-https@kubernetescrd"
+		// The app's own namespace, not the panel's.
+		//
+		// Traefik refuses a cross-namespace middleware reference unless
+		// allowCrossNamespace is turned on, and it is off by default — on k3s's
+		// bundled Traefik included. This used to name skifity-system, so the
+		// reference resolved to nothing and the redirect silently never
+		// happened: plain HTTP kept being served, with no error anywhere,
+		// because a middleware Traefik will not load is not a middleware
+		// Traefik complains about.
+		annotations["traefik.ingress.kubernetes.io/router.middlewares"] =
+			s.Namespace + "-" + RedirectMiddleware + "@kubernetescrd"
 	}
 
 	// An app that can scale to zero is reached through KEDA's interceptor,

@@ -137,8 +137,19 @@ func (c *Cluster) DeleteApp(ctx context.Context, namespace, appSlug string) erro
 // signature where a caller can forget it. Forgetting it here would silently put
 // a lowered environment back to the strict level on the next deploy.
 func (c *Cluster) EnsureNamespace(ctx context.Context, env store.Environment, teamID, projectID string) error {
-	return c.client.EnsureNamespace(ctx, env.Namespace, teamID, projectID,
-		kube.NormalizePodSecurity(env.PodSecurity))
+	if err := c.client.EnsureNamespace(ctx, env.Namespace, teamID, projectID,
+		kube.NormalizePodSecurity(env.PodSecurity)); err != nil {
+		return err
+	}
+	// Best effort, and separate from the namespace's own guards: this is a
+	// Traefik CRD, and a cluster running a different ingress controller does
+	// not have the type at all. An app there still deploys; it just does not
+	// get an automatic redirect from plain HTTP.
+	if err := c.client.Applier().Apply(ctx, kube.BuildRedirectMiddleware(env.Namespace)); err != nil {
+		c.log.Warn("could not create the HTTPS redirect middleware",
+			"namespace", env.Namespace, "error", err)
+	}
+	return nil
 }
 
 // DeleteNamespace removes an environment's namespace.

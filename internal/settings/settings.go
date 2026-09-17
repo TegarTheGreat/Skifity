@@ -129,9 +129,10 @@ const (
 	// swept, and how long finished records are kept. They are settings because
 	// they have to survive a restart, and the first one has no form field for
 	// the same reason a timestamp never does.
-	KeyRegistrySweptAt  = "maintenance.registry_swept_at"
-	KeyHistoryDays      = "maintenance.history_days"
-	KeyAuditHistoryDays = "maintenance.audit_history_days"
+	KeyRegistrySweptAt   = "maintenance.registry_swept_at"
+	KeyPrunedAt          = "maintenance.pruned_at"
+	KeyDeploymentHistory = "maintenance.deployment_history"
+	KeyAuditHistoryDays  = "maintenance.audit_history_days"
 )
 
 // Definitions is the whole catalogue, in display order.
@@ -165,6 +166,25 @@ var Definitions = []Definition{
 		Key: KeyPreviewTTLDays, Label: "Remove preview environments after", Group: GroupCluster,
 		Help:        "Days with no deployment before a pull request's preview environment is removed. A preview that is still being pushed to survives however long the pull request stays open. Set to 0 to keep them until their pull request closes, which is how previews are normally removed — but a webhook that never arrives then leaves one running forever.",
 		Placeholder: "7",
+		Kind:        KindNumber,
+		Validate:    validateInt,
+	},
+	{
+		Key: KeyDeploymentHistory, Label: "Deployment records to keep, per app", Group: GroupCluster,
+		Help: "How many past deployments an app keeps, with their build logs. " +
+			"Older ones are removed so the panel's database does not grow without end. " +
+			"Only the ten most recent can be rolled back to, because that is how many " +
+			"images the registry keeps and how many revisions Kubernetes itself remembers.",
+		Placeholder: "50",
+		Kind:        KindNumber,
+		Validate:    validateInt,
+	},
+	{
+		Key: KeyAuditHistoryDays, Label: "Keep the activity log for", Group: GroupCluster,
+		Help: "Days. The activity log is kept far longer than anything else here, " +
+			"because a log that forgets is most of the way to not having one. " +
+			"Shorten it only if you have a reason to.",
+		Placeholder: "365",
 		Kind:        KindNumber,
 		Validate:    validateInt,
 	},

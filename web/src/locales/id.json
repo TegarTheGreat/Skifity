@@ -260,6 +260,8 @@
     "rebuild": "Build ulang dari awal",
     "rebuildHelp": "Mengabaikan cache dan membangun ulang meski tidak ada perubahan.",
     "rollback": "Kembalikan",
+    "imageCollected": "Image sudah dihapus",
+    "imageCollectedHelp": "Hanya beberapa versi terakhir yang menyimpan image-nya, agar disk tidak penuh. Deploy ulang commit ini untuk mendapatkannya kembali.",
     "rollbackTo": "Kembalikan ke #{{number}}",
     "rollbackHelp": "Mengembalikan image versi ini beserta pengaturan yang dipakainya saat itu.",
     "cancel": "Batalkan deployment",

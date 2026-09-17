@@ -10,6 +10,7 @@ import (
 	"skifity/internal/cron"
 	"skifity/internal/errdoc"
 	"skifity/internal/logging"
+	"skifity/internal/registry"
 	"skifity/internal/store"
 )
 
@@ -62,6 +63,10 @@ func (s *Server) handleListDeployments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// The panel keeps far more records than the registry keeps images, so the
+	// list says which of them can still be gone back to. Without it the button
+	// is there on every old version and the rollback fails on a pull.
+	store.MarkRollbackTargets(deployments, registry.KeptPerApp)
 	writeList(w, deployments)
 }
 

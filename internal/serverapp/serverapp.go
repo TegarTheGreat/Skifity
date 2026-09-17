@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -116,7 +117,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 	go server.Background(background)
-	go runScheduler(background, backups, clusterAdapter, log)
+	go runScheduler(background, db, backups, clusterAdapter, log)
 	go watcher.Run(background)
 
 	httpServer := &http.Server{
@@ -264,7 +265,7 @@ func markInterruptedDeployments(ctx context.Context, db *store.DB, log *slog.Log
 }
 
 // runScheduler fires scheduled backups once a minute.
-func runScheduler(ctx context.Context, backups *backup.Manager, c *cluster.Cluster, log *slog.Logger) {
+func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c *cluster.Cluster, log *slog.Logger) {
 	// Align to the start of the next minute so a schedule of "0 3 * * *" fires
 	// at 03:00 rather than at whatever second the panel happened to start.
 	timer := time.NewTimer(time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)))
@@ -283,6 +284,7 @@ func runScheduler(ctx context.Context, backups *backup.Manager, c *cluster.Clust
 		// Maintenance is on the same minute tick rather than a timer of its
 		// own, because "due" has to survive a restart: a panel restarted daily
 		// would never reach a weekly timer, and the disk would fill anyway.
+		pruneHistory(ctx, db, log)
 		if c != nil {
 			c.MaintainRegistry(ctx)
 		}
@@ -300,4 +302,44 @@ func portOf(listen string) string {
 		return port
 	}
 	return "8080"
+}
+
+// pruneHistory removes the records nobody will read again, once a day.
+//
+// The panel's database is a file on one node's disk, and a deployment record,
+// an audit entry and a finished operation were all written and never removed. It
+// is not a failure that arrives, it is one that accumulates: every query over
+// those tables gets slower and the backup of them gets larger, and both are
+// only ever noticed long after they started.
+func pruneHistory(ctx context.Context, db *store.DB, log *slog.Logger) {
+	if !db.DueEvery(ctx, settings.KeyPrunedAt, 24*time.Hour) {
+		return
+	}
+	report, err := db.Prune(ctx, retentionFrom(ctx, db))
+	if err != nil {
+		log.Warn("could not prune the panel's history", "error", err)
+		return
+	}
+	// A pass that found nothing is the ordinary case and says nothing. One that
+	// removed something says how much, so "the database keeps growing" is a
+	// question the log can answer.
+	if !report.Empty() {
+		log.Info("pruned the panel's history", "removed", report.String())
+	}
+}
+
+// retentionFrom reads the configured windows, falling back to the defaults.
+func retentionFrom(ctx context.Context, db *store.DB) store.Retention {
+	keep := store.DefaultRetention()
+	if value, _, err := db.GetSetting(ctx, settings.KeyDeploymentHistory); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && n > 0 {
+			keep.DeploymentsPerApp = n
+		}
+	}
+	if value, _, err := db.GetSetting(ctx, settings.KeyAuditHistoryDays); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && n > 0 {
+			keep.AuditDays = n
+		}
+	}
+	return keep
 }

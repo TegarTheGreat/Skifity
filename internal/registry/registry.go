@@ -31,6 +31,18 @@ import (
 // removing it makes the next build of every app a cold build.
 const CacheTag = "buildcache"
 
+// KeptPerApp is how many of an app's images the sweep keeps.
+//
+// Ten, which is the Deployment's revision history: a rollback further back than
+// Kubernetes itself remembers is not offered, so the image for it would be kept
+// for nobody.
+//
+// It lives here rather than next to the sweep because it is also the answer to
+// "can this deployment still be rolled back to". The panel keeps far more
+// deployment records than images, and offering a rollback to a version whose
+// image was collected would be offering a deployment that fails on a pull.
+const KeptPerApp = 10
+
 // manifestTypes are the media types a manifest may have.
 //
 // The Accept header is not optional here. Without it the registry answers a

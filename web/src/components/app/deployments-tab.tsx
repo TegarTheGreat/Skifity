@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -116,7 +117,20 @@ export function DeploymentsTab({ app }: { app: App }) {
                 </div>
 
                 {TERMINAL.has(deployment.status) ? (
-                  deployment.status === "succeeded" && (
+                  deployment.status === "succeeded" &&
+                  (deployment.can_rollback === false ? (
+                    // Said rather than hidden. A button that is simply absent
+                    // on old versions reads as a bug; this says why, and the
+                    // answer — deploy that commit again — is a real one.
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-xs text-muted-foreground">
+                          {t("deploy.imageCollected")}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("deploy.imageCollectedHelp")}</TooltipContent>
+                    </Tooltip>
+                  ) : (
                     <Button
                       variant="outline"
                       size="sm"
@@ -126,7 +140,7 @@ export function DeploymentsTab({ app }: { app: App }) {
                       <RotateCcwIcon className="size-3.5" />
                       {t("deploy.rollback")}
                     </Button>
-                  )
+                  ))
                 ) : (
                   <Button
                     variant="outline"

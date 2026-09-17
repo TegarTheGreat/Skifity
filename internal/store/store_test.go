@@ -806,3 +806,158 @@ func TestImagesWorthKeepingBoundsTheHistory(t *testing.T) {
 		t.Error("an app's own image is not kept when no deployment row carries it")
 	}
 }
+
+func TestPruneKeepsWhatIsStillInFlight(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+	_, team, _, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web", Replicas: 1}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	for i := 1; i <= 12; i++ {
+		d := Deployment{AppID: app.ID, Image: fmt.Sprintf("registry:5000/acme-prod/web:v%d", i)}
+		if err := db.CreateDeployment(ctx, &d); err != nil {
+			t.Fatalf("CreateDeployment: %v", err)
+		}
+		// The oldest is left queued, as a panel killed mid-build leaves one.
+		status := DeploySucceeded
+		if i == 1 {
+			status = DeployQueued
+		}
+		if _, err := db.Exec(ctx, `UPDATE deployments SET status = ? WHERE id = ?`, status, d.ID); err != nil {
+			t.Fatalf("set status: %v", err)
+		}
+		if i == 2 {
+			// One line of build output, to prove it goes with its deployment.
+			if _, err := db.AppendBuildLog(ctx, d.ID, "stdout", "compiling"); err != nil {
+				t.Fatalf("AppendBuildLog: %v", err)
+			}
+		}
+	}
+
+	// An audit entry old enough to go, and one that is not.
+	if _, err := db.Exec(ctx, `INSERT INTO audit_events (id, team_id, action, at) VALUES (?,?,?,?)`,
+		"aud_old", team.ID, "app.created", FormatTime(time.Now().AddDate(-3, 0, 0))); err != nil {
+		t.Fatalf("insert old audit: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO audit_events (id, team_id, action, at) VALUES (?,?,?,?)`,
+		"aud_new", team.ID, "app.deployed", Now()); err != nil {
+		t.Fatalf("insert new audit: %v", err)
+	}
+
+	report, err := db.Prune(ctx, Retention{DeploymentsPerApp: 5, OperationDays: 90, AuditDays: 365})
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if report.Empty() {
+		t.Fatal("the pass removed nothing at all")
+	}
+
+	deployments, err := db.ListDeployments(ctx, app.ID, 100)
+	if err != nil {
+		t.Fatalf("ListDeployments: %v", err)
+	}
+	// Five finished ones, plus the queued one that must never be touched: a
+	// panel killed mid-build leaves it, and deleting it takes the log that says
+	// what happened with it.
+	if len(deployments) != 6 {
+		var left []int
+		for _, d := range deployments {
+			left = append(left, d.Number)
+		}
+		t.Fatalf("%d deployments left (%v), want 5 finished plus the unfinished one", len(deployments), left)
+	}
+	queued := false
+	for _, d := range deployments {
+		if d.Status == DeployQueued {
+			queued = true
+		}
+	}
+	if !queued {
+		t.Error("the unfinished deployment was pruned")
+	}
+
+	// Build logs go with their deployment rather than being left orphaned.
+	var logs int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM build_logs`).Scan(&logs); err != nil {
+		t.Fatalf("count build logs: %v", err)
+	}
+	if logs != 0 {
+		t.Errorf("%d build log lines survived the deployment they belong to", logs)
+	}
+
+	var audits int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_events`).Scan(&audits); err != nil {
+		t.Fatalf("count audit events: %v", err)
+	}
+	if audits != 1 {
+		t.Errorf("%d audit entries left, want only the recent one", audits)
+	}
+
+	// Running it again finds nothing, which is what makes it safe on a timer.
+	again, err := db.Prune(ctx, Retention{DeploymentsPerApp: 5, OperationDays: 90, AuditDays: 365})
+	if err != nil {
+		t.Fatalf("Prune again: %v", err)
+	}
+	if !again.Empty() {
+		t.Errorf("a second pass removed %s, so the first one was not complete", again.String())
+	}
+}
+
+func TestOnlyRecentVersionsCanBeRolledBackTo(t *testing.T) {
+	// The registry keeps the last few images per app. A deployment record older
+	// than that is worth reading and is no longer somewhere to go back to:
+	// offering it would offer a rollout that fails on a pull.
+	db := testDB(t)
+	ctx := t.Context()
+	_, _, _, env := seedTeam(t, db)
+
+	app := App{EnvironmentID: env.ID, Name: "web", Slug: "web", Replicas: 1}
+	if err := db.CreateApp(ctx, &app); err != nil {
+		t.Fatalf("CreateApp: %v", err)
+	}
+
+	ids := []string{}
+	for i := 1; i <= 6; i++ {
+		d := Deployment{AppID: app.ID, Image: fmt.Sprintf("registry:5000/acme-prod/web:v%d", i)}
+		if err := db.CreateDeployment(ctx, &d); err != nil {
+			t.Fatalf("CreateDeployment: %v", err)
+		}
+		if _, err := db.Exec(ctx, `UPDATE deployments SET status = 'succeeded' WHERE id = ?`, d.ID); err != nil {
+			t.Fatalf("set status: %v", err)
+		}
+		ids = append(ids, d.ID)
+	}
+
+	newest, oldest := ids[5], ids[0]
+	if ok, err := db.WithinRollbackWindow(ctx, app.ID, newest, 3); err != nil || !ok {
+		t.Fatalf("the newest version cannot be rolled back to (%v, %v)", ok, err)
+	}
+	if ok, err := db.WithinRollbackWindow(ctx, app.ID, oldest, 3); err != nil || ok {
+		t.Fatalf("a version whose image was collected is still offered (%v, %v)", ok, err)
+	}
+
+	list, err := db.ListDeployments(ctx, app.ID, 100)
+	if err != nil {
+		t.Fatalf("ListDeployments: %v", err)
+	}
+	MarkRollbackTargets(list, 3)
+	marked := 0
+	for _, d := range list {
+		if d.CanRollback {
+			marked++
+		}
+	}
+	if marked != 3 {
+		t.Fatalf("%d versions are offered for rollback, want 3", marked)
+	}
+	if !list[0].CanRollback {
+		t.Error("the newest version is not offered")
+	}
+	if list[len(list)-1].CanRollback {
+		t.Error("the oldest version is offered although its image is gone")
+	}
+}

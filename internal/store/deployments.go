@@ -306,3 +306,46 @@ func (db *DB) PruneBuildLogs(ctx context.Context, appID string, keepDeployments 
 	}
 	return nil
 }
+
+// MarkRollbackTargets fills in CanRollback across a list of an app's
+// deployments, newest first.
+//
+// keep is how many images the registry keeps. Only a deployment that succeeded
+// counts towards it, because a failed one never pushed an image, and only the
+// most recent of those can still be pulled.
+func MarkRollbackTargets(deployments []Deployment, keep int) {
+	if keep < 1 {
+		keep = 1
+	}
+	seen := 0
+	for i := range deployments {
+		if deployments[i].Status != DeploySucceeded || deployments[i].Image == "" {
+			continue
+		}
+		seen++
+		deployments[i].CanRollback = seen <= keep
+	}
+}
+
+// WithinRollbackWindow reports whether a deployment is one of the most recent
+// keep successful deployments of its app, which is the same question as whether
+// its image still exists.
+func (db *DB) WithinRollbackWindow(ctx context.Context, appID, deploymentID string, keep int) (bool, error) {
+	if keep < 1 {
+		keep = 1
+	}
+	var rank int
+	err := db.QueryRowContext(ctx, `
+		SELECT rn FROM (
+			SELECT id, ROW_NUMBER() OVER (ORDER BY number DESC) AS rn
+			FROM deployments
+			WHERE app_id = ? AND status = 'succeeded' AND image <> ''
+		) WHERE id = ?`, appID, deploymentID).Scan(&rank)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check whether a deployment can still be rolled back to: %w", err)
+	}
+	return rank <= keep, nil
+}

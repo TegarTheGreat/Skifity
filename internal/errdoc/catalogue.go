@@ -1,6 +1,7 @@
 package errdoc
 
 import (
+	"fmt"
 	"net/http"
 
 	"skifity/internal/version"
@@ -71,6 +72,22 @@ func NameTaken(kind, name string) *Problem {
 			"in staging and in production is fine.").
 		WithStatus(http.StatusConflict).
 		With("name", name).With("taken_by", kind)
+}
+
+// ImageCollected means a version is too old to roll back to.
+//
+// The registry keeps the last few images for each app and collects the rest,
+// because otherwise the disk fills. The record of the deployment is kept far
+// longer, so this is not a missing record: it is a record whose image is gone.
+func ImageCollected(number, kept int) *Problem {
+	return New("deploy.image_collected", "That version is too old to roll back to").
+		WithCause("Only the last %d versions of an app keep their image. Version %d is "+
+			"further back than that, and its image was removed to keep the disk free.", kept, number).
+		WithImpact("Nothing was changed. The version that is running now is still running.").
+		WithFix("Roll back to one of the last %d versions, or deploy the commit you want "+
+			"again, which builds it fresh.", kept).
+		WithStatus(http.StatusConflict).
+		With("version", fmt.Sprintf("%d", number))
 }
 
 // Conflict means a uniqueness rule or a state rule rejected the write.

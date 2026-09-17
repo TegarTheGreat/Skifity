@@ -18,6 +18,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/registry"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 )
@@ -370,6 +371,17 @@ func (d *Deployer) Rollback(ctx context.Context, appID, deploymentID, actorID st
 	}
 	if previous.Image == "" {
 		return store.Deployment{}, errdoc.BadRequest("That version has no image to roll back to.")
+	}
+	// The registry keeps the last few images per app and collects the rest, so
+	// a record older than that window is still worth reading and is no longer
+	// something to go back to. Saying so here is the difference between a clear
+	// refusal and a rollout that sits in ImagePullBackOff.
+	within, err := d.db.WithinRollbackWindow(ctx, appID, deploymentID, registry.KeptPerApp)
+	if err != nil {
+		return store.Deployment{}, err
+	}
+	if !within {
+		return store.Deployment{}, errdoc.ImageCollected(previous.Number, registry.KeptPerApp)
 	}
 
 	// A rollback is a new deployment carrying the old image, so the history

@@ -169,6 +169,12 @@ export type Deployment = {
   created_at: string
   started_at?: string
   finished_at?: string
+  /**
+   * Whether this version's image still exists. The panel keeps far more
+   * deployment records than the registry keeps images, so an old record is
+   * worth reading and is no longer somewhere to go back to.
+   */
+  can_rollback?: boolean
 }
 
 export type LogLine = { seq: number; stream: string; line: string; at: string }

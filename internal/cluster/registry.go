@@ -30,13 +30,6 @@ import (
 // thing that starts builds, so it can simply hold them, which is a stronger
 // guarantee than a quiet hour.
 
-// KeptDeploymentsPerApp is how far back an app's images are kept.
-//
-// Ten, which is the Deployment's revision history: a rollback further back than
-// Kubernetes itself remembers is not something the panel offers, so keeping the
-// image for it would be keeping it for nobody.
-const KeptDeploymentsPerApp = 10
-
 // registryGCJob is the name of the Job that sweeps the blobs.
 const registryGCJob = "skifity-registry-gc"
 
@@ -59,7 +52,7 @@ func (c *Cluster) BeginBuild() func() {
 func (c *Cluster) PruneRegistry(ctx context.Context) (int, error) {
 	client := registry.New(kube.RegistryHost())
 
-	images, err := c.db.ImagesWorthKeeping(ctx, KeptDeploymentsPerApp)
+	images, err := c.db.ImagesWorthKeeping(ctx, registry.KeptPerApp)
 	if err != nil {
 		return 0, err
 	}
@@ -239,25 +232,7 @@ const RegistrySweepInterval = 7 * 24 * time.Hour
 // timer and the disk would fill anyway. The last run is a setting for exactly
 // that reason.
 func (c *Cluster) MaintainRegistry(ctx context.Context) {
-	raw, _, err := c.db.GetSetting(ctx, settings.KeyRegistrySweptAt)
-	if err != nil {
-		c.log.Warn("could not read when the registry was last swept", "error", err)
-		return
-	}
-	if raw != "" {
-		last, err := time.Parse(time.RFC3339, raw)
-		if err == nil && time.Since(last) < RegistrySweepInterval {
-			return
-		}
-	}
-
-	// Recorded before the sweep rather than after. A sweep that fails half way
-	// through has still deleted what it deleted, and retrying it every minute
-	// would hold builds every minute; next week is soon enough, and the error
-	// is in the log.
-	if err := c.db.SetSetting(ctx, settings.KeyRegistrySweptAt,
-		time.Now().UTC().Format(time.RFC3339), false, "system"); err != nil {
-		c.log.Warn("could not record the registry sweep", "error", err)
+	if !c.db.DueEvery(ctx, settings.KeyRegistrySweptAt, RegistrySweepInterval) {
 		return
 	}
 	if err := c.CollectRegistryGarbage(ctx); err != nil {

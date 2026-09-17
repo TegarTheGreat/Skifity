@@ -260,6 +260,8 @@
     "rebuild": "从头重新构建",
     "rebuildHelp": "忽略缓存，即使没有变化也重新构建。",
     "rollback": "回滚",
+    "imageCollected": "镜像已删除",
+    "imageCollectedHelp": "只有最近几个版本会保留镜像，以免磁盘被占满。重新部署这个提交即可重新得到它。",
     "rollbackTo": "回滚到 #{{number}}",
     "rollbackHelp": "恢复该版本的镜像，以及它当时使用的设置。",
     "cancel": "取消部署",

@@ -295,6 +295,12 @@ type Deployment struct {
 	CreatedAt        time.Time        `json:"created_at"`
 	StartedAt        time.Time        `json:"started_at,omitzero"`
 	FinishedAt       time.Time        `json:"finished_at,omitzero"`
+
+	// CanRollback is worked out when a list is built, not stored. The panel
+	// keeps far more deployment records than the registry keeps images, so an
+	// old record is still worth showing and is no longer something to go back
+	// to: offering it would offer a deployment that fails on a pull.
+	CanRollback bool `json:"can_rollback"`
 }
 
 // LogLine is one line of build output.

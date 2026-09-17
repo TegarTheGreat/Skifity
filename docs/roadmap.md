@@ -106,9 +106,17 @@ In the order it matters.
 
 1. **Run it on real hardware.** Nothing below this line is worth as much as
    this, and it is the one thing this sandbox cannot do — see the last section.
-2. **Tag a release.** The installer points at `ghcr.io/skifity/skifity`, which
-   does not exist until the first tag; until then an install needs
-   `SKIFITY_IMAGE` set to a locally built image.
+2. **Tag a release.** This was worse than "the image does not exist yet". The
+   release published to `ghcr.io/skifity/skifity`, which is **not this
+   repository and not a namespace anybody here owns** — so a tag would either
+   fail or, worse, point every installer at a name somebody else could register.
+   The release now publishes to the repository it is cut from, derived from
+   `GITHUB_REPOSITORY`, so it is right wherever that is.
+
+   What is still a decision rather than a fix: `installer/install.sh` has a
+   literal default of `ghcr.io/skifity/skifity`, and a shell script downloaded
+   by a stranger cannot derive it. That line has to name wherever the project
+   actually publishes, and choosing that is choosing the project's public home.
 3. **Measure k3s's own footprint.** The panel's is measured, in
    `docs/performance.md`. The cluster's is not, and "runs on a 2 GB VPS" is a
    claim about the pair.
@@ -116,6 +124,14 @@ In the order it matters.
    first pass and found three things. It was still the same eyes. Tenant
    isolation is the one class of bug where being wrong is not recoverable, and
    it deserves somebody who did not write any of this.
+
+   Half of that is now arranged and half is not. **CodeQL** runs on every push
+   and weekly with `security-extended`: a different analyser, with a different
+   model of the code, reading taint from source to sink across packages, into
+   the Security tab where a finding cannot be quietly forgotten. **Dependabot**
+   opens the update before `make audit` has to report it. Neither is a person.
+   A review by somebody who did not write this is still owed, and a tool that
+   agrees with the author is not evidence that the author was right.
 
 ## Not on this roadmap, and why
 

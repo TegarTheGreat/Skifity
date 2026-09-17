@@ -1,0 +1,39 @@
+# Dependency updates, so a known vulnerability is a pull request rather than
+# something `make audit` reports months later.
+#
+# govulncheck already fails CI on a vulnerability the code reaches. This is the
+# other half: it opens the update before anyone has to notice.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: wednesday
+    open-pull-requests-limit: 5
+    groups:
+      # Kubernetes releases a dozen modules in lockstep; one pull request per
+      # module is a dozen CI runs that all say the same thing.
+      kubernetes:
+        patterns: ["k8s.io/*", "sigs.k8s.io/*"]
+      golang-x:
+        patterns: ["golang.org/x/*"]
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+      day: wednesday
+    open-pull-requests-limit: 5
+    groups:
+      # Everything under @radix-ui moves together, and shadcn/ui components are
+      # built on it, so they are reviewed together too.
+      radix:
+        patterns: ["@radix-ui/*"]
+      types:
+        patterns: ["@types/*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly

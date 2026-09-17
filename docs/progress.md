@@ -1050,6 +1050,43 @@ with a remedy, rather than a wall. The ADR now says so. No cluster has been run
 either way, so nothing else changes; what changes is that the reason written
 down was not the real one.
 
+## Phase 30 — the release pointed somewhere nobody owns
+
+"Tag a release" was on the roadmap as *the image does not exist until the first
+tag*. It was worse than that.
+
+The release published to **`ghcr.io/skifity/skifity`**, and the README two pages
+away says plainly that there is no such repository — this one lives at
+`TegarTheGreat/Skifity`. So a tag would either fail, or succeed into a namespace
+nobody here owns and tell every installer to pull from a name **somebody else
+could register**. That is not a missing artefact; it is a supply-chain hazard
+written into the release configuration, sitting next to a document that already
+knew.
+
+The release now publishes to the repository it is cut from: the workflow derives
+`IMAGE_REPO` from `GITHUB_REPOSITORY`, lowercased for ghcr.io, and GoReleaser
+uses that for the image, the upgrade command in the release notes, and the
+`image.source` label. Right wherever it is released from, and no decision taken
+here.
+
+One thing is still a decision rather than a fix, and it is flagged rather than
+guessed: `installer/install.sh` carries a literal default, and a shell script a
+stranger downloads cannot derive one. That line has to name wherever the project
+actually publishes, which is choosing the project's public home.
+
+### And the half of "a second pair of eyes" that can be arranged
+
+The roadmap has asked since Phase 17 for somebody who did not write any of this
+to look at the security model. **CodeQL** now runs on every push and weekly with
+`security-extended` — a different analyser with a different model of the code,
+reading taint from source to sink across packages, reporting into the Security
+tab where a finding cannot be quietly forgotten. **Dependabot** opens the update
+before `make audit` has to report it, grouped so a Kubernetes bump is one pull
+request rather than twelve.
+
+Neither is a person. A tool that agrees with the author is not evidence that the
+author was right, and the roadmap still says so.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

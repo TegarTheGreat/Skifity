@@ -38,6 +38,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ghcr.io wants a lowercase path and GITHUB_REPOSITORY keeps the owner's
+      # capitalisation, so it is lowered here rather than assumed.
+      - name: Where this release publishes to
+        run: |
+          echo "IMAGE_REPO=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "REPO_URL=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_ENV"
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"

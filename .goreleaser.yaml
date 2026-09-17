@@ -45,10 +45,17 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The image is published to the repository this release is cut from.
+#
+# It used to name ghcr.io/skifity/skifity, which is not this repository and not
+# a namespace anyone here owns — so a release would either fail or, worse, tell
+# every installer to pull from a name somebody else could register. The workflow
+# sets IMAGE_REPO from GITHUB_REPOSITORY, lowercased, which is right wherever it
+# is released from and needs no decision here.
 dockers_v2:
   - id: panel
     images:
-      - "ghcr.io/skifity/skifity"
+      - "{{ .Env.IMAGE_REPO }}"
     tags:
       - "{{ .Version }}"
       - "latest"
@@ -62,7 +69,7 @@ dockers_v2:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.licenses: Apache-2.0
-      org.opencontainers.image.source: https://github.com/skifity/skifity
+      org.opencontainers.image.source: "{{ .Env.REPO_URL }}"
 
 changelog:
   use: github
@@ -94,5 +101,5 @@ release:
 
     ```sh
     kubectl -n skifity-system set image deployment/skifity-panel \
-      panel=ghcr.io/skifity/skifity:{{ .Version }}
+      panel={{ .Env.IMAGE_REPO }}:{{ .Version }}
     ```

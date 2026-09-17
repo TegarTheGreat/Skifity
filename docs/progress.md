@@ -382,6 +382,42 @@ What did not turn anything up: the authorize helpers themselves, the SSE topic
 authorization, the encryption contexts, secret disclosure through the variables
 and credentials endpoints, and the webhook's team scoping.
 
+### A pass over the code that runs as root on somebody's server
+
+The provisioning path had never been read this session and is where a defect
+does the most damage: it runs shell as root on a machine the user owns, and it
+can delete the cluster. Two things came out of it, and the second explains why
+the first had survived.
+
+* **`%q` is not shell quoting, and every generated script used it.** Go's `%q`
+  produces a Go double-quoted literal; a shell reading a double-quoted string
+  still expands `$` and a backtick, and `%q` escapes neither. So
+  `fmt.Sprintf("TARGET=%q", "1.2.3.4$(id)")` produces `TARGET="1.2.3.4$(id)"`
+  and the shell runs `id`. The code reads as though it is defended and is not.
+  Every script this panel generates used it — the ones that provision a server
+  over SSH and the ones that build an image. `internal/shellsafe` quotes with
+  single quotes, the only quoting a POSIX shell does not look inside, and a test
+  puts both forms through a real `sh` and shows the difference rather than
+  asserting it. The one reachable path was the SSH account name, which was never
+  validated; it is now checked against the shape a distribution produces.
+* **The guard against destroying the cluster counted the wrong thing.** Removing
+  a control plane node is refused when too few would be left, and it counted
+  rows in one team's table rather than the nodes that actually run the cluster.
+  A panel installed by `install.sh` has no row for the node it runs on, and a
+  panel with more than one team splits the rest between them, so the number was
+  low by at least one and scoped to the wrong thing. It refused removals from a
+  healthy four-node control plane, and at zero it permitted the one removal that
+  deletes Kubernetes, every app, and the panel answering the request.
+
+**And the pattern underneath both.** Three handlers checked "is this feature
+configured" before the check that mattered — before validating the request,
+before authorizing the second resource, before the quorum guard. Beyond the
+small leak of telling somebody who may not touch an app whether databases are
+configured, it means a safety check only runs on a configured panel, so nothing
+can test it without a cluster. That is why this class kept surviving review. The
+checks run first now, and the tests for them run against a panel with no cluster
+at all.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

@@ -87,6 +87,19 @@ one place" was true and unenforced, which is a different thing from being safe.
 
 ---
 
+## Phase 18 — The code that runs as root on somebody's server — *done*
+
+The provisioning path, which is where a defect does the most damage. It found
+that `%q` had been used as shell quoting in every script the panel generates,
+and that the guard against removing the last control plane counted rows in one
+team's table instead of the cluster's own nodes.
+
+Both had survived review for the same reason: a check placed after a "is this
+configured" branch only runs on a configured panel, and nothing in this sandbox
+has one. The ordering is fixed and the tests run without a cluster.
+
+---
+
 ## What is next
 
 In the order it matters.

@@ -101,8 +101,9 @@ smoke: backend ## Run the smoke tests against a freshly built binary
 # machine. It is what somebody runs on a server they are willing to rebuild,
 # before a release, and it asks for a typed yes first.
 .PHONY: verify
-verify: ## Install on THIS machine and check a real cluster end to end
+verify: ## Install on THIS machine and crosscheck the whole checklist on a real cluster
 	@echo "This installs k3s and changes this machine. See test/cluster/README.md."
+	@echo "SKIFITY_PHASES=\"1 2 3 4 5\" picks which phases run; docs/checklist.md says what each covers."
 	sudo -E bash test/cluster/verify.sh
 
 e2e: backend ## Run the Playwright user interface test against the real binary

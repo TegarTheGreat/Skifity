@@ -1295,6 +1295,57 @@ criticised Coolify for the same thing without admitting it. Both now say it, and
 IP, or a provider's load balancer, with the address going in
 **Settings → Domains → Cluster public IP**.
 
+## Phase 35 — the checklist, crosschecked
+
+Eighteen things a self-hosted platform is judged on, put against the code one at
+a time. `docs/checklist.md` is the result and the record: three statuses, and
+only three — **Works** means a test that runs on every push, **Written** means
+the code and its unit tests exist and it has never touched a cluster, **Missing**
+means missing. Nothing is Works because it looks right.
+
+Two of the eighteen are Works end to end. Most are Written. That ratio is the
+honest state of this product and it does not change until `verify.sh` has run.
+
+### The one that was Missing
+
+Taking the data out. "Can I take my data with me" was answered by "copy
+`panel.db` and `master.key`", which is a Skifity-shaped blob and a promise
+rather than an export. `skifity export` now writes a directory that needs none
+of this product to read: the whole team as JSON, and each app as the Kubernetes
+objects it would be applied as. Secret values are deliberately not in it — the
+promise that a stored secret is never shown again is worth more than the
+convenience, and it costs nothing, because those values are already in the
+reader's own cluster as ordinary Kubernetes Secrets.
+
+### And the crosscheck itself, made runnable
+
+`test/cluster/verify.sh` was a script that had never been run, and reading it
+against the code showed why that matters: it asked for an API token with the
+wrong CSRF header name, without the team id the endpoint requires, and then read
+the secret out of a field that does not exist. It would have died four checks
+in, and everything after it would never have run.
+
+It is now organised as the five phases a person can actually work through, and
+covers what it claimed to and more: a build from Git rather than a prebuilt
+image, a build log read while it is still building, an address that answers, a
+variable change that restarts without rebuilding, a rollback, two hundred
+requests held across a rolling restart, a volume that survives one, a database,
+a backup restored, the export, a token refused on another team, a member refused
+the settings, one namespace refused another's app, sixty-four cores refused by
+the quota, the panel scaled to zero while the app keeps serving, a node drained,
+the panel replaced under a running app, and a deployment that cannot pull its
+image sending a real notification to a real listener.
+
+`test/cluster/sample-app` is what phase 1 builds: one Go file and a two-stage
+Dockerfile with nothing to download, so a build failure is the builder's and not
+the network's.
+
+The parts of that script that only talk to the panel are now also covered by
+`make smoke` against the real binary — the invitation flow end to end over HTTP,
+what a member is refused, and the export. A field renamed in the API would
+otherwise leave the crosscheck quietly checking nothing, on the one machine
+nobody can run from CI.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

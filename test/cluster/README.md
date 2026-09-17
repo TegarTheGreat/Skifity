@@ -1,27 +1,27 @@
-# The verification that has never been run
+# The crosscheck
 
 Everything in `test/smoke` checks this product against fakes, golden files and an
 in-process SSH server, because the machine it was built on could not start a
 cluster. `docs/progress.md` says so plainly, and it is the largest single gap in
 this repository.
 
-`verify.sh` is the other half. It installs Skifity on a real server, deploys a
-real application, and then checks the three things only a real cluster can
-settle:
+`verify.sh` is the other half. It installs Skifity on a real server and works
+through the checklist a self-hosted platform is actually judged on —
+`docs/checklist.md` is that list, and the column that says which of the eighteen
+items have a test that runs and which are still only written.
 
-1. **An app comes up and answers.** Not that the manifest renders — that the
-   pod starts, the Service routes, and an HTTP request gets a reply.
-2. **Autoscaling has numbers to scale on.** A HorizontalPodAutoscaler with no
-   metrics sits at `<unknown>/70%` forever and nothing says so. The panel
-   reports that as a scaling finding now; this is what proves the finding is
-   right.
-3. **Scale to zero is wired the way it is drawn.** KEDA running, an
-   HTTPScaledObject for the app, and the app's own HPA *gone* — two autoscalers
-   on one Deployment fight, and this is where that stops being a claim.
+## The phases
 
-It also measures what the thing actually costs. `docs/performance.md` says 35
-MiB idle, measured on a laptop. The number this prints is the first one measured
-on a cluster, and if they disagree the document is what changes.
+| Phase | What it settles | Checklist |
+|---|---|---|
+| **1 — the basic path** | An app is built *from Git*, its log can be read while it is building, it gets an address that answers, a variable change restarts it without rebuilding, one call rolls it back, and a rolling restart under continuous traffic drops nothing. | 1, 2, 3, 4, 8, 9 |
+| **2 — the data** | A volume keeps what was written to it across a restart, a managed database comes up on its own, a backup restores, and the export carries every app's Kubernetes objects and none of its secrets. | 5, 6, 7, 16 |
+| **3 — security and isolation** | A token for one team answers 404 on another, a member cannot run the panel, a pod in one namespace cannot reach another's app, and asking for sixty-four cores is refused by a real quota. | 11, 12, 13 |
+| **4 — what survives** | The panel is scaled to zero and the app keeps answering every request. A node is drained and the work moves, with the disruption budget letting it move one instance at a time. | 14, 9 |
+| **5 — running it** | Logs and per-instance usage can be read, the panel serves its own metrics, an app serves every request while the panel is replaced under it, and a deployment that cannot pull its image actually sends a notification. | 10, 15, 17 |
+
+Phase 6 is a person and should not become a script: give somebody
+`docs/quick-start.md` and nothing else, and write down where they get stuck.
 
 ## Running it
 
@@ -37,13 +37,28 @@ sudo SKIFITY_IMAGE=skifity:local bash test/cluster/verify.sh
 It asks for a typed `yes` before touching anything. `SKIFITY_ASSUME_YES=1` skips
 the question, which is for a machine that is already disposable.
 
+`SKIFITY_PHASES="2 3"` runs only those phases, which is what you want when one
+of them failed and you are fixing it.
+
 | Variable | What it is |
 |---|---|
 | `SKIFITY_IMAGE` | **Required.** The panel image. No release is published yet, so build one or push one somewhere the server can pull from. |
-| `SKIFITY_DOMAIN` | The panel's domain. Defaults to `<public-ip>.nip.io`, so there is nothing to set up in DNS. |
+| `SKIFITY_DOMAIN` | The panel's domain. Defaults to `<public-ip>.nip.io`, so there is nothing to set up in DNS. A domain you own is what makes the HTTPS check run rather than skip. |
 | `SKIFITY_PUBLIC_IP` | Set it when the machine cannot work its own out. |
+| `SKIFITY_PHASES` | Which phases to run. Default `1 2 3 4 5`. |
 | `SKIFITY_ASSUME_YES` | `1` to skip the confirmation. |
-| `VERIFY_APP_IMAGE` | The application it deploys. A small public image with an HTTP server, on purpose: the first run should fail on the cluster if it fails, not on a build. |
+| `VERIFY_GIT_REPO` / `VERIFY_GIT_BRANCH` / `VERIFY_GIT_ROOT` | The application phase 1 builds. Defaults to this repository's own `test/cluster/sample-app`: one Go file and a Dockerfile with nothing to download, so a build failure is the builder's and not the network's. |
+| `VERIFY_S3_ENDPOINT` / `VERIFY_S3_BUCKET` / `VERIFY_S3_ACCESS_KEY` / `VERIFY_S3_SECRET_KEY` | Where backups go. Without them phase 2 skips the backup check and says so — a backup with nowhere to put it is not a backup. |
+
+## What is already proven, and what is not
+
+The parts of this script that only talk to the panel — first-run setup, the CSRF
+header, creating an API token, inviting somebody, what a member is refused, the
+export — are also checked by `make smoke` against the real binary on every push.
+That is deliberate: a field renamed in the API would otherwise leave this script
+quietly checking nothing, on the one machine nobody can run from CI.
+
+Everything else here has never run.
 
 ## What to send back
 

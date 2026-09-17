@@ -173,11 +173,12 @@ no way out to the internet.
 | [Configuration](docs/configuration.md) | Every setting, and what to back up |
 | [What it costs](docs/performance.md) | Memory and size, measured |
 
-Those eleven are the ones the panel serves. Three more are for people working on
+Those eleven are the ones the panel serves. The rest are for people working on
 Skifity rather than running it, so they stay in the repository:
 
 | | |
 |---|---|
+| [The checklist](docs/checklist.md) | The eighteen things a self-hosted platform is judged on, and which of them have a test that runs |
 | [Architecture](docs/architecture.md) | How it fits together |
 | [Decisions](docs/decisions.md) | Why it is like this |
 | [Progress](docs/progress.md) | Where the work stands, including what has never run |

@@ -430,6 +430,57 @@ pass "the panel reports on itself, in the format every monitoring system reads"
 printf '%s' "$METRICS" | grep -q "$TEAM_ID" && fail "an id leaked into a metric label"
 pass "metric labels are route patterns, not paths with ids in them"
 
+# --- getting a second person in, and letting them take the data out ---------
+#
+# These two exist here as well as in Go because test/cluster/verify.sh drives
+# them over HTTP, and a field renamed in the API would leave that script quietly
+# checking nothing on the one machine nobody can reach from CI.
+
+INVITE=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" -X POST \
+  "$BASE/api/teams/$TEAM_ID/invitations" -H 'Content-Type: application/json' \
+  -d '{"email":"colleague@example.test","role":"member"}')
+INVITE_URL=$(echo "$INVITE" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+[ -n "$INVITE_URL" ] || fail "inviting somebody returned no link to send them"
+INVITE_TOKEN="${INVITE_URL##*/}"
+pass "an invitation returns a one-time link"
+
+curl -fsS "$BASE/api/invitations/$INVITE_TOKEN" | grep -q 'colleague@example.test' \
+  || fail "the invitation lookup does not say who it is for"
+pass "opening the link says which team and which address, before any password is typed"
+
+curl -fsS -c "$WORKDIR/member-cookies" -X POST "$BASE/api/invitations/$INVITE_TOKEN/accept" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Colleague","password":"a reasonable member passphrase"}' >/dev/null \
+  || fail "the invitation could not be accepted"
+pass "accepting the link creates the account and signs them in"
+
+code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/invitations/$INVITE_TOKEN/accept" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Again","password":"a reasonable member passphrase"}')
+[ "$code" = "404" ] || fail "an invitation link worked twice, answering $code"
+pass "the link is spent once it is used"
+
+MEMBER_CSRF=$(awk '/skifity_csrf/ {print $7}' "$WORKDIR/member-cookies")
+[ -n "$MEMBER_CSRF" ] || fail "no CSRF cookie was set for the new member"
+MEMBER_TOKEN=$(curl -fsS -b "$WORKDIR/member-cookies" -X POST "$BASE/api/me/tokens" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $MEMBER_CSRF" \
+  -d '{"name":"member","team_id":"'"$TEAM_ID"'"}' | sed -n 's/.*"secret":"\([^"]*\)".*/\1/p')
+[ -n "$MEMBER_TOKEN" ] || fail "the new member could not create a token"
+
+EXPORT=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/teams/$TEAM_ID/export")
+echo "$EXPORT" | grep -q '"manifests"\|"manifest_error"' \
+  || fail "the export says nothing about each app's Kubernetes objects"
+echo "$EXPORT" | grep -q 'verysecret' && fail "the export contains a secret value"
+pass "the export carries the apps and none of the secrets"
+
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $MEMBER_TOKEN" \
+  "$BASE/api/teams/$TEAM_ID/export")
+[ "$code" = "403" ] || fail "a member downloaded the whole team, answering $code"
+code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $MEMBER_TOKEN" \
+  "$BASE/api/settings")
+[ "$code" = "403" ] || fail "a member read the panel's settings, answering $code"
+pass "a member can use the panel and cannot run it"
+
 # Logging out must end the session.
 "$BINARY" logout >/dev/null
 printf '\nAll panel smoke checks passed.\n\n'

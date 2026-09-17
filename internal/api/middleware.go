@@ -9,8 +9,11 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"skifity/internal/auth"
 	"skifity/internal/crypto"
@@ -174,14 +177,26 @@ func (s *Server) accessLog(next http.Handler) http.Handler {
 			// drowns everything else.
 			level = slog.LevelDebug
 		}
+		elapsed := time.Since(start)
 		s.log.Log(r.Context(), level, "request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
 			"bytes", rec.bytes,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", elapsed.Milliseconds(),
 			"ip", clientIPFrom(r.Context()),
 			"request_id", requestIDFrom(r.Context()))
+
+		// Labelled by the route pattern rather than the path. A label per app
+		// id is how a metrics endpoint turns into a memory leak: every
+		// deployment somebody ever looked at would keep a series forever.
+		route := chi.RouteContext(r.Context()).RoutePattern()
+		if route == "" {
+			route = "other"
+		}
+		s.metrics.Inc("skifity_http_requests_total",
+			"method", r.Method, "route", route, "status", strconv.Itoa(rec.status))
+		s.metrics.Observe("skifity_http_request_duration_seconds", elapsed.Seconds(), "route", route)
 	})
 }
 

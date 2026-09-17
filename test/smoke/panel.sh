@@ -403,6 +403,30 @@ grep -q 'verysecret' "$WORKDIR/server.log" && fail "a secret reached the panel's
 grep -q "$PASSWORD" "$WORKDIR/server.log" && fail "the password reached the panel's log"
 pass "no secrets reached the panel's log"
 
+# The metrics page: behind authentication, in the format Prometheus reads, and
+# carrying the request this very check makes.
+code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/metrics")
+[ "$code" = "401" ] || fail "the metrics page answered $code without credentials, want 401"
+pass "the metrics page is not open to anyone who can reach the port"
+
+METRICS=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/metrics")
+printf '%s' "$METRICS" | grep -q '^# TYPE skifity_http_requests_total counter$' \
+  || fail "the metrics page is not in the exposition format"
+printf '%s' "$METRICS" | grep -q 'skifity_http_requests_total{.*status="200".*} ' \
+  || fail "requests are not being counted"
+printf '%s' "$METRICS" | grep -q '^skifity_goroutines ' \
+  || fail "the runtime is not reported"
+printf '%s' "$METRICS" | grep -q '^skifity_database_bytes ' \
+  || fail "the database size is not reported"
+printf '%s' "$METRICS" | grep -q 'skifity_http_request_duration_seconds_bucket{.*le="+Inf"}' \
+  || fail "the duration histogram has no +Inf bucket"
+pass "the panel reports on itself, in the format every monitoring system reads"
+
+# A label per app id is how a metrics endpoint becomes a memory leak, so the
+# route pattern is the label and the id is not in it.
+printf '%s' "$METRICS" | grep -q "$TEAM_ID" && fail "an id leaked into a metric label"
+pass "metric labels are route patterns, not paths with ids in them"
+
 # Logging out must end the session.
 "$BINARY" logout >/dev/null
 printf '\nAll panel smoke checks passed.\n\n'

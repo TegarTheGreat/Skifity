@@ -97,3 +97,44 @@ Two things, and they are not the same thing:
 
 Keep the key somewhere the database backup is not. Together they are everything;
 apart, neither is enough.
+
+## Monitoring the panel
+
+The panel watches the cluster; this is how you watch the panel. `GET
+/api/metrics` returns the Prometheus text format.
+
+It is behind the same authentication as the rest of the API, because it says how
+many apps and servers exist and how the process is getting on, which is not
+something to hand to anyone who can reach the port. Scrape it with an API token
+from an account with administrator rights:
+
+```yaml
+scrape_configs:
+  - job_name: skifity
+    metrics_path: /api/metrics
+    authorization:
+      credentials: skf_your_token_here
+    static_configs:
+      - targets: ["panel.example.com"]
+```
+
+Create the token under your account, then **API tokens**.
+
+What is there:
+
+| Metric | What it tells you |
+| --- | --- |
+| `skifity_http_requests_total` | Requests by method, route and status. The route is the pattern, not the path, so an id never becomes a label. |
+| `skifity_http_request_duration_seconds` | A histogram of how long they took. |
+| `skifity_deployments_total` | Deployments that finished, by result. |
+| `skifity_deployments_in_flight` | Deployments that have not. A number that only climbs means something is stuck. |
+| `skifity_apps`, `skifity_servers` | How many exist; servers are split by status. |
+| `skifity_cluster_reachable` | 1 when the Kubernetes API answered. |
+| `skifity_event_clients` | Open event streams. Climbing and never falling is a subscription that is not being closed. |
+| `skifity_database_bytes` | The size of `panel.db`. |
+| `skifity_goroutines`, `skifity_memory_heap_bytes` | The two numbers that say the panel is leaking. |
+| `skifity_uptime_seconds`, `skifity_build_info` | How long it has been up, and which version. |
+
+Three alerts are worth having: `skifity_cluster_reachable == 0` for more than a
+few minutes, `skifity_deployments_in_flight` above zero for an hour, and
+`skifity_goroutines` climbing steadily over a day.

@@ -291,3 +291,13 @@ func AppLogTopic(id string) string { return "app-logs:" + id }
 
 // TeamTopic is the topic for team-wide changes, which is what keeps lists fresh.
 func TeamTopic(id string) string { return "team:" + id }
+
+// Subscribers is how many clients are listening.
+//
+// A number that climbs and never comes down is a subscription that is not being
+// closed, which on a long-lived panel is the leak that eventually takes it down.
+func (h *Hub) Subscribers() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.subscribers)
+}

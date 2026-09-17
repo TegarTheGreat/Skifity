@@ -16,6 +16,7 @@ import (
 	"skifity/internal/docsite"
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
+	"skifity/internal/metrics"
 	"skifity/internal/store"
 )
 
@@ -27,6 +28,8 @@ type Server struct {
 	auth    *auth.Service
 	hub     *events.Hub
 	log     *slog.Logger
+	// metrics is what the panel says about itself, for whatever is watching it.
+	metrics *metrics.Registry
 
 	// setup guards first-run: it holds the one-time token until an admin exists.
 	setup *setupState
@@ -63,6 +66,10 @@ type Options struct {
 	Backups     BackupManager
 	Frontend    http.Handler
 	SetupToken  string
+	// Metrics is shared with the orchestrators, so a deployment counted there
+	// appears on the same page as a request counted here. Nil is fine and
+	// means the panel keeps its own.
+	Metrics *metrics.Registry
 }
 
 // New builds the API server and its routes.
@@ -81,7 +88,12 @@ func New(opts Options) *Server {
 		backups:     opts.Backups,
 		frontend:    opts.Frontend,
 		setup:       newSetupState(opts.SetupToken),
+		metrics:     opts.Metrics,
 	}
+	if s.metrics == nil {
+		s.metrics = metrics.New()
+	}
+	s.describeMetrics()
 	if s.log == nil {
 		s.log = slog.Default()
 	}
@@ -259,6 +271,12 @@ func (s *Server) routes() chi.Router {
 				admin.Post("/security/recovery-key/saved", s.handleRecoveryKeySaved)
 				admin.Get("/upgrade", s.handleUpgradeStatus)
 				admin.Post("/upgrade", s.handleUpgrade)
+				// Behind the same authentication as everything else. A
+				// metrics page says how many apps and servers exist and how
+				// the panel is doing, which is not a thing to hand to
+				// anybody who can reach the port. Prometheus scrapes it with
+				// an API token, the same way the CLI talks to the panel.
+				admin.Get("/metrics", s.handleMetrics)
 			})
 		})
 

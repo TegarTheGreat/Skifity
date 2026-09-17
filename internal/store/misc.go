@@ -387,3 +387,37 @@ func (db *DB) ListComponents(ctx context.Context) ([]ClusterComponent, error) {
 	}
 	return out, rows.Err()
 }
+
+// CountApps is how many apps exist across every team. Used by the metrics page,
+// which is about the panel rather than about one tenant.
+func (db *DB) CountApps(ctx context.Context) (int, error) {
+	var n int
+	err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM apps`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count apps: %w", err)
+	}
+	return n, nil
+}
+
+// CountServersByStatus is how many servers are in each state.
+//
+// By status rather than a total, because "three servers" is not the number
+// anybody wants to alert on and "one of them is not ready" is.
+func (db *DB) CountServersByStatus(ctx context.Context) (map[string]int, error) {
+	rows, err := db.QueryContext(ctx, `SELECT status, COUNT(*) FROM servers GROUP BY status`)
+	if err != nil {
+		return nil, fmt.Errorf("count servers: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		out[status] = count
+	}
+	return out, rows.Err()
+}

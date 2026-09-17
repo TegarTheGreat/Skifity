@@ -24,6 +24,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/logging"
+	"skifity/internal/metrics"
 	"skifity/internal/notify"
 	"skifity/internal/provision"
 	"skifity/internal/settings"
@@ -84,7 +85,12 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	dispatcher := notify.NewDispatcher(db, keyring, log, panelAddress(cfg, db, log))
 	defer dispatcher.Wait()
 
+	// One registry for the whole process, so a deployment counted by the
+	// deployer appears on the same page as a request counted by the API.
+	registry := metrics.New()
+
 	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	deployer.Metrics = registry
 	provisioner := provision.New(provision.Options{
 		DB: db, Keyring: keyring, Hub: hub, Cluster: clusterAdapter,
 		Notifier: dispatcher, ClusterTokenPath: cfg.ClusterTokenPath, Logger: log,
@@ -102,7 +108,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 		Config: cfg, DB: db, Keyring: keyring, Auth: authService, Hub: hub, Logger: log,
 		Cluster: nilIfNil(clusterAdapter), Provisioner: provisioner, Deployer: deployer,
 		Databases: databases, Backups: backups,
-		Frontend: frontend, SetupToken: setupToken,
+		Frontend: frontend, SetupToken: setupToken, Metrics: registry,
 	})
 
 	// Anything left running when the panel stopped is marked failed with an

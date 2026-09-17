@@ -17,6 +17,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/kube"
+	"skifity/internal/metrics"
 	"skifity/internal/notify"
 	"skifity/internal/registry"
 	"skifity/internal/settings"
@@ -25,10 +26,13 @@ import (
 
 // Deployer implements api.Deployer.
 type Deployer struct {
-	db       *store.DB
-	keyring  *crypto.Keyring
-	hub      *events.Hub
-	cluster  *cluster.Cluster
+	db      *store.DB
+	keyring *crypto.Keyring
+	hub     *events.Hub
+	cluster *cluster.Cluster
+	// Metrics is set by the server command. Nil is fine: every method on the
+	// registry checks for it, because a deployer in a test has no monitoring.
+	Metrics  *metrics.Registry
 	notifier notify.Notifier
 	log      *slog.Logger
 
@@ -183,6 +187,7 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 
 	d.appendLog(ctx, deployment.ID, "Deployed.")
 	_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeploySucceeded, "", "", "")
+	d.Metrics.Inc("skifity_deployments_total", "result", "succeeded")
 	_ = d.db.SetAppStatus(ctx, app.ID, "running")
 	d.publish(ctx, deployment.ID)
 	d.notify(ctx, app, deployment, notify.EventDeploySucceeded, notify.Message{
@@ -483,6 +488,7 @@ func (d *Deployer) fail(ctx context.Context, deployment store.Deployment, proble
 	d.log.Error("deployment failed",
 		"deployment", deployment.ID, "app", deployment.AppID, "code", problem.Code, "error", problem.Error())
 
+	d.Metrics.Inc("skifity_deployments_total", "result", "failed")
 	_ = d.db.UpdateDeploymentStatus(ctx, deployment.ID, store.DeployFailed,
 		problem.Code, problem.Error(), problem.Fix)
 	_ = d.db.SetAppStatus(ctx, deployment.AppID, "failed")

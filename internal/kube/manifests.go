@@ -3,6 +3,7 @@ package kube
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -255,21 +256,29 @@ func BuildIngress(s AppSpec) *networkingv1.Ingress {
 			tlsHosts = append(tlsHosts, d.Hostname)
 		}
 	}
+
+	// Middleware names, in the order Traefik runs them.
+	//
+	// Every one of them lives in the app's own namespace. Traefik refuses a
+	// cross-namespace middleware reference unless allowCrossNamespace is turned
+	// on, and it is off by default — k3s's bundled Traefik included — so a
+	// reference to another namespace resolves to nothing and the middleware
+	// silently never runs. A middleware Traefik will not load is not a
+	// middleware Traefik complains about, which is why that was invisible for
+	// as long as it was.
+	var middlewares []string
+
+	// The firewall comes first: a request nobody is allowed to make should not
+	// be answered with a redirect that tells them where to make it instead.
+	if s.Protected {
+		middlewares = append(middlewares, s.Namespace+"-"+GuardMiddleware+"@kubernetescrd")
+	}
 	if len(tlsHosts) > 0 && s.ClusterIssuer != "" {
 		annotations["cert-manager.io/cluster-issuer"] = s.ClusterIssuer
-		// Traefik's redirect middleware is namespaced, and the one Skifity
-		// installs lives in the system namespace.
-		// The app's own namespace, not the panel's.
-		//
-		// Traefik refuses a cross-namespace middleware reference unless
-		// allowCrossNamespace is turned on, and it is off by default — on k3s's
-		// bundled Traefik included. This used to name skifity-system, so the
-		// reference resolved to nothing and the redirect silently never
-		// happened: plain HTTP kept being served, with no error anywhere,
-		// because a middleware Traefik will not load is not a middleware
-		// Traefik complains about.
-		annotations["traefik.ingress.kubernetes.io/router.middlewares"] =
-			s.Namespace + "-" + RedirectMiddleware + "@kubernetescrd"
+		middlewares = append(middlewares, s.Namespace+"-"+RedirectMiddleware+"@kubernetescrd")
+	}
+	if len(middlewares) > 0 {
+		annotations["traefik.ingress.kubernetes.io/router.middlewares"] = strings.Join(middlewares, ",")
 	}
 
 	// An app that can scale to zero is reached through KEDA's interceptor,

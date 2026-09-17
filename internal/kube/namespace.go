@@ -352,3 +352,52 @@ func BuildRedirectMiddleware(namespace string) *unstructured.Unstructured {
 		},
 	}}
 }
+
+// GuardMiddleware is the name of the Traefik middleware that asks the guard
+// whether a request may go through.
+const GuardMiddleware = "firewall"
+
+// GuardService is where the guard answers, and the port it answers on.
+const (
+	GuardService = "skifity-guard"
+	GuardPort    = 9000
+)
+
+// BuildGuardMiddleware renders the forwardAuth middleware into one namespace.
+//
+// The address is a URL rather than a Kubernetes reference, so pointing it at a
+// Service in the panel's namespace is not a cross-namespace object reference
+// and needs nothing turned on. The middleware object itself does have to be
+// beside the Ingress that names it; see BuildRedirectMiddleware.
+//
+// authResponseHeaders is deliberately empty. The guard answers yes or no and
+// has nothing to add to the request, and a header it did set would be one an
+// app might come to trust — which would make this a way of telling an app
+// something rather than a way of stopping a request.
+func BuildGuardMiddleware(namespace, systemNamespace string) *unstructured.Unstructured {
+	address := fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/authorize",
+		GuardService, systemNamespace, GuardPort)
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "traefik.io/v1alpha1",
+		"kind":       "Middleware",
+		"metadata": map[string]any{
+			"name":      GuardMiddleware,
+			"namespace": namespace,
+			"labels":    map[string]any{"app.kubernetes.io/managed-by": version.Binary},
+		},
+		"spec": map[string]any{
+			"forwardAuth": map[string]any{
+				"address": address,
+				// authRequestHeaders is deliberately not set, which forwards
+				// every header rather than a list.
+				//
+				// A list was the first draft and it was wrong: a rule may test
+				// any header by name, so a list would have to hold every header
+				// anybody might ever write a rule about. What it would actually
+				// do is make a rule on X-Api-Key match nothing, with no error
+				// and no sign — the rule saved, the request allowed, and the
+				// header never sent to the process judging it.
+			},
+		},
+	}}
+}

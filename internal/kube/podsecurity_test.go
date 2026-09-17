@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // The defect this whole type exists for.
@@ -287,5 +288,49 @@ func TestTheRedirectMiddlewareIsInTheAppsOwnNamespace(t *testing.T) {
 	}
 	if name := middleware.GetName(); name != RedirectMiddleware {
 		t.Errorf("the middleware is named %q, and the annotation names %q", name, RedirectMiddleware)
+	}
+}
+
+// The firewall's middleware goes in front of the redirect: a request nobody is
+// allowed to make should not be answered with a redirect telling them where to
+// make it instead. And both live in the app's own namespace, because Traefik
+// will not load a middleware from another one.
+func TestTheFirewallMiddlewareComesFirstAndIsLocal(t *testing.T) {
+	spec := AppSpec{
+		Name: "web", Namespace: "acme-shop-production", Image: "app:1", Port: 3000,
+		Replicas: 1, ClusterIssuer: "skifity", Protected: true,
+		Domains: []DomainSpec{{Hostname: "shop.example.com", Path: "/", TLS: true}},
+	}
+	got := BuildIngress(spec).Annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+	want := "acme-shop-production-firewall@kubernetescrd,acme-shop-production-redirect-https@kubernetescrd"
+	if got != want {
+		t.Errorf("middlewares = %q, want %q", got, want)
+	}
+
+	// An app with no rules carries only the redirect.
+	spec.Protected = false
+	got = BuildIngress(spec).Annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+	if got != "acme-shop-production-redirect-https@kubernetescrd" {
+		t.Errorf("an unprotected app got %q", got)
+	}
+}
+
+// A rule may test any header by name, so the middleware must forward all of
+// them. A list would make a rule on X-Api-Key match nothing, with no error and
+// no sign: the rule saved, the request allowed, and the header never sent to
+// the process judging it.
+func TestTheGuardMiddlewareForwardsEveryHeader(t *testing.T) {
+	middleware := BuildGuardMiddleware("acme-shop-production", "skifity-system")
+	spec, _, _ := unstructured.NestedMap(middleware.Object, "spec", "forwardAuth")
+	if _, listed := spec["authRequestHeaders"]; listed {
+		t.Error("a header allowlist would silently break a rule on any header not in it")
+	}
+	address, _ := spec["address"].(string)
+	want := "http://skifity-guard.skifity-system.svc.cluster.local:9000/authorize"
+	if address != want {
+		t.Errorf("address = %q, want %q", address, want)
+	}
+	if ns := middleware.GetNamespace(); ns != "acme-shop-production" {
+		t.Errorf("the middleware was created in %q, not beside the Ingress that names it", ns)
 	}
 }

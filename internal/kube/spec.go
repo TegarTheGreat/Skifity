@@ -75,6 +75,9 @@ type AppSpec struct {
 	// PodSecurity is the environment's Pod Security Admission level. Empty
 	// means the strict one.
 	PodSecurity PodSecurity
+	// Protected is true when this app has firewall rules switched on, which
+	// puts the guard's middleware in front of its Ingress.
+	Protected bool
 	// ImageBuiltHere is true when Skifity's own builder produced this image.
 	//
 	// It is the difference between knowing what is inside a container and

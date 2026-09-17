@@ -19,6 +19,7 @@ import (
 	"skifity/internal/crypto"
 	"skifity/internal/errdoc"
 	"skifity/internal/store"
+	"skifity/web"
 )
 
 type contextKey string
@@ -205,9 +206,15 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	// The panel serves its own assets and talks only to itself, so the policy
 	// can be strict. 'unsafe-inline' is needed for styles because Tailwind's
 	// runtime theme variables are set on the document element.
+	// The one inline script in index.html sets the theme before the first
+	// paint. Its hash is read out of the file that ships, so the policy and the
+	// script cannot drift: without it the policy refused to run the script, and
+	// every dark-mode user saw a white flash on every load — in production
+	// only, because the policy is not set in dev mode.
+	script := append([]string{"'self'"}, web.InlineScriptHashes()...)
 	csp := strings.Join([]string{
 		"default-src 'self'",
-		"script-src 'self'",
+		"script-src " + strings.Join(script, " "),
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob:",
 		"font-src 'self' data:",

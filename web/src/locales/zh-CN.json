@@ -365,6 +365,7 @@
     "title": "伸缩",
     "fixed": "固定实例数",
     "automatic": "自动伸缩",
+    "automaticHelp": "Skifity 会根据应用的繁忙程度，在下面的数字之间增减实例。",
     "instances": "实例数",
     "minInstances": "最少实例数",
     "maxInstances": "最多实例数",
@@ -515,7 +516,25 @@
     "installedNote": "已安装。启动可能需要一分钟。",
     "installedApps_other": "已安装 {{count}} 个应用。启动可能需要一分钟。",
     "search": "搜索模板",
-    "notesTitle": "在它能用之前"
+    "notesTitle": "在它能用之前",
+    "categories": {
+      "ai": "人工智能",
+      "analytics": "分析",
+      "automation": "自动化",
+      "business": "商务",
+      "cms": "网站与发布",
+      "communication": "沟通",
+      "developer": "开发者工具",
+      "ecommerce": "商店",
+      "finance": "财务",
+      "media": "媒体",
+      "monitoring": "监控",
+      "networking": "网络",
+      "other": "其他",
+      "productivity": "效率",
+      "security": "安全",
+      "storage": "存储与文件"
+    }
   },
   "settings": {
     "title": "设置",

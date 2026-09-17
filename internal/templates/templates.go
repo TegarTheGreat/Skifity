@@ -63,6 +63,23 @@ func load() {
 			loadErr = fmt.Errorf("%s: %w", entry.Name(), err)
 			return
 		}
+		// A nil slice marshals as `null`, and the API says these are arrays.
+		// 157 of the templates in this directory have no database, and every
+		// one of them answered `"databases": null` — which the panel iterated,
+		// which threw, which meant the Templates page rendered an error
+		// boundary instead of the catalogue on every install since it grew
+		// past the hand-written eight. Nothing caught it: the structural tests
+		// below check the Go value, not the JSON, and nothing ever opened the
+		// page.
+		if template.Databases == nil {
+			template.Databases = []DatabaseSpec{}
+		}
+		if template.Inputs == nil {
+			template.Inputs = []Input{}
+		}
+		if template.Services == nil {
+			template.Services = []Service{}
+		}
 		catalogue = append(catalogue, template)
 	}
 	// Sorted by name, because a directory listing is not an order anybody

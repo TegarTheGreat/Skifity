@@ -365,6 +365,7 @@
     "title": "Penskalaan",
     "fixed": "Jumlah instance tetap",
     "automatic": "Skalakan otomatis",
+    "automaticHelp": "Skifity menambah dan mengurangi instance di antara angka di bawah, sesuai kesibukan aplikasi.",
     "instances": "Instance",
     "minInstances": "Instance paling sedikit",
     "maxInstances": "Instance paling banyak",
@@ -515,7 +516,25 @@
     "installedNote": "Terpasang. Mungkin butuh semenit untuk menyala.",
     "installedApps_other": "{{count}} aplikasi terpasang. Mungkin butuh semenit untuk menyala.",
     "search": "Cari template",
-    "notesTitle": "Sebelum ini berjalan"
+    "notesTitle": "Sebelum ini berjalan",
+    "categories": {
+      "ai": "AI",
+      "analytics": "Analitik",
+      "automation": "Otomatisasi",
+      "business": "Bisnis",
+      "cms": "Situs dan penerbitan",
+      "communication": "Komunikasi",
+      "developer": "Alat pengembang",
+      "ecommerce": "Toko",
+      "finance": "Keuangan",
+      "media": "Media",
+      "monitoring": "Pemantauan",
+      "networking": "Jaringan",
+      "other": "Lainnya",
+      "productivity": "Produktivitas",
+      "security": "Keamanan",
+      "storage": "Penyimpanan dan berkas"
+    }
   },
   "settings": {
     "title": "Pengaturan",

@@ -59,9 +59,17 @@ export function TemplatesPage() {
     )
   }, [items, search])
 
+  // Sorted by the name somebody reads, not by the slug underneath it: sorting
+  // "cms" and "ai" alphabetically puts Websites first in English and somewhere
+  // else entirely in Russian, for a reason nobody can see on screen.
   const categories = useMemo(
-    () => [...new Set(shown.map((template) => template.category))].sort(),
-    [shown],
+    () =>
+      [...new Set(shown.map((template) => template.category))].sort((a, b) =>
+        t(`templates.categories.${a}`, { defaultValue: a }).localeCompare(
+          t(`templates.categories.${b}`, { defaultValue: b }),
+        ),
+      ),
+    [shown, t],
   )
 
   return (
@@ -103,7 +111,14 @@ export function TemplatesPage() {
       ) : (
         categories.map((category) => (
           <section key={category} className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground">{category}</h2>
+            {/*
+              The category is a slug in the file — "cms", "ai" — and showing
+              the slug is how a page looks unfinished. defaultValue keeps a
+              category nobody has translated yet readable rather than blank.
+            */}
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {t(`templates.categories.${category}`, { defaultValue: category })}
+            </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {shown
                 .filter((template) => template.category === category)
@@ -176,11 +191,17 @@ export function TemplatesPage() {
  * thing to install than a template that does not.
  */
 function installs(template: Template, t: TFunction): string {
+  // Defaulted rather than trusted. The panel answered `"databases": null` for
+  // every template without one — 157 of them — and iterating that threw, which
+  // put an error boundary where the catalogue should be. The server sends an
+  // array now; a client that falls over when a field is not the shape it
+  // expected is the other half of that bug, and this is the other half's fix.
+  const services = template.services ?? []
   const parts =
-    template.services.length === 1
-      ? [versionOf(template.services[0].image)]
-      : [t("common.app", { count: template.services.length })]
-  for (const database of template.databases) parts.push(database.engine)
+    services.length === 1
+      ? [versionOf(services[0].image)]
+      : [t("common.app", { count: services.length })]
+  for (const database of template.databases ?? []) parts.push(database.engine)
   return parts.join(" · ")
 }
 

@@ -19,6 +19,7 @@ import (
 	"skifity/internal/crypto"
 	"skifity/internal/events"
 	"skifity/internal/store"
+	"skifity/web"
 )
 
 // Tenant isolation, tested against the real router.
@@ -630,4 +631,59 @@ func (h *harness) node(owner tenant, name string) store.Server {
 		h.t.Fatalf("create server: %v", err)
 	}
 	return record
+}
+
+// TestTheContentSecurityPolicyAllowsTheScriptThatShips.
+//
+// index.html carries one inline script: it reads the stored theme and sets the
+// dark class before the first paint, so a dark-mode user never sees a white
+// flash. `script-src 'self'` refused to run it, in production only — the policy
+// is not set in dev mode, which is why the flash it exists to prevent was
+// visible everywhere except where anybody was working.
+//
+// The hash is read out of the embedded file rather than written down beside it,
+// and this checks that the policy actually names every inline script in it: a
+// hash written down beside a script goes stale the first time somebody edits
+// the script and does not think about the policy.
+func TestTheContentSecurityPolicyAllowsTheScriptThatShips(t *testing.T) {
+	h := newHarness(t)
+
+	response, err := h.server.Client().Get(h.server.URL + "/")
+	if err != nil {
+		t.Fatalf("fetch the panel: %v", err)
+	}
+	defer response.Body.Close()
+
+	policy := response.Header.Get("Content-Security-Policy")
+	if policy == "" {
+		t.Skip("no policy is set in this configuration, so there is nothing to check")
+	}
+	// Only script-src. style-src carries 'unsafe-inline' on purpose — Tailwind
+	// sets its theme variables on the document element — and checking the whole
+	// header instead of the one directive reports that as a failure.
+	var scriptSrc string
+	for _, directive := range strings.Split(policy, ";") {
+		if directive = strings.TrimSpace(directive); strings.HasPrefix(directive, "script-src ") {
+			scriptSrc = directive
+		}
+	}
+	if scriptSrc == "" {
+		t.Fatalf("the policy has no script-src: %s", policy)
+	}
+
+	hashes := web.InlineScriptHashes()
+	if len(hashes) == 0 {
+		// A build with no frontend embedded, or a frontend with no inline
+		// script. Both are fine; silently passing when there *is* one is not.
+		t.Skip("the embedded index.html has no inline script")
+	}
+	for _, hash := range hashes {
+		if !strings.Contains(scriptSrc, hash) {
+			t.Errorf("the policy does not allow an inline script that ships in index.html.\n"+
+				"missing: %s\nscript-src: %s", hash, scriptSrc)
+		}
+	}
+	if strings.Contains(scriptSrc, "'unsafe-inline'") {
+		t.Error("script-src allows 'unsafe-inline', which is what the hashes exist to avoid")
+	}
 }

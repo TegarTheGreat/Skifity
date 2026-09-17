@@ -373,6 +373,7 @@
     "title": "Scaling",
     "fixed": "A fixed number of instances",
     "automatic": "Scale automatically",
+    "automaticHelp": "Skifity adds and removes instances between the numbers below, by how busy the app is.",
     "instances": "Instances",
     "minInstances": "Fewest instances",
     "maxInstances": "Most instances",
@@ -525,7 +526,25 @@
     "installedApps_one": "Installed {{count}} app. It may take a minute to start.",
     "installedApps_other": "Installed {{count}} apps. They may take a minute to start.",
     "search": "Search templates",
-    "notesTitle": "Before this works"
+    "notesTitle": "Before this works",
+    "categories": {
+      "ai": "AI",
+      "analytics": "Analytics",
+      "automation": "Automation",
+      "business": "Business",
+      "cms": "Websites and publishing",
+      "communication": "Communication",
+      "developer": "Developer tools",
+      "ecommerce": "Shops",
+      "finance": "Finance",
+      "media": "Media",
+      "monitoring": "Monitoring",
+      "networking": "Networking",
+      "other": "Everything else",
+      "productivity": "Productivity",
+      "security": "Security",
+      "storage": "Storage and files"
+    }
   },
   "settings": {
     "title": "Settings",

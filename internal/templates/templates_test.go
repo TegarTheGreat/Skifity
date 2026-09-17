@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"encoding/json"
 	"os"
 	"regexp"
 	"strconv"
@@ -348,4 +349,40 @@ func spell(n int) string {
 		return word
 	}
 	return strconv.Itoa(n)
+}
+
+// TestEveryListInATemplateIsAnArrayInJSON.
+//
+// A nil slice in Go marshals as `null`, and the panel's own type says these are
+// arrays. 157 of the templates here have no database and every one of them
+// answered `"databases": null`; the Templates page iterated it, threw, and
+// rendered an error boundary instead of the catalogue — on every install since
+// the catalogue grew past the eight hand-written entries, all of which happened
+// to have a database.
+//
+// The tests in this file all read the Go value. This one reads what goes over
+// the wire, because that is where the difference was.
+func TestEveryListInATemplateIsAnArrayInJSON(t *testing.T) {
+	for _, tpl := range All() {
+		body, err := json.Marshal(tpl)
+		if err != nil {
+			t.Fatalf("%s: marshal: %v", tpl.ID, err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("%s: unmarshal: %v", tpl.ID, err)
+		}
+		for _, field := range []string{"services", "databases", "inputs"} {
+			value, present := raw[field]
+			if !present {
+				// omitempty is fine: a client reading an absent key gets
+				// undefined and can default it. `null` is what breaks, because
+				// it is present and not iterable.
+				continue
+			}
+			if string(value) == "null" {
+				t.Errorf("%s answers %q: null, which a client cannot iterate", tpl.ID, field)
+			}
+		}
+	}
 }

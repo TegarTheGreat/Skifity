@@ -7,13 +7,16 @@
 package web
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/base64"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -107,4 +110,51 @@ func devProxy(target string) http.Handler {
 func HasBuild() bool {
 	_, err := fs.Stat(dist, "dist/index.html")
 	return err == nil
+}
+
+// InlineScriptHashes returns a CSP source for every inline <script> in the
+// embedded index.html.
+//
+// The panel's Content-Security-Policy is `script-src 'self'`, with no
+// 'unsafe-inline'. index.html carries one inline script, which reads the stored
+// theme and sets the dark class before the first paint so that a dark-mode user
+// never sees a white flash — and the policy refused to run it. In production
+// only: the policy is not set in dev mode, which is why the flash it exists to
+// prevent was visible everywhere except where anybody was looking.
+//
+// The hash is computed from the file that ships rather than written down beside
+// it, because a hash written down beside a script is a hash that goes stale the
+// first time somebody edits the script and does not think about the policy.
+func InlineScriptHashes() []string {
+	data, err := dist.ReadFile("dist/index.html")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, body := range inlineScripts(string(data)) {
+		sum := sha256.Sum256([]byte(body))
+		out = append(out, "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'")
+	}
+	return out
+}
+
+// inlineScripts returns the body of every <script> tag that has no src.
+//
+// A regular expression rather than a parser: this reads one file this
+// repository produces, from a template this repository wrote, and pulling in an
+// HTML parser to find two tags in it would be the larger risk.
+var scriptTag = regexp.MustCompile(`(?is)<script([^>]*)>(.*?)</script>`)
+
+func inlineScripts(html string) []string {
+	var out []string
+	for _, match := range scriptTag.FindAllStringSubmatch(html, -1) {
+		if strings.Contains(strings.ToLower(match[1]), "src=") {
+			continue
+		}
+		if strings.TrimSpace(match[2]) == "" {
+			continue
+		}
+		out = append(out, match[2])
+	}
+	return out
 }

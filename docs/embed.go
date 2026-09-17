@@ -19,7 +19,7 @@ import (
 // and the progress log are for people working on Skifity, not people running
 // it, so they are not shipped.
 //
-//go:embed quick-start.md concepts.md templates.md adding-servers.md cli.md backups.md
+//go:embed quick-start.md concepts.md templates.md tour.md adding-servers.md cli.md backups.md
 //go:embed configuration.md troubleshooting.md faq.md performance.md
 //go:embed images/*.png images/*.svg
 var Pages embed.FS

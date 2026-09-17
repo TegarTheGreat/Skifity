@@ -375,6 +375,7 @@
     "title": "स्केलिंग",
     "fixed": "इंस्टेंस की तय संख्या",
     "automatic": "अपने आप स्केल करें",
+    "automaticHelp": "Skifity नीचे दी गई संख्याओं के बीच इंस्टेंस जोड़ता और हटाता है, ऐप कितना व्यस्त है उसके अनुसार।",
     "instances": "इंस्टेंस",
     "minInstances": "कम से कम इंस्टेंस",
     "maxInstances": "ज़्यादा से ज़्यादा इंस्टेंस",
@@ -527,7 +528,25 @@
     "installedApps_one": "{{count}} ऐप लग गया। शुरू होने में एक मिनट लग सकता है।",
     "installedApps_other": "{{count}} ऐप लग गए। शुरू होने में एक मिनट लग सकता है।",
     "search": "टेम्पलेट खोजें",
-    "notesTitle": "इसके काम करने से पहले"
+    "notesTitle": "इसके काम करने से पहले",
+    "categories": {
+      "ai": "एआई",
+      "analytics": "विश्लेषण",
+      "automation": "स्वचालन",
+      "business": "व्यवसाय",
+      "cms": "वेबसाइट और प्रकाशन",
+      "communication": "संचार",
+      "developer": "डेवलपर उपकरण",
+      "ecommerce": "दुकानें",
+      "finance": "वित्त",
+      "media": "मीडिया",
+      "monitoring": "निगरानी",
+      "networking": "नेटवर्किंग",
+      "other": "अन्य सब",
+      "productivity": "उत्पादकता",
+      "security": "सुरक्षा",
+      "storage": "भंडारण और फ़ाइलें"
+    }
   },
   "settings": {
     "title": "सेटिंग्स",

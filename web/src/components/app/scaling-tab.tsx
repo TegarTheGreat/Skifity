@@ -107,8 +107,13 @@ export function ScalingTab({ app }: { app: App }) {
           <label className="flex items-center justify-between gap-4">
             <span className="text-sm">
               {t("scaling.automatic")}
+              {/*
+                The line under the switch says what the switch does, and used to
+                repeat its own label when autoscaling was on: "Scale
+                automatically / Scale automatically".
+              */}
               <span className="block text-xs text-muted-foreground">
-                {form.autoscale ? t("scaling.automatic") : t("scaling.fixed")}
+                {form.autoscale ? t("scaling.automaticHelp") : t("scaling.fixed")}
               </span>
             </span>
             <Switch

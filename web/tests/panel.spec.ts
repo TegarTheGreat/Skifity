@@ -169,6 +169,54 @@ test("the theme can be changed and is remembered", async ({ page }) => {
   await expect(page.locator("html")).toHaveClass(/dark/)
 })
 
+// Every page in the navigation, opened.
+//
+// The Templates page threw on every install from the day the catalogue grew
+// past the eight hand-written entries — `"databases": null` for the 157
+// templates that have none, iterated, thrown — and rendered the error boundary
+// instead of the catalogue. Nothing caught it, because nothing had ever opened
+// the page: the Go tests read the catalogue's structure rather than its JSON,
+// and the tests here checked the shell and the empty states.
+//
+// This opens each one and fails on two things: an uncaught error in the page,
+// and the error boundary being on screen. It is deliberately not an assertion
+// about what each page contains — that would be a second copy of the panel,
+// out of date within a week. It asserts only that the page renders at all,
+// which is the thing that was not true.
+test("every page in the navigation renders", async ({ page }) => {
+  await signIn(page)
+
+  const crashes: string[] = []
+  page.on("pageerror", (error) => crashes.push(`${page.url()}: ${error.message}`))
+
+  for (const [path, label] of [
+    ["/", "Overview"],
+    ["/projects", "Projects"],
+    ["/databases", "Databases"],
+    ["/servers", "Servers"],
+    ["/servers/new", "Add a server"],
+    ["/templates", "Templates"],
+    ["/activity", "Activity"],
+    ["/account", "Account"],
+    ["/settings", "Settings"],
+  ] as const) {
+    await page.goto(path)
+    // The heading, not networkidle: two of these are lazy chunks behind a
+    // Suspense fallback, and an idle network says nothing about whether the
+    // chunk rendered.
+    await expect(
+      page.getByRole("heading", { level: 1 }).or(page.getByRole("heading", { level: 2 })).first(),
+      `${label} (${path}) showed no heading`,
+    ).toBeVisible({ timeout: 30_000 })
+    await expect(
+      page.getByText(/this page stopped working/i),
+      `${label} (${path}) rendered the error boundary`,
+    ).toHaveCount(0)
+  }
+
+  expect(crashes, "a page threw while rendering").toEqual([])
+})
+
 /** Signs in, unless this context already has a session. */
 async function signIn(page: Page) {
   await page.goto("/")

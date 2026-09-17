@@ -1116,6 +1116,73 @@ It is not in `make check` and never will be: it needs a machine to destroy,
 several minutes and the internet, and it asks for a typed `yes` before touching
 anything. `make verify` runs it. The release is not tagged until it passes.
 
+## Phase 32 — the screenshots, and the page that had never been opened
+
+A request for pictures of every screen. Taking them found that one of the
+screens did not work.
+
+### The Templates page threw on every install
+
+`"databases": null`. A nil slice in Go marshals as `null`, and **157 of the 282
+templates have no database**. The panel iterated it, threw
+`TypeError: t.databases is not iterable`, and the error boundary rendered "This
+page stopped working" where the catalogue should be.
+
+It had been that way since the catalogue grew past the eight hand-written
+entries — all eight of which happened to have a database. So the single
+most-cited reason people choose a panel in this category, the thing three phases
+of work went into, **has been a crash the whole time.**
+
+Nothing caught it, and the reasons are worth writing down because they are all
+the same reason:
+
+* The structural tests in `internal/templates` read the Go value. The difference
+  was in the JSON.
+* The interface test checked the shell and the empty states. It had never opened
+  the page.
+* The screenshot capture is skipped by default, so the only thing that would
+  have looked was switched off.
+
+Fixed at both ends: the loader normalises nil slices to empty ones, because the
+API's own type says these are arrays, and the page defaults them anyway — a
+client that falls over on a shape it did not expect is the other half of the
+same bug. A test now marshals every template and fails on a `null` list.
+
+**And the guard that should have existed from the start:** the interface test
+opens every page in the navigation and fails on an uncaught error or on the
+error boundary being on screen. It deliberately asserts nothing about what each
+page contains — that would be a second copy of the panel, out of date within a
+week. It asserts only that the page renders, which is the thing that was not
+true.
+
+### The theme flash, in production only
+
+The same run showed `Refused to execute inline script` in the console. `index.html`
+carries one inline script: it reads the stored theme and adds the dark class
+before the first paint, so a dark-mode user never sees a white flash. The policy
+is `script-src 'self'` with no `'unsafe-inline'`, so **it never ran** — and the
+white flash it exists to prevent happened on every load.
+
+In production only. The policy is not set in dev mode, which is why it was
+invisible to everybody who was looking.
+
+The hash is now computed from the embedded `index.html` at startup and put in
+the policy, so the two cannot drift: a hash written down beside a script goes
+stale the first time somebody edits the script and does not think about the
+policy. A test fetches the page and checks that the policy names every inline
+script that ships, and that `script-src` still has no `'unsafe-inline'`.
+
+### Two smaller things the pictures made obvious
+
+* The template categories were shown as their slugs — `ai`, `cms`, `other`.
+  Translated now, in all five languages, and sorted by the name somebody reads
+  rather than by the slug underneath it.
+* The autoscaling switch's description repeated its own label: "Scale
+  automatically / Scale automatically".
+
+**32 screenshots**, in `docs/tour.md`, captured by a test against the real
+binary — so a picture can never show a screen that no longer exists.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

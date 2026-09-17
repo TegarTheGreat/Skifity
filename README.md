@@ -161,6 +161,7 @@ no way out to the internet.
 
 | | |
 |---|---|
+| [A look at the panel](docs/tour.md) | Every screen, captured from the real binary |
 | [Quick start](docs/quick-start.md) | Empty server to a running app |
 | [Concepts](docs/concepts.md) | What the words mean, and what they are underneath |
 | [Adding servers](docs/adding-servers.md) | The seven steps, and what to do when one fails |
@@ -172,7 +173,7 @@ no way out to the internet.
 | [Configuration](docs/configuration.md) | Every setting, and what to back up |
 | [What it costs](docs/performance.md) | Memory and size, measured |
 
-Those ten are the ones the panel serves. Three more are for people working on
+Those eleven are the ones the panel serves. Three more are for people working on
 Skifity rather than running it, so they stay in the repository:
 
 | | |

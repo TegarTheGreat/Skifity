@@ -32,7 +32,8 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 ### Phase 0 — done
 
 * `docs/research/competitors.md` — 13 products compared, weaknesses we design against.
-* `docs/research/stack.md` — component versions verified 2026-09-16.
+* `docs/research/stack.md` — component versions verified 2026-09-16, reconciled
+  with the code 2026-09-17.
 * `docs/architecture.md` — layers, deploy path, add-server state machine, data model, isolation.
 * `docs/decisions.md` — ADR-0001 to ADR-0017.
 
@@ -417,6 +418,44 @@ configured, it means a safety check only runs on a configured panel, so nothing
 can test it without a cluster. That is why this class kept surviving review. The
 checks run first now, and the tests for them run against a panel with no cluster
 at all.
+
+## Phase 19 — the research, read back against the code
+
+The three research pages were written before the code and never checked against
+it afterwards. Reading them back found two promises the product did not keep and
+a page that had drifted.
+
+* **The WireGuard fallback did not exist.** The preflight told an operator that
+  a kernel without the module was fine and that "traffic between your servers
+  will use vxlan". Nothing did that: the backend was hardcoded to
+  `wireguard-native` in the panel's install scripts and in `install.sh`, so the
+  server joined a cluster it could not exchange a packet with, and neither k3s
+  nor the panel reported anything wrong. The pod network is now one choice for
+  the whole cluster, stored in `cluster.flannel_backend`. The installer picks it
+  on the first node — where the fallback is real, because there is nothing yet
+  to disagree with — and hands its choice to the panel, which records it and
+  installs every later server the same way. A server whose kernel cannot run the
+  cluster's backend is refused, with the two fixes that work.
+* **Compose was announced, not implemented.** Detection reported "Docker
+  Compose" and said services become separate apps and their links become
+  variables. `ConvertCompose` was written, tested, and called by nothing; the
+  Compose file's contents were never fetched; and `compose` was a source an app
+  could be created with, which the API accepted, stored, and then deployed as a
+  Git app with no repository. The reader is wired up now: the file is fetched
+  and parsed, the services are listed with what did not carry over named against
+  the service it came from, and picking one fills the form in — name, root
+  directory, port, image or build, and the service's variables, which the create
+  endpoint now seals before the first deploy. Skifity still runs one service per
+  app, and the panel says so rather than implying an import.
+* **A Dockerfile's `EXPOSE` line was never read.** Same cause: the file was
+  found in the tree and then read back as an empty string, because it was not in
+  the list of files fetched. The port detection it fed had never once produced
+  an answer.
+* **`docs/research/stack.md` had drifted** — `--write-kubeconfig-mode=0644`
+  against 0600 in the code, a node label the code never sets, `--secrets-encryption`
+  missing, self-hosted fonts the frontend deliberately does not use, and a link
+  to a page that does not exist. It is reconciled, and a test now reads the
+  flags out of the page and fails when no generated script passes one.
 
 ## Next tasks
 

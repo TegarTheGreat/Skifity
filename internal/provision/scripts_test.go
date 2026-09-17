@@ -315,3 +315,53 @@ func TestTheInstallKeyScriptQuotesTheAccountName(t *testing.T) {
 		t.Error("root was given a home under /home")
 	}
 }
+
+// TestTheResearchPageSaysWhatTheCodeDoes: docs/research/stack.md lists the k3s
+// flags Skifity installs a server with, and it drifted — it documented
+// --write-kubeconfig-mode=0644 while the code used 0600, and a node label the
+// code never sets. A research page that is wrong about the thing it researched
+// is worse than no page, and nothing was checking it.
+//
+// Only the flags are checked, because they are the part a reader would copy.
+func TestTheResearchPageSaysWhatTheCodeDoes(t *testing.T) {
+	page, err := os.ReadFile(filepath.Join("..", "..", "docs", "research", "stack.md"))
+	if err != nil {
+		t.Fatalf("read stack.md: %v", err)
+	}
+
+	server := InstallServerScript("", "tok", "203.0.113.10", settings.FlannelWireGuard, nil)
+	agent := JoinAgentScript("", "tok", "https://203.0.113.10:6443", "203.0.113.12",
+		map[string]string{"skifity.io/location": "fra"})
+
+	var flags []string
+	for _, line := range strings.Split(string(page), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "--") {
+			continue
+		}
+		// The page annotates some flags with a comment, and writes the values
+		// that vary as placeholders. The placeholders are filled in with what
+		// the scripts above were given, so the flags carrying a value are
+		// checked too rather than skipped.
+		flag, _, _ := strings.Cut(line, " #")
+		flag = strings.NewReplacer(
+			"<public ip>", "203.0.113.10",
+			"<location>", "fra",
+		).Replace(strings.TrimSpace(flag))
+		if strings.Contains(flag, "<") {
+			// The backend is the cluster's choice, and the size was not given.
+			continue
+		}
+		flags = append(flags, flag)
+	}
+	if len(flags) < 7 {
+		t.Fatalf("only %d flags were found in stack.md; the page or this test is wrong", len(flags))
+	}
+
+	for _, flag := range flags {
+		if strings.Contains(server, flag) || strings.Contains(agent, flag) {
+			continue
+		}
+		t.Errorf("stack.md documents %s and no generated script passes it", flag)
+	}
+}

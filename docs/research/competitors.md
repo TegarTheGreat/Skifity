@@ -1,6 +1,6 @@
 # Research: Competing platforms
 
-Date: 2026-09-16
+Date: 2026-09-16. Reconciled with the code on 2026-09-17.
 
 ## Summary table
 
@@ -25,7 +25,8 @@ Date: 2026-09-16
 * **Railway** - visual canvas of services, variables shared between services of a project.
 * **Heroku** - detect the language and build without a Dockerfile.
 * **Cloudflare Workers** - scale-to-zero for idle apps.
-* **Coolify / Dokploy** - one-click templates, S3 backups, being genuinely self-hosted.
+* **Coolify / Dokploy** - one-click templates, S3 backups, being genuinely self-hosted. Their template
+  libraries are much larger than ours: Skifity ships eight, and that gap is real rather than closing.
 * **Kubernetes** - self-healing, rolling updates, rollback, node failover for free.
 
 ## Weaknesses we explicitly design against
@@ -39,13 +40,20 @@ Date: 2026-09-16
    fingerprint - see `internal/deploy`.
 3. **Memory footprint.** Coolify can fail to install on a 1 GB VPS. Skifity ships a single Go binary and
    installs heavy components (Longhorn, KEDA, database operators, full monitoring) only when a user first
-   enables the feature.
+   enables the feature. What is measured is the panel: 34 MiB resident idle. What is not measured is k3s
+   underneath it, because a real cluster could never be started where this was built (ADR-0010), so the
+   1 GB figure in [performance](../performance.md) is an estimate and says so there. Until somebody runs
+   the installer on a real 1 GB server, this is a design argument and not a result.
 4. **Leaky abstraction.** Swarm task states leak into debugging. Skifity keeps Kubernetes nouns behind an
    "Advanced" view and translates events into plain language with a cause / impact / fix structure.
 5. **Licensing.** Skifity is Apache-2.0 for everything, including multi-node and templates.
 6. **Security posture.** CVEs in this category are usually missing authz on an endpoint or unencrypted
-   credentials at rest. Skifity uses envelope encryption for every secret, deny-by-default authorization
-   checks in a single middleware, and an audit log.
+   credentials at rest. Skifity uses envelope encryption for every secret and an audit log. The
+   authorization is not one middleware: authentication is, and then every handler resolves the thing
+   it was asked about through `authorizeTeam`, `authorizeApp`, `authorizeEnvironment` and their
+   siblings, which is what makes a handler that reaches into the store without one a tenant-isolation
+   bug you can find by reading. A middleware cannot do this, because what a route may touch depends on
+   which row the id in it names.
 
 ## Sources
 

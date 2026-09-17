@@ -6,6 +6,7 @@ import { BoxIcon, ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-rea
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
 import { DomainsTab } from "@/components/app/domains-tab"
+import { AppFirewall } from "@/components/app/firewall"
 import { ConsoleTab } from "@/components/app/console-tab"
 import { LogsTab } from "@/components/app/logs-tab"
 import { ScalingTab } from "@/components/app/scaling-tab"
@@ -141,6 +142,7 @@ export function AppDetailPage() {
           <TabsTrigger value="console">{t("apps.console")}</TabsTrigger>
           <TabsTrigger value="variables">{t("apps.variables")}</TabsTrigger>
           <TabsTrigger value="domains">{t("apps.domains")}</TabsTrigger>
+          <TabsTrigger value="firewall">{t("apps.firewall")}</TabsTrigger>
           <TabsTrigger value="scaling">{t("apps.scaling")}</TabsTrigger>
           <TabsTrigger value="storage">{t("apps.storage")}</TabsTrigger>
           <TabsTrigger value="settings">{t("apps.settings")}</TabsTrigger>
@@ -168,6 +170,9 @@ export function AppDetailPage() {
         </TabsContent>
         <TabsContent value="domains" className="pt-4">
           <DomainsTab app={current} />
+        </TabsContent>
+        <TabsContent value="firewall" className="pt-4">
+          <AppFirewall appId={appId} />
         </TabsContent>
         <TabsContent value="scaling" className="pt-4">
           <ScalingTab app={current} />

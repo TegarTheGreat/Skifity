@@ -288,7 +288,8 @@
     "composeVariables_other": "{{count}} 个变量",
     "composeRest": "其余服务用同样的方式在这个环境里创建。它们通过名字互相访问，这就是 Compose 文件里的链接在这里的样子。",
     "builderStatic": "静态文件",
-    "lastBackup": "上次备份"
+    "lastBackup": "上次备份",
+    "firewall": "防火墙"
   },
   "deploy": {
     "title": "部署记录",
@@ -686,6 +687,64 @@
     "podSecurity": {
       "restricted": "最严格",
       "baseline": "接受 root 镜像"
+    }
+  },
+  "firewall": {
+    "title": "防火墙",
+    "off": "已关闭",
+    "help": "谁可以访问该应用的规则：按地址、国家、网络、路径或标头，用 and 与 or 组合。第一条匹配的规则做决定。",
+    "addRule": "添加规则",
+    "addCondition": "添加条件",
+    "addGroup": "添加分组",
+    "rulePlaceholder": "这条规则用来做什么",
+    "ruleName": "规则名称",
+    "ruleEnabled": "规则已启用",
+    "otherwise": "其他情况：",
+    "match": "匹配",
+    "matchAll": "全部匹配",
+    "matchAny": "任一匹配",
+    "field": "检查什么",
+    "operator": "比较方式",
+    "values": "值",
+    "headerName": "标头名称",
+    "headerPlaceholder": "X-Api-Key",
+    "notInstalled": "这些规则并未生效",
+    "notInstalledHelp": "防火墙组件尚未安装，因此没有任何东西在检查请求。请在设置、组件中安装。",
+    "noDomain": "该应用还没有可保护的地址",
+    "noDomainHelp": "规则作用于主机名。请在域名中添加一个域名，这些规则便会开始生效。",
+    "noGeo": "有规则用到国家或网络，而本面板并不查询它们",
+    "noGeoHelp": "请在设置、域名与 HTTPS 中打开「查询访客的国家和网络」。在此之前，这类规则在每次请求时都会被跳过。",
+    "action": {
+      "allow": "允许",
+      "block": "拦截"
+    },
+    "fields": {
+      "ip.src": "访客地址",
+      "ip.country": "访客国家",
+      "ip.asn": "访客网络",
+      "http.host": "主机名",
+      "http.path": "路径",
+      "http.method": "方法",
+      "http.user_agent": "浏览器或机器人",
+      "http.header": "某个标头"
+    },
+    "operators": {
+      "in": "属于",
+      "not_in": "不属于",
+      "contains": "包含",
+      "starts_with": "开头是",
+      "ends_with": "结尾是",
+      "matches": "匹配该模式"
+    },
+    "placeholders": {
+      "ip.src": "203.0.113.0/24, 198.51.100.9",
+      "ip.country": "ID, SG",
+      "ip.asn": "AS13335, 15169",
+      "http.host": "shop.example.com",
+      "http.path": "/admin",
+      "http.method": "POST",
+      "http.user_agent": "badbot",
+      "http.header": "一个值"
     }
   }
 }

@@ -1649,6 +1649,60 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 45 — an allowlist, and everything it took to make one real
+
+Asked whether there was an allowlist by address, by network or by country.
+There was none of any kind: `netguard` is outbound SSRF protection and
+unrelated. So this is one, in the shape people already know from Cloudflare —
+an ordered list of rules over the request, combined with and and or.
+
+The expression is a tree rather than a string. Cloudflare writes theirs as a
+small language and then has to parse it; the panel does not need one, because
+the interface builds the tree directly and "match all of these" and "match any
+of these" are groups on a form, not syntax anybody has to learn.
+
+**Unknown is a third answer.** A rule about a country is worthless if nothing
+knows the country, and both ways of pretending otherwise are wrong: as false a
+Block rule silently stops blocking, as true an Allow rule silently blocks
+everybody. So it is neither, and it propagates the way it does in SQL. A rule
+that comes out unknown is skipped by name rather than deciding.
+
+**The geo data needs no account.** DB-IP publish country and network databases
+monthly under CC BY 4.0 with no sign-up, where GeoLite2 wants a registered
+account before a single byte — a registration in the middle of turning on a
+firewall rule. The decode tags were checked against the real files rather than
+the documentation: 1.1.1.1 is AU and AS13335, 8.8.8.8 is US and AS15169.
+Attribution is on the page and in `docs/firewall.md`.
+
+**The guard is its own process, not the panel.** Traefik can ask an external
+service whether to let a request through, and the panel is the obvious place and
+the wrong one: its Deployment uses Recreate, because its database is a file on
+one node's disk, so every panel upgrade would take every protected site down. It
+is the same binary in another mode, with no database, no Kubernetes API access
+and no credentials — its whole state is a ConfigMap the kubelet drops into its
+filesystem.
+
+**Three knobs were removed for being lies**, each caught by writing the test:
+
+* a per-rule-set *fail open*, whose value lived inside the file the guard had
+  failed to read, and which Traefik decides before this process is reached;
+* `authRequestHeaders` on the middleware, a list of headers to forward, which
+  would have made a rule on any header not in the list match nothing — the rule
+  saved, the request allowed, the header never sent to the process judging it;
+* "is a geo database available", inferred from whether a URL setting was empty
+  — and empty means the default, so it was always available and the check meant
+  nothing. It is an explicit switch now, on by default.
+
+**And the file the whole feature is worth exactly as much as** is the one that
+decides who is asking. `X-Forwarded-For` is walked from the right and stops at
+the first entry that did not come from a proxy we trust, because only the
+rightmost entry was added by somebody we know. Trust is a list of ranges rather
+than a hop count, since a hop count is wrong the moment somebody adds a load
+balancer and the failure is silent. Junk in the chain stops the walk rather than
+being skipped. Cloudflare's headers are believed only when the peer handing them
+over is one of ours — which also makes the country free behind the tunnel, with
+no database consulted at all.
+
 ## Phase 44 — two things wanting the same name
 
 Asked whether collisions, SSH and the shell were sound. SSH and the shell were.
@@ -1798,6 +1852,11 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
+* **The firewall has never been through a live Traefik.** The rules engine, the
+  address handling, the geo lookup, the guard's decisions and the rendered
+  Kubernetes objects are unit-tested, and the country and network lookups were
+  checked against the real DB-IP databases. Whether Traefik loads the middleware
+  and forwards what the guard reads needs a cluster, which is ADR-0010 again.
 * **The confinement levels have never been enforced by a real API server.**
   The rendered pod specs, the namespace labels and the rules that choose between
   them are unit-tested; whether the kubelet accepts the sysctl and whether a

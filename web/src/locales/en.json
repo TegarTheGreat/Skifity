@@ -296,7 +296,8 @@
     "composeVariables_other": "{{count}} variables",
     "composeRest": "Create the other services the same way, in this environment. They reach each other by name, which is what the links in a Compose file become.",
     "builderStatic": "Static files",
-    "lastBackup": "Last backup"
+    "lastBackup": "Last backup",
+    "firewall": "Firewall"
   },
   "deploy": {
     "title": "Deployments",
@@ -697,6 +698,64 @@
     "podSecurity": {
       "restricted": "Strictest",
       "baseline": "Accepts root images"
+    }
+  },
+  "firewall": {
+    "title": "Firewall",
+    "off": "Off",
+    "help": "Rules on who may reach this app: by address, by country, by network, by path or by header, combined with and and or. The first rule that matches decides.",
+    "addRule": "Add a rule",
+    "addCondition": "Add a condition",
+    "addGroup": "Add a group",
+    "rulePlaceholder": "What this rule is for",
+    "ruleName": "Rule name",
+    "ruleEnabled": "Rule is on",
+    "otherwise": "Anything else:",
+    "match": "Match",
+    "matchAll": "Match all of these",
+    "matchAny": "Match any of these",
+    "field": "What to look at",
+    "operator": "Comparison",
+    "values": "Values",
+    "headerName": "Header name",
+    "headerPlaceholder": "X-Api-Key",
+    "notInstalled": "These rules are not being enforced",
+    "notInstalledHelp": "The firewall component is not installed, so nothing is checking requests. Install it under Settings, then Components.",
+    "noDomain": "This app has no address to guard",
+    "noDomainHelp": "Rules apply to a hostname. Add a domain under Domains, and these rules will start applying to it.",
+    "noGeo": "A rule names a country or a network, and this panel does not look them up",
+    "noGeoHelp": "Turn on \"Look up a visitor's country and network\" under Settings, then Domains and HTTPS. Until then, a rule like this is skipped on every request.",
+    "action": {
+      "allow": "Allow",
+      "block": "Block"
+    },
+    "fields": {
+      "ip.src": "Visitor's address",
+      "ip.country": "Visitor's country",
+      "ip.asn": "Visitor's network",
+      "http.host": "Hostname",
+      "http.path": "Path",
+      "http.method": "Method",
+      "http.user_agent": "Browser or bot",
+      "http.header": "A header"
+    },
+    "operators": {
+      "in": "is one of",
+      "not_in": "is not one of",
+      "contains": "contains",
+      "starts_with": "starts with",
+      "ends_with": "ends with",
+      "matches": "matches the pattern"
+    },
+    "placeholders": {
+      "ip.src": "203.0.113.0/24, 198.51.100.9",
+      "ip.country": "ID, SG",
+      "ip.asn": "AS13335, 15169",
+      "http.host": "shop.example.com",
+      "http.path": "/admin",
+      "http.method": "POST",
+      "http.user_agent": "badbot",
+      "http.header": "a value"
     }
   }
 }

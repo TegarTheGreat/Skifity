@@ -288,7 +288,8 @@
     "composeVariables_other": "{{count}} variabel",
     "composeRest": "Buat layanan lainnya dengan cara yang sama, di lingkungan ini. Mereka saling terhubung lewat nama, dan itulah yang menggantikan tautan di berkas Compose.",
     "builderStatic": "Berkas statis",
-    "lastBackup": "Cadangan terakhir"
+    "lastBackup": "Cadangan terakhir",
+    "firewall": "Firewall"
   },
   "deploy": {
     "title": "Deployment",
@@ -686,6 +687,64 @@
     "podSecurity": {
       "restricted": "Paling ketat",
       "baseline": "Terima image root"
+    }
+  },
+  "firewall": {
+    "title": "Firewall",
+    "off": "Mati",
+    "help": "Aturan siapa yang boleh mencapai app ini: berdasarkan alamat, negara, jaringan, path, atau header, digabung dengan and dan or. Aturan pertama yang cocok yang memutuskan.",
+    "addRule": "Tambah aturan",
+    "addCondition": "Tambah kondisi",
+    "addGroup": "Tambah grup",
+    "rulePlaceholder": "Aturan ini untuk apa",
+    "ruleName": "Nama aturan",
+    "ruleEnabled": "Aturan menyala",
+    "otherwise": "Selain itu:",
+    "match": "Cocok",
+    "matchAll": "Cocok semua ini",
+    "matchAny": "Cocok salah satu ini",
+    "field": "Yang dilihat",
+    "operator": "Perbandingan",
+    "values": "Nilai",
+    "headerName": "Nama header",
+    "headerPlaceholder": "X-Api-Key",
+    "notInstalled": "Aturan ini belum ditegakkan",
+    "notInstalledHelp": "Komponen firewall belum dipasang, jadi tidak ada yang memeriksa request. Pasang di Setelan, lalu Komponen.",
+    "noDomain": "App ini belum punya alamat untuk dijaga",
+    "noDomainHelp": "Aturan berlaku pada sebuah hostname. Tambahkan domain di Domain, dan aturan ini akan mulai berlaku padanya.",
+    "noGeo": "Ada aturan yang menyebut negara atau jaringan, dan panel ini tidak mencarinya",
+    "noGeoHelp": "Nyalakan \"Cari negara dan jaringan pengunjung\" di Setelan, lalu Domain dan HTTPS. Sampai itu, aturan seperti ini dilewati di setiap request.",
+    "action": {
+      "allow": "Izinkan",
+      "block": "Blokir"
+    },
+    "fields": {
+      "ip.src": "Alamat pengunjung",
+      "ip.country": "Negara pengunjung",
+      "ip.asn": "Jaringan pengunjung",
+      "http.host": "Hostname",
+      "http.path": "Path",
+      "http.method": "Metode",
+      "http.user_agent": "Browser atau bot",
+      "http.header": "Sebuah header"
+    },
+    "operators": {
+      "in": "salah satu dari",
+      "not_in": "bukan salah satu dari",
+      "contains": "mengandung",
+      "starts_with": "diawali",
+      "ends_with": "diakhiri",
+      "matches": "cocok dengan pola"
+    },
+    "placeholders": {
+      "ip.src": "203.0.113.0/24, 198.51.100.9",
+      "ip.country": "ID, SG",
+      "ip.asn": "AS13335, 15169",
+      "http.host": "shop.example.com",
+      "http.path": "/admin",
+      "http.method": "POST",
+      "http.user_agent": "badbot",
+      "http.header": "sebuah nilai"
     }
   }
 }

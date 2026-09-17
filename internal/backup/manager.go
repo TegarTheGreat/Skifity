@@ -392,7 +392,7 @@ func failedContainers(pod corev1.Pod) []string {
 
 func (m *Manager) containerLog(ctx context.Context, namespace, pod, container string) string {
 	tail := int64(30)
-	stream, err := m.cluster.Client().Clientset().CoreV1().Pods(namespace).
+	stream, err := m.cluster.Client().StreamClientset().CoreV1().Pods(namespace).
 		GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &tail}).Stream(ctx)
 	if err != nil {
 		return ""

@@ -24,9 +24,12 @@ import (
 // Client talks to the Kubernetes API.
 type Client struct {
 	clientset kubernetes.Interface
-	dynamic   dynamic.Interface
-	metrics   metricsv.Interface
-	applier   *Applier
+	// streams is the same connection with no request deadline, used for calls
+	// whose response body is read for as long as somebody watches it.
+	streams kubernetes.Interface
+	dynamic dynamic.Interface
+	metrics metricsv.Interface
+	applier *Applier
 	// systemNamespace is where the panel and the components it installs live.
 	systemNamespace string
 	config          *rest.Config
@@ -51,11 +54,33 @@ func NewClient(opts Options) (*Client, error) {
 	config.QPS = 50
 	config.Burst = 100
 	config.UserAgent = version.UserAgent()
-	config.Timeout = 30 * time.Second
 
-	clientset, err := kubernetes.NewForConfig(config)
+	// Two clients from one connection, because one timeout cannot be right for
+	// both kinds of call this panel makes.
+	//
+	// Everything ordinary is a request that either answers in a moment or has
+	// gone wrong, and a deadline on it is what keeps a page from hanging on an
+	// API server that stopped replying.
+	//
+	// A log stream is the opposite: the request succeeds immediately and the
+	// body is then read for as long as somebody is watching. rest.Config's
+	// Timeout is the HTTP client's, which bounds the whole exchange including
+	// that body, so a single deadline here cut every followed log at thirty
+	// seconds. The browser reconnected and replayed the last two hundred
+	// lines, so live logs repeated themselves every half minute and a build
+	// log stopped halfway through a build.
+	shortConfig := *config
+	shortConfig.Timeout = 30 * time.Second
+
+	clientset, err := kubernetes.NewForConfig(&shortConfig)
 	if err != nil {
 		return nil, fmt.Errorf("build Kubernetes client: %w", err)
+	}
+	// No deadline at all: a stream ends when the caller's context does, when
+	// the pod stops writing, or when the connection breaks.
+	streams, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("build Kubernetes streaming client: %w", err)
 	}
 	dyn, err := dynamic.NewForConfig(config)
 	if err != nil {
@@ -74,6 +99,7 @@ func NewClient(opts Options) (*Client, error) {
 	}
 	return &Client{
 		clientset:       clientset,
+		streams:         streams,
 		dynamic:         dyn,
 		metrics:         metricsClient,
 		applier:         NewApplier(dyn),
@@ -102,6 +128,19 @@ func (c *Client) Applier() *Applier { return c.applier }
 
 // Clientset exposes the typed client for the few places that need it.
 func (c *Client) Clientset() kubernetes.Interface { return c.clientset }
+
+// StreamClientset is the client to read a log with.
+//
+// It is the same connection with no request deadline, so following a log is
+// bounded by the caller's context rather than by a timeout meant for calls that
+// answer in a moment. It falls back to the ordinary client, which is what a
+// test that builds a Client around a fake clientset has.
+func (c *Client) StreamClientset() kubernetes.Interface {
+	if c.streams != nil {
+		return c.streams
+	}
+	return c.clientset
+}
 
 // SystemNamespace is where the panel and its components run.
 func (c *Client) SystemNamespace() string { return c.systemNamespace }
@@ -514,7 +553,7 @@ func (c *Client) AppLogs(ctx context.Context, namespace, appSlug string, opts Lo
 	if opts.TailLines > 0 {
 		options.TailLines = &opts.TailLines
 	}
-	stream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(target.Name, options).Stream(ctx)
+	stream, err := c.StreamClientset().CoreV1().Pods(namespace).GetLogs(target.Name, options).Stream(ctx)
 	if err != nil {
 		if opts.Previous {
 			// The API server answers 400 when there is no earlier container,
@@ -630,21 +669,89 @@ func (c *Client) WaitForRollout(ctx context.Context, namespace, name string, tim
 // DeleteApp removes everything an app owns in its namespace.
 func (c *Client) DeleteApp(ctx context.Context, namespace, appSlug string) error {
 	// Ordered so that traffic stops before the workload does.
-	for _, target := range []struct{ apiVersion, kind, name string }{
-		{"networking.k8s.io/v1", "Ingress", appSlug},
-		{"autoscaling/v2", "HorizontalPodAutoscaler", ResourceName(appSlug, "hpa")},
-		{"policy/v1", "PodDisruptionBudget", ResourceName(appSlug, "pdb")},
-		{"v1", "Service", appSlug},
-		{"apps/v1", "Deployment", appSlug},
-		{"v1", "Secret", ResourceName(appSlug, "env")},
+	for _, target := range []struct {
+		apiVersion, kind, name string
+		// optional marks a kind the cluster may not have. KEDA is installed
+		// only when somebody asks for scale to zero, and a cluster without it
+		// answers "no such resource" — which must not be the reason deleting
+		// an app fails.
+		optional bool
+	}{
+		{apiVersion: "networking.k8s.io/v1", kind: "Ingress", name: appSlug},
+		// The wake Service and the scaled object go with the ingress: they are
+		// the path traffic took to a sleeping app, and an HTTPScaledObject left
+		// behind keeps KEDA reconciling a Deployment that is no longer there.
+		{apiVersion: "v1", kind: "Service", name: InterceptorServiceName(appSlug)},
+		{apiVersion: "http.keda.sh/v1alpha1", kind: "HTTPScaledObject", name: appSlug, optional: true},
+		{apiVersion: "autoscaling/v2", kind: "HorizontalPodAutoscaler", name: ResourceName(appSlug, "hpa")},
+		{apiVersion: "policy/v1", kind: "PodDisruptionBudget", name: ResourceName(appSlug, "pdb")},
+		{apiVersion: "v1", kind: "Service", name: appSlug},
+		{apiVersion: "apps/v1", kind: "Deployment", name: appSlug},
+		{apiVersion: "v1", kind: "Secret", name: ResourceName(appSlug, "env")},
 	} {
-		if err := c.applier.Delete(ctx, target.apiVersion, target.kind, namespace, target.name); err != nil {
+		err := c.applier.Delete(ctx, target.apiVersion, target.kind, namespace, target.name)
+		if err != nil && !target.optional {
 			return err
 		}
 	}
+
+	// The scheduled commands, which are the part of an app that keeps going on
+	// its own. Left behind, a deleted app's nightly job fires every night
+	// forever against an image nothing will pull and a Secret that no longer
+	// exists, and the only sign of it is failed pods accumulating in a
+	// namespace nobody is looking at.
+	if err := c.deleteRuns(ctx, namespace, appSlug); err != nil {
+		return err
+	}
+
 	// PersistentVolumeClaims are deliberately left behind: deleting an app
 	// should not silently destroy its data. They are removed with the
 	// environment, or by hand.
+	return nil
+}
+
+// deleteRuns removes an app's scheduled commands and the Jobs from its runs.
+func (c *Client) deleteRuns(ctx context.Context, namespace, appSlug string) error {
+	selector := labels.SelectorFromSet(map[string]string{
+		"app.kubernetes.io/name":      appSlug,
+		"app.kubernetes.io/component": "run",
+	}).String()
+	// Background, because the default for a Job is to orphan its pods, and a
+	// migration pod outliving the app that owns it is the thing being removed.
+	background := metav1.DeletePropagationBackground
+	options := metav1.DeleteOptions{PropagationPolicy: &background}
+	listing := metav1.ListOptions{LabelSelector: selector}
+
+	// Listed and then deleted one at a time rather than as a collection. A
+	// DeleteCollection would be one call, but it is one call whose selector
+	// nothing here can check: if it were ever sent without one it would empty
+	// the namespace of every app's scheduled commands, and that is not a
+	// mistake worth being one typo away from.
+	crons, err := c.clientset.BatchV1().CronJobs(namespace).List(ctx, listing)
+	if err != nil && !IsNotFound(err) {
+		return fmt.Errorf("find %s's scheduled commands: %w", appSlug, err)
+	}
+	if crons != nil {
+		for _, cron := range crons.Items {
+			if err := c.clientset.BatchV1().CronJobs(namespace).
+				Delete(ctx, cron.Name, options); err != nil && !IsNotFound(err) {
+				return fmt.Errorf("remove the scheduled command %s: %w", cron.Name, err)
+			}
+		}
+	}
+
+	jobs, err := c.clientset.BatchV1().Jobs(namespace).List(ctx, listing)
+	if err != nil && !IsNotFound(err) {
+		return fmt.Errorf("find %s's runs: %w", appSlug, err)
+	}
+	if jobs != nil {
+		for _, job := range jobs.Items {
+			if err := c.clientset.BatchV1().Jobs(namespace).
+				Delete(ctx, job.Name, options); err != nil && !IsNotFound(err) {
+				return fmt.Errorf("remove the run %s: %w", job.Name, err)
+			}
+		}
+	}
 	return nil
 }
 

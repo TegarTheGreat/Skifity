@@ -86,7 +86,7 @@ func (d *Deployer) RunLogs(ctx context.Context, appID, name string, follow bool)
 	if err != nil {
 		return nil, err
 	}
-	return d.cluster.Client().Clientset().CoreV1().Pods(env.Namespace).
+	return d.cluster.Client().StreamClientset().CoreV1().Pods(env.Namespace).
 		GetLogs(podName, &corev1.PodLogOptions{Follow: follow}).Stream(ctx)
 }
 
@@ -169,7 +169,7 @@ func (d *Deployer) streamRun(ctx context.Context, deployment store.Deployment, n
 	if err != nil {
 		return err
 	}
-	stream, err := d.cluster.Client().Clientset().CoreV1().Pods(namespace).
+	stream, err := d.cluster.Client().StreamClientset().CoreV1().Pods(namespace).
 		GetLogs(podName, &corev1.PodLogOptions{Follow: true}).Stream(ctx)
 	if err == nil {
 		scanner := bufio.NewScanner(stream)

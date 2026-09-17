@@ -227,7 +227,7 @@ func (d *Deployer) waitForBuildPod(ctx context.Context, namespace, jobName strin
 
 // streamContainer follows one container's logs into the deployment's log.
 func (d *Deployer) streamContainer(ctx context.Context, namespace, pod, container string, deployment *store.Deployment, tail *strings.Builder) error {
-	stream, err := d.cluster.Client().Clientset().CoreV1().Pods(namespace).
+	stream, err := d.cluster.Client().StreamClientset().CoreV1().Pods(namespace).
 		GetLogs(pod, &corev1.PodLogOptions{Container: container, Follow: true}).Stream(ctx)
 	if err != nil {
 		return err

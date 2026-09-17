@@ -1087,6 +1087,35 @@ request rather than twelve.
 Neither is a person. A tool that agrees with the author is not evidence that the
 author was right, and the roadmap still says so.
 
+## Phase 31 — the check that settles it, written
+
+The largest open item in this repository is that nothing has ever run against a
+real cluster. It cannot be closed from here — the environment refuses to start a
+Docker daemon, and the server offered for it is not reachable from this
+container, which serves HTTPS through a proxy and has no SSH client at all.
+
+What can be written is the check itself, so that closing it is one command
+somebody runs rather than an afternoon of improvisation. `test/cluster/verify.sh`
+installs Skifity on a real server, deploys a real application, and then settles
+the three things only a cluster can:
+
+1. **An app comes up and answers.** Not that the manifest renders — that the pod
+   starts, the Service routes, and an HTTP request gets a reply.
+2. **Autoscaling has numbers to scale on.** It waits a minute for the HPA's
+   first sample and fails if it is still `<unknown>`. That is the silent failure
+   Phase 28 added a warning for; this is what proves the warning is right.
+3. **Scale to zero is wired the way it is drawn.** KEDA running, an
+   HTTPScaledObject for the app, and the app's own HPA *gone* — two autoscalers
+   on one Deployment fight, and this is where that stops being a claim.
+
+It also measures what the thing costs. `docs/performance.md` says 35 MiB idle,
+measured on a laptop; this prints the first number measured on a cluster, and if
+they disagree the document is what changes.
+
+It is not in `make check` and never will be: it needs a machine to destroy,
+several minutes and the internet, and it asks for a typed `yes` before touching
+anything. `make verify` runs it. The release is not tagged until it passes.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

@@ -105,7 +105,13 @@ has one. The ordering is fixed and the tests run without a cluster.
 In the order it matters.
 
 1. **Run it on real hardware.** Nothing below this line is worth as much as
-   this, and it is the one thing this sandbox cannot do — see the last section.
+   this. The check is written now — `test/cluster/verify.sh`, or `make verify` —
+   so this is one command on a server somebody is willing to rebuild, rather
+   than an afternoon of improvisation. It installs, deploys an app, settles
+   whether autoscaling has metrics and whether scale-to-zero is wired the way it
+   is drawn, and measures what the whole thing costs. Until it has passed once,
+   every other claim in this repository is about code that has never met a
+   cluster.
 2. **Tag a release.** This was worse than "the image does not exist yet". The
    release published to `ghcr.io/skifity/skifity`, which is **not this
    repository and not a namespace anybody here owns** — so a tag would either

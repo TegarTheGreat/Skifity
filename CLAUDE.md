@@ -65,6 +65,9 @@ make check       What CI runs: every linter, the tests, then the vulnerability
                  scan. If it does not contain something CI fails on, it is a
                  gate with a hole in it — that happened, see docs/progress.md.
 make smoke       Build and run the smoke tests against a real panel.
+make verify      The end-to-end check against a real cluster. Installs k3s and
+                 changes the machine, so it is never part of `check` and asks
+                 before it starts. See test/cluster/README.md.
 make e2e         The Playwright interface test, against the real binary.
 make audit       Known vulnerabilities, Go and npm.
 make image       The panel's container image.

@@ -97,6 +97,14 @@ smoke: backend ## Run the smoke tests against a freshly built binary
 	./test/smoke/panel.sh
 	./test/smoke/installer.sh
 
+# Never part of `check`, and never run by CI: it installs k3s and changes the
+# machine. It is what somebody runs on a server they are willing to rebuild,
+# before a release, and it asks for a typed yes first.
+.PHONY: verify
+verify: ## Install on THIS machine and check a real cluster end to end
+	@echo "This installs k3s and changes this machine. See test/cluster/README.md."
+	sudo -E bash test/cluster/verify.sh
+
 e2e: backend ## Run the Playwright user interface test against the real binary
 	npm --prefix web run test:e2e
 

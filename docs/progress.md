@@ -1575,6 +1575,33 @@ all 211 directly gives 0 failures, and that is what the interface test does now 
 it also checks that a template *without* a logo answers 404 rather than putting
 a broken image on every card.
 
+## Phase 41 — the front door, answered properly
+
+`docs/adding-servers.md` listed three ways to keep one address alive when a
+server goes down: round-robin DNS, a floating IP, a provider's load balancer.
+Researched against how each actually behaves, that list was wrong in two ways.
+
+**It was missing the best answer for this audience.** Cloudflare Tunnel:
+`cloudflared` in the cluster with two or three replicas, each making outbound
+connections to Cloudflare. Kubernetes already spreads those across servers, so
+failover needs no configuration and no health check — and it needs **no public
+IP and no inbound ports at all**, which makes a server behind NAT or on a home
+connection work. Free to 25 replicas. The trades are written down too: traffic
+goes through Cloudflare, replicas are steered by geography rather than round
+robin, and the free plan caps an upload at 100 MB.
+
+**And it did not warn about the thing people try first.** kube-vip and MetalLB
+in layer-2 mode hold a virtual IP by answering ARP, and ARP does not cross a
+router. Every node has to be on one segment *and* the provider has to route that
+extra address to you — which on cloud VPS is exactly what a floating IP is, sold
+as a product. Their BGP modes work, and need a provider that speaks BGP to you.
+On bare metal in one rack they are the right answer; between providers they are
+not, and somebody was going to spend an evening finding that out.
+
+Round-robin DNS is also described for what it is now: a failover for a server
+that is **off**, not one that is **sick**. A machine that accepts a connection
+and then answers nothing is one DNS keeps handing out.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

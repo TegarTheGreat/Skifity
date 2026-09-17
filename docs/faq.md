@@ -47,6 +47,26 @@ roughly 700 MB between them on a fresh install; everything else is your apps.
 
 Each optional component says what it costs before you install it.
 
+## How do I make one address survive a server going down?
+
+Every server runs the ingress, so your apps answer on all of them — but DNS
+names one, and Kubernetes cannot move a DNS record.
+
+The answer that costs nothing and needs no public IP is **Cloudflare Tunnel**:
+`cloudflared` in the cluster with two or three replicas, each making outbound
+connections to Cloudflare. Kubernetes spreads them across your servers, so one
+going down changes nothing, and there are no inbound ports to open. The trade is
+that traffic goes through Cloudflare and your domain lives on their DNS.
+
+Otherwise: round-robin DNS is free and handles a server that is *off* but not
+one that is *sick*; managed DNS with health checks fixes that for a few dollars;
+a floating IP or a provider load balancer is the most reliable.
+
+**kube-vip and MetalLB will not work** on most VPS — they hold an address by
+answering ARP, which does not cross a router, so the nodes must share a network
+segment and the provider must route that address to you. `docs/adding-servers.md`
+has the detail.
+
 ## Which operating systems does it run on?
 
 Servers need systemd, because k3s is installed as a unit. Ubuntu 24.04 and

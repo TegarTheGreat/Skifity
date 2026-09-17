@@ -64,18 +64,71 @@ instances across three servers and the server your domain points at goes down,
 the app is still running and the name is still dead. Kubernetes moved the work;
 it cannot move your DNS record.
 
-There are three ways out, and Skifity does not need to know which you chose:
+Skifity does not need to know which way you solve it. Four work, in the order
+worth trying them.
 
-* **Round-robin DNS.** Add an A record per server. Free, and a browser retries
-  the next address on a refused connection, though not always quickly.
-* **A floating IP.** Most providers sell one — Hetzner, DigitalOcean, Vultr. It
-  moves between servers, so the name never changes.
-* **A provider's load balancer.** The most reliable and the one that costs
-  money.
+### Cloudflare Tunnel — automatic, free, and needs no public IP at all
 
-With a floating IP or a load balancer, put its address in **Settings → Domains →
-Cluster public IP**. That is the address the panel then uses for the free
-`sslip.io` names it hands out, instead of a single server's own.
+Run `cloudflared` in the cluster as an ordinary Deployment with two or three
+replicas. Each one makes **outbound** connections to Cloudflare — four of them,
+to servers in at least two data centres — and traffic arrives through those.
+Kubernetes already spreads those replicas across your servers, so if one server
+goes the others carry the traffic, with nothing to configure and no health check
+to set up.
+
+What it buys, beyond failover: **no inbound ports and no public IP**. It works
+on a server behind NAT, on a home connection, and on a provider that charges for
+IPv4. Your servers' addresses stop being public at all.
+
+The trade, and it is a real one: every request goes through Cloudflare, and your
+domain has to be on their DNS. Replicas are also not load balanced in the
+round-robin sense — a request goes to the replica geographically closest to
+where it arrived, which is failover rather than spreading. And the free plan
+caps an upload at 100 MB, which matters if your app takes large files.
+
+Free for up to 25 replicas per tunnel.
+
+### Round-robin DNS — free, nothing to install
+
+One A record per server, all with the same name. A browser that cannot connect
+to the first address tries the next.
+
+Honest about what it is: **a failover for a server that is off, not for a server
+that is sick.** A machine that accepts the connection and then answers nothing
+is one DNS gives out for as long as the record exists. Good enough for a great
+many installs, and it costs nothing.
+
+### DNS with health checks — automatic, a few dollars
+
+Cloudflare Load Balancing, Route 53 health checks, and most managed DNS
+providers do the same thing: they watch each address and stop handing out the
+ones that stopped answering. This is round-robin DNS with the missing half, and
+it is the smallest amount of money that buys real automatic failover.
+
+### A floating IP, or the provider's load balancer
+
+One address that moves between servers, or one that fronts them. The most
+reliable, and the one that ties you to a provider.
+
+### What does not work, and people try it first
+
+**kube-vip and MetalLB in layer-2 mode do not work on most VPS.** They hold a
+virtual IP by answering ARP, and ARP does not cross a router — so every node has
+to be on the same network segment *and* your provider has to route that extra
+address to you. On cloud VPS, "an extra address the provider routes to you" is
+exactly what a floating IP is, sold as a product. Their BGP modes work and need a
+provider that speaks BGP to you, which the cheap ones do not.
+
+On bare metal in one rack, or on Hetzner nodes sharing a private network, they
+are the right answer. Between providers, or across regions, they are not.
+
+### Telling Skifity
+
+With a floating IP, a load balancer or a tunnel, put the address people will
+reach in **Settings → Domains → Cluster public IP**. That is the address the
+panel uses for the free `sslip.io` names it hands out, instead of one server's
+own. With round-robin DNS there is nothing to set: the name is yours and points
+at all of them.
 
 ## Control plane servers
 

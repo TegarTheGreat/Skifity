@@ -263,7 +263,7 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 					// rather than per handler, so a read-only token cannot
 					// reach a route that nobody thought to guard — starting
 					// with the one that issues a token with no scopes at all.
-					if !auth.TokenAllows(apiToken.Scopes, r.Method) {
+					if !auth.TokenAllows(apiToken.Scopes, r.Method, r.URL.Path) {
 						writeError(w, r, errdoc.New("auth.token_scope", "This token cannot make that request").
 							WithCause("The token %s is limited to %s.", apiToken.Name, apiToken.Scopes).
 							WithImpact("The request was refused. Nothing was changed.").

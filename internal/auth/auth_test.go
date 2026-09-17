@@ -344,7 +344,7 @@ func TestTokenScopesAreEnforced(t *testing.T) {
 		{"admin", http.MethodGet, false},
 		{"readonly", http.MethodGet, false},
 	} {
-		if got := TokenAllows(tc.scopes, tc.method); got != tc.want {
+		if got := TokenAllows(tc.scopes, tc.method, "/api/apps/app_1"); got != tc.want {
 			t.Errorf("TokenAllows(%q, %s) = %v, want %v", tc.scopes, tc.method, got, tc.want)
 		}
 	}
@@ -408,6 +408,80 @@ func TestAnAccountWithNoPasswordCannotBeSignedIntoWithOne(t *testing.T) {
 	for _, hash := range []string{"", "not a hash", "$argon2id$", "$2y$10$something"} {
 		if err := VerifyPassword("anything", hash); err == nil {
 			t.Errorf("VerifyPassword accepted the stored hash %q", hash)
+		}
+	}
+}
+
+// A scope naming a resource is the whole point: two plugins that both need to
+// write must not end up holding each other's powers.
+func TestAResourceScopeReachesOnlyItsOwnResource(t *testing.T) {
+	cases := []struct {
+		name   string
+		scopes string
+		method string
+		path   string
+		want   bool
+	}{
+		{"reading apps with apps:read", "apps:read", http.MethodGet, "/api/apps/app_1", true},
+		{"writing apps with apps:read", "apps:read", http.MethodPost, "/api/apps/app_1/deploy", false},
+		{"reading servers with apps:read", "apps:read", http.MethodGet, "/api/servers", false},
+		{"deleting a server with backups:write", "backups:write", http.MethodDelete, "/api/servers/srv_1", false},
+		{"writing backups with backups:write", "backups:write", http.MethodPost, "/api/databases/db_1/backups", true},
+		{"two scopes, each in its place", "apps:read,backups:write",
+			http.MethodPost, "/api/databases/db_1/backups", true},
+		{"two scopes, neither covering this", "apps:read,backups:write",
+			http.MethodPost, "/api/servers", false},
+
+		// A nested collection belongs to itself: a token that may read
+		// deployments and not apps still gets the deployments.
+		{"deployments under an app", "deployments:read", http.MethodGet,
+			"/api/apps/app_1/deployments", true},
+		{"the app itself", "deployments:read", http.MethodGet, "/api/apps/app_1", false},
+		{"apps under an environment", "apps:read", http.MethodGet,
+			"/api/environments/env_1/apps", true},
+
+		// An environment is part of a project once its nested collections are
+		// taken out.
+		{"the environment itself", "projects:read", http.MethodGet, "/api/environments/env_1", true},
+
+		// The prefix must not swallow a longer name.
+		{"a route that merely starts the same way", "apps:read", http.MethodGet, "/api/appstore", false},
+
+		// Fail closed: a route no scope covers is refused to a scoped token
+		// rather than falling into whichever scope happened to be nearest.
+		{"a route no scope names", "apps:write", http.MethodPost, "/api/something-new", false},
+
+		// The older, unscoped form still means what it always did.
+		{"plain write, anywhere", "write", http.MethodDelete, "/api/servers/srv_1", true},
+		{"no scopes at all", "", http.MethodDelete, "/api/servers/srv_1", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := TokenAllows(tc.scopes, tc.method, tc.path); got != tc.want {
+				t.Errorf("TokenAllows(%q, %s, %s) = %v, want %v",
+					tc.scopes, tc.method, tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+// A scope that names something the panel cannot enforce must be refused when
+// the token is made, or somebody hands out a token they believe is narrow.
+func TestAScopeNamingSomethingUnknownIsRefused(t *testing.T) {
+	for _, scopes := range []string{"apps:read", "apps:read,backups:write", "servers:write"} {
+		if err := ValidateScopes(scopes); err != nil {
+			t.Errorf("ValidateScopes(%q): %v", scopes, err)
+		}
+	}
+	for _, scopes := range []string{
+		"apps:admin",      // not an action
+		"secrets:read",    // not a resource
+		"keyring:read",    // especially not this one
+		"*:write",         // no wildcard: full access is an empty scope list
+		"apps:read:extra", // not a shape
+	} {
+		if err := ValidateScopes(scopes); err == nil {
+			t.Errorf("ValidateScopes(%q) was accepted", scopes)
 		}
 	}
 }

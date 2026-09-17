@@ -1649,6 +1649,52 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 46 — the plugin standard, and the permission model it needed first
+
+The ask was an ecosystem: other people writing features for Skifity, including
+commercial ones, published to a store and installed from the panel. What that
+needs before it needs a store is a **standard**, because the standard is the one
+thing everybody else builds against and the one thing that cannot be changed
+casually afterwards.
+
+**The permission model had to come first, and it was not one.** API token scopes
+were `read` and `write`, decided by the HTTP method — so a plugin that copies
+backups and a plugin that provisions servers would carry the same token, and
+installing the first would grant the second's powers. "This plugin may only read
+your apps" would have been a sentence on a screen that nothing enforced. Scopes
+now name a resource as well as a direction, `apps:read`, `backups:write`, over
+twelve resources, checked in the one middleware rather than per handler — a scope
+enforced per handler stops being enforced the day somebody adds a route and does
+not think about it. A path no scope covers is refused to a scoped token rather
+than falling into whichever scope was nearest, and the older unscoped forms keep
+meaning exactly what they meant.
+
+**The standard is `internal/plugins`, not prose.** A manifest that parses and
+validates there is a valid plugin, and the example in `docs/plugins.md` is a
+test: if it stops being valid, the standard changed and it was not on purpose.
+See ADR-0018 for why a container rather than a library, with `plugin.Open`'s own
+documentation quoted for why that door is closed.
+
+Three rules in it are the ones somebody will try to relax:
+
+* **The image is a digest, never a tag.** A tag can be moved by whoever controls
+  the registry, and this image is about to be handed an API token.
+* **`read` and `write` alone are refused for a plugin.** They mean every
+  resource, which nobody can meaningfully agree to on a screen.
+* **Only an event that happens before something may block**, capped at ten
+  seconds, because the thing on the other end is a person watching a page.
+
+And one trap avoided by writing the test: the subscription field is `event:` and
+not `on:`. `on` is a boolean in YAML 1.1, so `on: backup.completed` parses in
+some readers as the key `true` — the scar GitHub Actions carries in every
+workflow file ever written. A standard being defined today should not step on
+it, and the only reason this was caught is that the example manifest is
+exercised rather than admired.
+
+Nothing installs a plugin yet, and `docs/plugins.md` says so in the same words:
+the runtime, the event delivery and the store are not written. What exists is
+what a plugin *is*, so that one can be written against it.
+
 ## Phase 45 — an allowlist, and everything it took to make one real
 
 Asked whether there was an allowlist by address, by network or by country.
@@ -1852,6 +1898,10 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
+* **No plugin has ever been installed, because nothing installs one.** The
+  manifest standard, its validator and the permission model are tested; the
+  runtime that deploys a plugin's container, the event delivery and the store
+  are not written. The documentation says so where an author would read it.
 * **The firewall has never been through a live Traefik.** The rules engine, the
   address handling, the geo lookup, the guard's decisions and the rendered
   Kubernetes objects are unit-tested, and the country and network lookups were

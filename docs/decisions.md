@@ -375,3 +375,74 @@ that a shell script and a Go package have to agree on without ever talking to ea
 other, so a test fails if they drift. Changing them is a change on every node,
 which means an installer re-run; the installer detects that the file changed and
 restarts k3s itself.
+
+## ADR-0018 - A plugin is a container and a manifest, not a library
+
+**Context.** Skifity needs an ecosystem: other people writing features for it,
+including commercial ones, publishing them and having operators install them
+from a store. That means Skifity needs a plugin *standard* before it needs a
+plugin *store*, because the standard is what everybody else builds against and
+the one thing that cannot be changed casually afterwards.
+
+The obvious model is WordPress: drop a file in a directory and it is loaded into
+the running process. It works because PHP is interpreted. Skifity is one static
+Go binary with `CGO_ENABLED=0` — ADR-0011 — and the two ways to load Go code
+into it both fail:
+
+* **`plugin.Open`** requires CGO, works only on Linux, FreeBSD and macOS, and
+  its own documentation says "runtime crashes are likely to occur unless all
+  parts of the program (the application and all its plugins) are compiled using
+  exactly the same version of the toolchain, the same build tags, and the same
+  values of certain flags and environment variables", plus identical source for
+  every shared dependency. A plugin author cannot meet that, and the failure is
+  a crash rather than a refusal.
+* **Recompiling the panel**, which is how Caddy's `xcaddy` and Traefik's static
+  plugins work, means every operator needs a Go toolchain and a build step. That
+  is the opposite of one static file that runs anywhere.
+
+An in-process interpreter was considered and rejected. Yaegi, which Traefik uses
+for its dynamic plugins, and WASM through wazero, which is pure Go and needs no
+CGO, are both technically available. Both add a whole runtime and a new failure
+surface to cover cases the container model already covers — with worse isolation
+and a narrower choice of language. WASM keeps one clear future use: a per-request
+filter in the request firewall, where an HTTP round trip per request would be too
+slow to consider.
+
+**Decision.** A plugin is an OCI image and a manifest. The panel runs the image
+as a Deployment in a namespace of its own, gives it an API token carrying exactly
+the permissions its manifest declared and an administrator granted, and posts the
+events it subscribed to. Dokku's plugin model, translated to Kubernetes.
+
+The standard is `internal/plugins`, not prose: a manifest that parses and
+validates there is a valid plugin, and the example in `docs/plugins.md` is a
+test. A standard written only in prose is a standard every implementation reads
+differently.
+
+Three decisions inside it are worth recording because they are the ones somebody
+will otherwise try to relax:
+
+* **The image is a digest, never a tag.** A tag can be moved by whoever controls
+  the registry, and this image is about to be handed an API token: "the plugin
+  you approved" has to mean the bytes you approved.
+* **`read` and `write` on their own are refused for a plugin.** They mean every
+  resource, which is not something anybody can meaningfully agree to on a
+  screen. This is why API token scopes were narrowed to `resource:action` first:
+  without that, "this plugin may only read your apps" would have been a sentence
+  on a screen that nothing anywhere enforced.
+* **Only an event that happens before something may block.** Refusing a deploy
+  is a decision; refusing to acknowledge a backup that already finished is a
+  promise with nothing behind it. A blocking hook is capped at ten seconds,
+  because the thing on the other end is a person watching a page.
+
+**Consequences.** A plugin can be written in any language. It cannot take the
+panel down when it crashes, cannot read the master key, and cannot reach a
+resource its manifest did not name. It costs a pod, which is the price of that
+isolation and is stated before installation. Skifity does not process payments:
+a commercial plugin sells and validates its own licence through its own server,
+which keeps the panel out of being a payment processor.
+
+What this cannot do, and should not be made to do: change the panel's own pages.
+Third-party JavaScript in the panel's origin can read the session of somebody who
+holds the master key. If in-panel pages are ever offered, they will be declarative
+— a plugin describing a table or a form that the panel renders — and not a bundle
+the panel executes.

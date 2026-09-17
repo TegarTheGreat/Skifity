@@ -55,6 +55,7 @@ var order = []string{
 	"templates",
 	"adding-servers",
 	"firewall",
+	"plugins",
 	"backups",
 	"configuration",
 	"cli",

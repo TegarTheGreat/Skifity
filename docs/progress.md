@@ -308,6 +308,47 @@ or `authorizeApp`, every write is serialised behind one mutex and every raw
 statement runs inside `db.Tx`, and the SSE handler already had its heartbeat,
 its replay and `X-Accel-Buffering`.
 
+### The roadmap, worked through
+
+`docs/roadmap.md` set out what was left, largest first: the things that decide
+whether a panel survives its second month, then the questions people actually
+ask it, then two features that were gaps rather than defects. All of it is
+built.
+
+* **The registry collects its garbage.** Every build pushed an image and nothing
+  ever removed one — the first open issue on this page since the day it was
+  written, and the one that ends with a full disk and every pod on the node
+  stopping at once. The panel untags what nothing can reach and a Job runs the
+  registry's own collector beside the files. Builds are held while it runs,
+  because a push concurrent with a collection is the one case the registry's
+  documentation says corrupts an image, and the panel is the only thing that
+  starts builds.
+* **The panel's own database stops growing.** Deployment records, audit entries
+  and finished operations were written and never removed. A daily pass, with the
+  window in settings; the activity log keeps a year by default, because a log
+  that forgets is most of the way to not having one.
+* **A pending instance says why.** It used to say "waiting for a server with
+  enough free CPU and memory" whatever the reason, which is right about a third
+  of the time and otherwise sends somebody to add a server for a quota, a
+  volume, or a control-plane node that does not take apps. Kubernetes writes the
+  answer onto the pod; the panel now reads it. A quota refusal never reaches a
+  pod at all, so that one is read off the Deployment.
+* **An environment's limits are visible before they are hit**, once something is
+  above sixty per cent.
+* **The panel can be monitored.** `GET /api/metrics`, in the Prometheus format,
+  behind the same authentication as everything else, written by hand rather than
+  pulled in.
+* **A repository is read before it is built.** `builder.Detect` had been written,
+  tested and called by nothing. The panel reads the tree through the provider's
+  API — two requests, no clone — and says what it found while the form is still
+  open, as a guess presented as a guess.
+* **A volume can be backed up**, mounted read-only, as the app's own user, on
+  the node that holds it.
+* **The frontend is split by what changes**, and the labels only a screen reader
+  hears are translated — "Close", "Loading", "Toggle Sidebar" were all hardcoded
+  English in a panel shipping five languages, and the i18n check now fails the
+  build on the next one.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.
@@ -328,24 +369,20 @@ its replay and `X-Accel-Buffering`.
   `CHROMIUM_PATH` is set, and CI installs its own.
 * k3s's memory footprint is not measured; the panel's is, in
   `docs/performance.md`.
-* The in-cluster registry has no garbage collection, so the disk it uses grows
-  with every build. The images themselves are small and layers are shared, but
-  a busy cluster will eventually need `registry garbage-collect` run by hand.
-* `builder.Detect` works and is tested, and nothing calls it: the panel cannot
-  fetch a repository's file list, so it cannot say "this looks like Next.js"
-  before the first build. Railpack does its own detection inside the build, so
-  builds work; only the panel's guess before one is missing.
-* Volumes are not backed up. The panel refuses rather than pretending, and
-  `docs/backups.md` says so.
-* There is no shell into a running instance. A one-off command covers what
-  people need it for and is safer; an interactive session is not built.
+* There is no shell into a running instance, and this is a decision rather than
+  a gap. A one-off command runs in the app's own image with the app's own
+  variables, can be watched, leaves a log, and works when the app will not
+  start — which is when people reach for a shell. See `docs/roadmap.md`.
+* A volume backup is a tar taken while the app runs, not a snapshot, so a file
+  being written at that moment can be caught half-written. `docs/backups.md`
+  says so and says what to do instead.
 * The nixpacks builder is written and unit-tested and has never been run: like
   everything else that needs a cluster, it is checked against the rendered Job
   and not against a build. Railpack is the default and the one the product is
   designed around.
-* The frontend is one 917 kB bundle, 271 kB compressed, with settings and
-  templates already split out. It is served from the binary on the same host, so
-  it is not the problem it would be over a CDN, but it is not small.
+* The frontend is 509 kB of the panel's own code, 145 kB compressed, beside
+  vendor chunks a browser keeps across upgrades. Served from the binary on the
+  same host, so it is not the problem it would be over a CDN.
 
 ## Idle resource usage
 

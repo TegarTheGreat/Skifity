@@ -72,6 +72,23 @@ hardcoded 3000 when Skifity asked for 8080 produces exactly this.
 than 200, or the app takes longer to start than the check allows. Both are in
 the app's settings.
 
+## An app says it is waiting for a server
+
+The panel reads the scheduler's own answer, so the sentence on the page is the
+reason rather than a guess. The common ones:
+
+| What it says | What to do |
+| --- | --- |
+| No server has enough free CPU or memory | Lower what the app reserves under **Scaling**, or add a server. Reserved is a guarantee, so an app reserving more than it uses keeps other apps off the machine. |
+| This environment has reached its limit | Raise the environment's limits, or give this app less. The bars on the project page show which limit. |
+| This app's volume has not been created yet | On one server this is usually the storage class still starting. Across servers it means no server can provide the volume. |
+| The only servers with room are not accepting apps | A control-plane server does not run apps unless you allow it, and a server being drained accepts nothing. |
+| Every server already runs an instance of this app | Instances are spread across servers, so a three-instance app wants three servers. Add one, or run fewer. |
+
+An app with no instances at all and a message about a limit never got as far as
+creating one: the environment's quota refused it, and there is nothing to look
+at on the instances tab because nothing was made.
+
 ## An app is crashing
 
 Open the app: the instance list shows the restart count and the last reason.

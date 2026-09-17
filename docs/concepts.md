@@ -61,6 +61,12 @@ Rolling back therefore restores a working state, not just an old image. If you
 changed a variable and the app broke, rolling back puts the old variable back
 too.
 
+**How far back you can go.** The panel keeps a long list of deployments and the
+registry keeps the images for the last ten of them; older images are removed so
+the disk does not fill. The list says which versions can still be rolled back
+to, and the older ones say "image removed" where the button would be. To go back
+further, deploy that commit again — it builds the same code fresh.
+
 ## Release command
 
 A command that runs after the image is built and before any traffic reaches the
@@ -104,6 +110,26 @@ deployed rather than whatever it was when the schedule was written.
 Kubernetes does the scheduling, not the panel. A panel that is restarting at
 three in the morning is not a reason for a job to be skipped. A job that is
 still running when the next one is due does not start a second copy.
+
+## What the panel works out for you
+
+When you paste a repository address, **Check this repository** reads its file
+list through your Git provider's API — two requests, no clone — and says what it
+thinks it is: "This looks like Next.js", with the port it expects and the
+reasons it decided that.
+
+It fills in only the fields you have left empty, and only when the answer came
+from a file the repository's author put there, like a `package.json` naming a
+framework. A guess from a file extension is shown as a question and fills in
+nothing. It never overwrites something you typed.
+
+You do not have to use it. The zero-config builder does its own detection inside
+the build, so a repository deploys whether or not you press the button; this is
+about the panel being able to say something while you are still looking at the
+form.
+
+A private repository needs a connected Git account with access to it. The token
+is only ever sent to the host that account is for.
 
 ## Instances and scaling
 

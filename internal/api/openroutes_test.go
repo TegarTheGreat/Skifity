@@ -38,6 +38,14 @@ var openOnPurpose = map[string]string{
 	// nonce. TestASingleSignOnCallbackRefusesWhatItDidNotIssue covers that.
 	"GET /api/auth/sso/start":    "starting a sign-in is how credentials are obtained",
 	"GET /api/auth/sso/callback": "guarded by a single-use state and a verified ID token, not by a session",
+
+	// An invitation link, for somebody who has no account yet — which is the
+	// whole point of one. The token in the URL is the credential: stored
+	// hashed, single-use, expiring, and everything wrong with one answers the
+	// same way, so it cannot be used to find out whether an address was
+	// invited. TestAnInvitationCannotBeGuessedOrReused covers that.
+	"GET /api/invitations/{token}":         "the link is the credential; the person holding it has no account yet",
+	"POST /api/invitations/{token}/accept": "the same link, accepting it, which is what creates the account",
 }
 
 // placeholder fills a chi pattern with something shaped like an id. The value

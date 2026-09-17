@@ -581,7 +581,14 @@
     "edited": "已修改",
     "unsaved_other": "{{count}} 项未保存的更改",
     "subtitle": "运维需要配置的一切都在这里。其中任何一项都不需要去改服务器上的文件。",
-    "componentExternal": "如何安装"
+    "componentExternal": "如何安装",
+    "inviteLinkTitle": "把这个链接发给他们",
+    "inviteLink": "邀请链接",
+    "inviteLinkHelp": "只显示一次，有效期七天，且只能使用一次。除非你配置了 SMTP，否则 Skifity 不会发送邮件。",
+    "pendingInvitations": "等待接受",
+    "revokeInvitation": "撤回此邀请",
+    "invitationExpires": "{{when}} 过期",
+    "inviteMemberHelp": "用邮箱邀请某人。Skifity 会给你一个链接发给对方；密码由他们自己设置。已经在此有账户的人则直接添加。"
   },
   "errors": {
     "whatHappened": "发生了什么",
@@ -650,5 +657,14 @@
       "backup.failed": "备份失败",
       "certificate.failed": "证书签发失败"
     }
+  },
+  "invite": {
+    "title": "加入 {{team}}",
+    "subtitle": "你以 {{email}} 的身份受邀，角色为 {{role}}。设置一个密码即可进入。",
+    "emailFixed": "这是邀请对应的地址，在此不可更改。",
+    "join": "加入团队",
+    "notValidTitle": "此邀请无法使用",
+    "notValidHelp": "链接已过期、已被使用，或已被撤回。请向邀请你的人索取新链接。",
+    "goToSignIn": "前往登录"
   }
 }

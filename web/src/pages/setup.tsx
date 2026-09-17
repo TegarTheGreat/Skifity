@@ -254,7 +254,7 @@ function RecoveryKeyStep({ recoveryKey, onDone }: { recoveryKey: string; onDone:
 }
 
 /** A quiet strength hint, so the 12-character minimum is not a surprise. */
-function PasswordStrength({ password }: { password: string }) {
+export function PasswordStrength({ password }: { password: string }) {
   const { t } = useTranslation()
   if (!password) return null
 

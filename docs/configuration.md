@@ -65,6 +65,29 @@ to get started.
 | **Image registry** | Where built images go. An in-cluster registry is installed on first use if this is left empty. |
 | **Sign-in** | An OpenID Connect provider, so people sign in with the account they already have. See below. |
 
+## Adding somebody to the team
+
+**Settings → Members → invite by email.** Skifity gives you a **link** and shows
+it once. Send it however you like; whoever opens it picks their own name and
+password and lands in the panel, already signed in and already in the team.
+
+It is a link rather than an email on purpose. SMTP is a setting most installs
+have not filled in, and a panel that cannot add a colleague without a mail
+server is a panel that cannot add a colleague. Configure SMTP if you want
+notifications; you do not need it for this.
+
+The link works for **seven days** and **once**. The token behind it is stored
+hashed, like a session, so the panel cannot show it to you again — take a copy
+when it appears, and if you lose it, withdraw the invitation and make another.
+Pending invitations are listed under Members, and can be withdrawn there.
+
+Somebody who already has an account here does not need a link. Add them by the
+same form and they join directly.
+
+Roles: **owner** administers the team and can delete it, **admin** can invite
+and configure, **member** can deploy. Nobody can invite somebody to a role
+above their own.
+
 ## Single sign-on
 
 Skifity speaks **OpenID Connect**: Okta, Entra ID, Authentik, Keycloak, Zitadel,

@@ -132,6 +132,13 @@ func (s *Server) routes() chi.Router {
 		// back, and the ID token's signature.
 		api.Get("/auth/sso/start", s.handleSSOStart)
 		api.Get("/auth/sso/callback", s.handleSSOCallback)
+		// Open for the same reason as signing in: somebody holding an
+		// invitation has no account yet. The link's token is the credential,
+		// it is stored hashed, single-use and expiring, and everything wrong
+		// with one answers the same way so this cannot be used to find out
+		// whether an address was invited.
+		api.Get("/invitations/{token}", s.handleLookupInvitation)
+		api.Post("/invitations/{token}/accept", s.handleAcceptInvitation)
 
 		// Webhooks authenticate with their own per-source signature.
 		api.Post("/webhooks/git/{sourceID}", s.handleGitWebhook)
@@ -159,6 +166,9 @@ func (s *Server) routes() chi.Router {
 				team.Patch("/", s.handleUpdateTeam)
 				team.Get("/members", s.handleListMembers)
 				team.Post("/members", s.handleAddMember)
+				team.Post("/invitations", s.handleInvite)
+				team.Get("/invitations", s.handleListInvitations)
+				team.Delete("/invitations/{invitationID}", s.handleRevokeInvitation)
 				team.Delete("/members/{userID}", s.handleRemoveMember)
 				team.Get("/audit", s.handleListAudit)
 

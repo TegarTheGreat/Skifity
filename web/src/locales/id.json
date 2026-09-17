@@ -581,7 +581,14 @@
     "edited": "Diubah",
     "unsaved_other": "{{count}} perubahan belum disimpan",
     "subtitle": "Semua yang diatur operator, dalam satu tempat. Tidak ada di sini yang memerlukan berkas di server.",
-    "componentExternal": "Cara memasangnya"
+    "componentExternal": "Cara memasangnya",
+    "inviteLinkTitle": "Kirimkan tautan ini kepada mereka",
+    "inviteLink": "Tautan undangan",
+    "inviteLinkHelp": "Ditampilkan sekali, berlaku tujuh hari, dan hanya bisa dipakai sekali. Skifity tidak mengirim email kecuali Anda sudah menyiapkan SMTP.",
+    "pendingInvitations": "Menunggu diterima",
+    "revokeInvitation": "Tarik undangan ini",
+    "invitationExpires": "Kedaluwarsa {{when}}",
+    "inviteMemberHelp": "Undang seseorang lewat email. Skifity memberi Anda tautan untuk dikirimkan; mereka memilih kata sandinya sendiri. Yang sudah punya akun di sini langsung ditambahkan."
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",
@@ -650,5 +657,14 @@
       "backup.failed": "Pencadangan gagal",
       "certificate.failed": "Sertifikat gagal diterbitkan"
     }
+  },
+  "invite": {
+    "title": "Gabung ke {{team}}",
+    "subtitle": "Anda diundang sebagai {{email}}, dengan peran {{role}}. Pilih kata sandi dan Anda masuk.",
+    "emailFixed": "Ini alamat yang diundang, dan tidak bisa diubah di sini.",
+    "join": "Gabung ke tim",
+    "notValidTitle": "Undangan ini tidak bisa dipakai",
+    "notValidHelp": "Tautannya kedaluwarsa, sudah dipakai, atau ditarik kembali. Minta tautan baru dari yang mengundang Anda.",
+    "goToSignIn": "Ke halaman masuk"
   }
 }

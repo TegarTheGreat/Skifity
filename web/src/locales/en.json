@@ -592,7 +592,14 @@
     "unsaved_one": "{{count}} unsaved change",
     "unsaved_other": "{{count}} unsaved changes",
     "subtitle": "Everything an operator configures, in one place. Nothing here needs a file on the server.",
-    "componentExternal": "How to install it"
+    "componentExternal": "How to install it",
+    "inviteLinkTitle": "Send them this link",
+    "inviteLink": "Invitation link",
+    "inviteLinkHelp": "It is shown once, works for seven days, and can only be used once. Skifity does not send email unless you have configured SMTP.",
+    "pendingInvitations": "Waiting to be accepted",
+    "revokeInvitation": "Withdraw this invitation",
+    "invitationExpires": "Expires {{when}}",
+    "inviteMemberHelp": "Invite somebody by email. Skifity gives you a link to send them; they choose their own password. Somebody who already has an account here is added directly instead."
   },
   "errors": {
     "whatHappened": "What happened",
@@ -661,5 +668,14 @@
       "backup.failed": "A backup failed",
       "certificate.failed": "A certificate could not be issued"
     }
+  },
+  "invite": {
+    "title": "Join {{team}}",
+    "subtitle": "You have been invited as {{email}}, as a {{role}}. Choose a password and you are in.",
+    "emailFixed": "This is the address the invitation was for, and it cannot be changed here.",
+    "join": "Join the team",
+    "notValidTitle": "This invitation cannot be used",
+    "notValidHelp": "The link has expired, has been used already, or was withdrawn. Ask whoever invited you for a new one.",
+    "goToSignIn": "Go to sign in"
   }
 }

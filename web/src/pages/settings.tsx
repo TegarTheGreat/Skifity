@@ -5,8 +5,10 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import {
   BookOpenIcon,
   CheckCircle2Icon,
+  CopyIcon,
   DownloadIcon,
   KeyRoundIcon,
+  LinkIcon,
   PackagePlusIcon,
   PlusIcon,
   Trash2Icon,
@@ -21,7 +23,13 @@ import { NotificationChannels } from "@/components/settings/notification-channel
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import {
   Field,
   FieldContent,
@@ -55,7 +63,7 @@ import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
 import { queryClient } from "@/lib/query"
-import type { AuditEvent, Component, Role, Setting, User } from "@/lib/types"
+import type { AuditEvent, Component, Invitation, Role, Setting, User } from "@/lib/types"
 
 const GROUPS: { key: string; label: string }[] = [
   { key: "general", label: "settings.general" },
@@ -430,12 +438,33 @@ function MembersPanel() {
     enabled: Boolean(team),
   })
 
-  const add = useMutation({
-    mutationFn: () => api.post(`/api/teams/${team!.id}/members`, { email: email.trim(), role }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["members", team?.id] })
+  const invitations = useQuery({
+    queryKey: ["invitations", team?.id],
+    queryFn: () => api.get<List<Invitation>>(`/api/teams/${team!.id}/invitations`),
+    enabled: Boolean(team),
+  })
+
+  // The link is shown once, the same way the recovery key and the setup token
+  // are: the token behind it is stored hashed, so the panel cannot show it
+  // again even if somebody asks.
+  const [link, setLink] = useState<string | null>(null)
+
+  const invite = useMutation({
+    mutationFn: () =>
+      api.post<{ url: string }>(`/api/teams/${team!.id}/invitations`, {
+        email: email.trim(),
+        role,
+      }),
+    onSuccess: (result) => {
+      setLink(result.url)
       setEmail("")
+      void queryClient.invalidateQueries({ queryKey: ["invitations", team?.id] })
     },
+  })
+
+  const revoke = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/teams/${team!.id}/invitations/${id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["invitations", team?.id] }),
   })
 
   const remove = useMutation({
@@ -499,13 +528,14 @@ function MembersPanel() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("settings.inviteMember")}</CardTitle>
+          <CardDescription>{t("settings.inviteMemberHelp")}</CardDescription>
         </CardHeader>
         <CardContent>
           <form
             className="space-y-4"
             onSubmit={(event) => {
               event.preventDefault()
-              add.mutate()
+              invite.mutate()
             }}
           >
             <div className="grid gap-4 sm:grid-cols-2">
@@ -533,19 +563,91 @@ function MembersPanel() {
                 </Select>
               </div>
             </div>
-            {add.error != null && <ErrorDisplay error={add.error} compact />}
+            {invite.error != null && <ErrorDisplay error={invite.error} compact />}
             <div className="flex justify-end">
-              <Button type="submit" disabled={!email.trim() || add.isPending}>
+              <Button type="submit" disabled={!email.trim() || invite.isPending}>
                 <PlusIcon className="size-4" />
-                {add.isPending && <Spinner />}
-                {add.isPending ? t("common.saving") : t("settings.inviteMember")}
+                {invite.isPending && <Spinner />}
+                {invite.isPending ? t("common.saving") : t("settings.inviteMember")}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
+      {link != null && (
+        <Alert>
+          <LinkIcon />
+          <AlertTitle>{t("settings.inviteLinkTitle")}</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <p>{t("settings.inviteLinkHelp")}</p>
+            <code className="block w-full rounded-md border bg-muted p-2 font-mono text-xs break-all">
+              {link}
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard
+                  .writeText(link)
+                  .then(() => toast.success(t("common.copied")))
+                  .catch(() => toast.error(t("errors.somethingWentWrong")))
+              }}
+            >
+              <CopyIcon className="size-4" />
+              {t("common.copy")}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {(invitations.data?.items.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("settings.pendingInvitations")}</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableBody>
+                {invitations.data?.items.map((invitation) => (
+                  <TableRow key={invitation.id}>
+                    <TableCell>
+                      <div className="font-medium">{invitation.email}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {t("settings.invitationExpires", {
+                          when: formatDateTime(invitation.expires_at),
+                        })}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {t(
+                          `settings.role${invitation.role.charAt(0).toUpperCase()}${invitation.role.slice(1)}`,
+                          { defaultValue: invitation.role },
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="w-10">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t("settings.revokeInvitation")}
+                        disabled={revoke.isPending}
+                        onClick={() => revoke.mutate(invitation.id)}
+                      >
+                        <Trash2Icon className="size-4 text-muted-foreground" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
       {remove.error != null && <ErrorDisplay error={remove.error} />}
+      {revoke.error != null && <ErrorDisplay error={revoke.error} />}
     </div>
   )
 }

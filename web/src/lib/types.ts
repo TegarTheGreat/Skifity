@@ -2,6 +2,16 @@
 
 export type Role = "owner" | "admin" | "member"
 
+/** A pending offer to join a team. The link that carries its token is shown once. */
+export type Invitation = {
+  id: string
+  team_id: string
+  email: string
+  role: Role
+  expires_at: string
+  created_at: string
+}
+
 export type User = {
   id: string
   email: string

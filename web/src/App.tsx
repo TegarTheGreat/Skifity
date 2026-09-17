@@ -12,6 +12,7 @@ import { AppDetailPage } from "@/pages/app-detail"
 import { DashboardPage } from "@/pages/dashboard"
 import { DatabaseDetailPage } from "@/pages/database-detail"
 import { DatabasesPage } from "@/pages/databases"
+import { InvitePage } from "@/pages/invite"
 import { LoginPage } from "@/pages/login"
 import { NewAppPage } from "@/pages/new-app"
 import { NotFoundPage } from "@/pages/not-found"
@@ -49,6 +50,19 @@ export function App() {
           <Skeleton className="h-40" />
         </div>
       </CenteredLayout>
+    )
+  }
+
+  // Before the sign-in gate: somebody holding an invitation has no account, so
+  // sending them to a sign-in form is sending them to a form they cannot use.
+  // Before the setup gate too — an install with no account has no invitations,
+  // and a link that survived a wipe should say so rather than hand a stranger
+  // first-run setup.
+  if (window.location.pathname.startsWith("/invite/")) {
+    return (
+      <Routes>
+        <Route path="/invite/:token" element={<InvitePage onSignedIn={() => void refresh()} />} />
+      </Routes>
     )
   }
 

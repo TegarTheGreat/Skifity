@@ -186,11 +186,11 @@ func TestDockerfileBuildCommand(t *testing.T) {
 	script := job.Spec.Template.Spec.Containers[0].Args[0]
 	for _, want := range []string{
 		`--frontend dockerfile.v0`,
-		`--local "context=/workspace"`,
-		`--local "dockerfile=/workspace/docker"`,
-		`--opt "filename=Dockerfile"`,
-		`--opt "build-arg:API_URL=https://api.example.com"`,
-		`--opt "build-arg:NODE_ENV=production"`,
+		`--local 'context=/workspace'`,
+		`--local 'dockerfile=/workspace/docker'`,
+		`--opt 'filename=Dockerfile'`,
+		`--opt 'build-arg:API_URL=https://api.example.com'`,
+		`--opt 'build-arg:NODE_ENV=production'`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the build command is missing %s:\n%s", want, script)
@@ -220,8 +220,8 @@ func TestRailpackBuildCommand(t *testing.T) {
 	script := job.Spec.Template.Spec.Containers[0].Args[0]
 	for _, want := range []string{
 		"--frontend gateway.v0",
-		`--opt "source=ghcr.io/railwayapp/railpack-frontend:latest"`,
-		`--local "dockerfile=/workspace"`,
+		`--opt 'source=ghcr.io/railwayapp/railpack-frontend:latest'`,
+		`--local 'dockerfile=/workspace'`,
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the build command is missing %s:\n%s", want, script)
@@ -259,11 +259,11 @@ func TestRootDirBuildsASubdirectory(t *testing.T) {
 		t.Fatalf("BuildJob: %v", err)
 	}
 	script := job.Spec.Template.Spec.Containers[0].Args[0]
-	if !strings.Contains(script, `--local "context=/workspace/apps/web"`) {
+	if !strings.Contains(script, `--local 'context=/workspace/apps/web'`) {
 		t.Fatalf("the monorepo subdirectory is not the build context:\n%s", script)
 	}
 	prepare := job.Spec.Template.Spec.InitContainers[1].Args[0]
-	if !strings.Contains(prepare, `"/workspace/apps/web"`) {
+	if !strings.Contains(prepare, `'/workspace/apps/web'`) {
 		t.Fatalf("railpack was pointed at the wrong directory:\n%s", prepare)
 	}
 }
@@ -390,12 +390,12 @@ func TestTheBuildCacheIsWrittenWhereItIsRead(t *testing.T) {
 // cacheFlagValue pulls the quoted value of a flag out of the rendered command.
 func cacheFlagValue(t *testing.T, script, name string) string {
 	t.Helper()
-	idx := strings.Index(script, name+" \"")
+	idx := strings.Index(script, name+" '")
 	if idx < 0 {
 		t.Fatalf("the build command has no %s:\n%s", name, script)
 	}
 	rest := script[idx+len(name)+2:]
-	end := strings.IndexByte(rest, '"')
+	end := strings.IndexByte(rest, '\'')
 	if end < 0 {
 		t.Fatalf("%s is not quoted:\n%s", name, script)
 	}
@@ -435,7 +435,7 @@ func TestNixpacksWritesTheDockerfileItThenBuilds(t *testing.T) {
 	if !strings.Contains(prepare.Args[0], "--out /workspace") {
 		t.Fatalf("nixpacks is not told to write to the workspace:\n%s", prepare.Args[0])
 	}
-	if !strings.Contains(prepare.Args[0], `--env "NODE_ENV=production"`) {
+	if !strings.Contains(prepare.Args[0], `--env 'NODE_ENV=production'`) {
 		t.Errorf("build variables do not reach the detection:\n%s", prepare.Args[0])
 	}
 	if prepare.Image == "" {
@@ -444,7 +444,7 @@ func TestNixpacksWritesTheDockerfileItThenBuilds(t *testing.T) {
 
 	// And the build reads it from where it was written.
 	script := job.Spec.Template.Spec.Containers[0].Args[0]
-	if !strings.Contains(script, `--local "dockerfile=/workspace/.nixpacks"`) {
+	if !strings.Contains(script, `--local 'dockerfile=/workspace/.nixpacks'`) {
 		t.Errorf("the build does not read the generated Dockerfile:\n%s", script)
 	}
 }

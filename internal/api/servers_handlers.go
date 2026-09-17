@@ -31,11 +31,6 @@ func (s *Server) handleAddServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.provisioner == nil {
-		writeError(w, r, errdoc.NotConfigured("Server provisioning", "the panel's cluster connection"))
-		return
-	}
-
 	var req AddServerRequest
 	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, r, err)
@@ -43,8 +38,17 @@ func (s *Server) handleAddServer(w http.ResponseWriter, r *http.Request) {
 	}
 	req.TeamID = teamID
 	req.CreatedBy = user.ID
+	// Validated before the capability check below. The request is checked
+	// whether or not provisioning is configured, so somebody fixing one
+	// problem does not then discover the other on the next attempt — and
+	// because a check that only runs on a configured panel is a check that
+	// cannot be tested without one.
 	if err := validateAddServer(&req); err != nil {
 		writeError(w, r, err)
+		return
+	}
+	if s.provisioner == nil {
+		writeError(w, r, errdoc.NotConfigured("Server provisioning", "the panel's cluster connection"))
 		return
 	}
 
@@ -73,6 +77,13 @@ func validateAddServer(req *AddServerRequest) error {
 	}
 	if req.SSHUser == "" {
 		req.SSHUser = "root"
+	}
+	// The user names a home directory and is passed to chown in a script that
+	// runs as root on the server being added. Every value in those scripts is
+	// quoted now, and this is the other half: a Unix account name has a shape,
+	// and anything outside it was never going to sign in anyway.
+	if !validUnixName(req.SSHUser) {
+		return errdoc.BadRequest("That SSH user is not a valid account name.")
 	}
 	if req.SSHPort == 0 {
 		req.SSHPort = 22
@@ -311,4 +322,27 @@ func (s *Server) handleCancelOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, op.TeamID, "operation.cancelled", op.TargetType, op.TargetID, op.Kind)
 	writeOK(w)
+}
+
+// validUnixName reports whether a string is shaped like a Unix account.
+//
+// Deliberately stricter than what a system will accept: useradd allows a great
+// deal, and none of it is anything somebody signs into a server with. What is
+// left is what every distribution's own tooling produces.
+func validUnixName(name string) bool {
+	if name == "" || len(name) > 32 {
+		return false
+	}
+	for i, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+		case r == '-' && i > 0:
+		case r == '.' && i > 0:
+		default:
+			return false
+		}
+	}
+	// A name starting with a digit is legal and is also how a numeric uid gets
+	// mistaken for one, so it goes with the rest.
+	return !(name[0] >= '0' && name[0] <= '9')
 }

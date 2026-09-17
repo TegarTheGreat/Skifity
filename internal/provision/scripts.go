@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"skifity/internal/kube"
+	"skifity/internal/shellsafe"
 )
 
 // The shell that runs on the servers being added.
@@ -12,6 +13,11 @@ import (
 // Everything here is POSIX sh, is safe to run twice, and prints machine-readable
 // output. It is kept as Go string constants rather than uploaded files so that
 // one binary is genuinely all a user needs.
+//
+// Every value interpolated into one of these goes through shellsafe.Quote. It
+// used to go through %q, which reads as though it were shell quoting and is
+// not: a shell expands $ and a backtick inside a double-quoted string, and Go's
+// %q escapes neither. See that package.
 
 // PreflightScript inspects a server without changing anything on it.
 const PreflightScript = `
@@ -110,8 +116,8 @@ func InstallKeyScript(publicKey, user string) string {
 	}
 	return fmt.Sprintf(`
 set -eu
-HOME_DIR=%q
-KEY=%q
+HOME_DIR=%s
+KEY=%s
 
 mkdir -p "$HOME_DIR/.ssh"
 chmod 700 "$HOME_DIR/.ssh"
@@ -127,7 +133,7 @@ fi
 # in a way that looks like a rejected key.
 chown -R %s "$HOME_DIR/.ssh" 2>/dev/null || true
 echo "key_installed=yes"
-`, home, strings.TrimSpace(publicKey), user)
+`, shellsafe.Quote(home), shellsafe.Quote(strings.TrimSpace(publicKey)), shellsafe.Quote(user))
 }
 
 // FirewallScript opens the cluster ports to the other members only.
@@ -146,7 +152,8 @@ func FirewallScript(memberIPs []string, controlPlane bool) string {
 			if ip == "" {
 				continue
 			}
-			fmt.Fprintf(&rules, "allow_from %q %d %q\n", ip, port.Port, port.Protocol)
+			fmt.Fprintf(&rules, "allow_from %s %d %s\n",
+				shellsafe.Quote(ip), port.Port, shellsafe.Quote(port.Protocol))
 		}
 	}
 
@@ -262,19 +269,19 @@ func installScript(version, token, serverURL, args string, isServer bool) string
 		role = "server"
 	}
 	var env strings.Builder
-	fmt.Fprintf(&env, "INSTALL_K3S_EXEC=%q ", role+" "+args)
+	fmt.Fprintf(&env, "INSTALL_K3S_EXEC=%s ", shellsafe.Quote(role+" "+args))
 	if version != "" {
-		fmt.Fprintf(&env, "INSTALL_K3S_VERSION=%q ", version)
+		fmt.Fprintf(&env, "INSTALL_K3S_VERSION=%s ", shellsafe.Quote(version))
 	} else {
 		// Without a version the installer follows the stable channel, which is
 		// what we want by default: it moves forward without a Skifity release.
 		env.WriteString(`INSTALL_K3S_CHANNEL="stable" `)
 	}
 	if token != "" {
-		fmt.Fprintf(&env, "K3S_TOKEN=%q ", token)
+		fmt.Fprintf(&env, "K3S_TOKEN=%s ", shellsafe.Quote(token))
 	}
 	if serverURL != "" {
-		fmt.Fprintf(&env, "K3S_URL=%q ", serverURL)
+		fmt.Fprintf(&env, "K3S_URL=%s ", shellsafe.Quote(serverURL))
 	}
 
 	return fmt.Sprintf(`
@@ -361,7 +368,7 @@ echo "uninstalled=yes"
 func ConnectivityScript(targetIP string, port int) string {
 	return fmt.Sprintf(`
 set -u
-TARGET=%q
+TARGET=%s
 PORT=%d
 
 # Prefer a real TCP connect; fall back to whatever the machine has.
@@ -371,7 +378,7 @@ elif command -v timeout >/dev/null 2>&1; then
   if timeout 5 sh -c "exec 3<>/dev/tcp/$TARGET/$PORT" 2>/dev/null; then echo "reachable=yes"; exit 0; fi
 fi
 echo "reachable=no"
-`, targetIP, port)
+`, shellsafe.Quote(targetIP), port)
 }
 
 // sortedPairs returns a map's entries in key order, so a generated command is

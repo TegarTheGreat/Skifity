@@ -407,7 +407,7 @@ func TestSecondServerJoinsTheFirst(t *testing.T) {
 			installCommand = command
 		}
 	}
-	if !strings.Contains(installCommand, `K3S_URL="https://203.0.113.10:6443"`) {
+	if !strings.Contains(installCommand, `K3S_URL='https://203.0.113.10:6443'`) {
 		t.Fatalf("the second server was not pointed at the first:\n%s", installCommand)
 	}
 	if strings.Contains(installCommand, "--cluster-init") {
@@ -421,7 +421,7 @@ func TestSecondServerJoinsTheFirst(t *testing.T) {
 			firewallCommand = command
 		}
 	}
-	if !strings.Contains(firewallCommand, `allow_from "203.0.113.10" 6443`) {
+	if !strings.Contains(firewallCommand, `allow_from '203.0.113.10' 6443`) {
 		t.Fatalf("the cluster port was not opened to the first server:\n%s", firewallCommand)
 	}
 }

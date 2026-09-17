@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"skifity/internal/shellsafe"
 	"skifity/internal/version"
 )
 
@@ -329,12 +330,12 @@ func prepareContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
 	var b strings.Builder
 	b.WriteString("set -e\n")
 	b.WriteString("echo '==> Working out how to build this repository'\n")
-	fmt.Fprintf(&b, "railpack prepare %q --plan-out %s/railpack-plan.json --info-out %s/railpack-info.json",
-		context, workspace, workspace)
+	fmt.Fprintf(&b, "railpack prepare %s --plan-out %s/railpack-plan.json --info-out %s/railpack-info.json",
+		shellsafe.Quote(context), workspace, workspace)
 	for _, pair := range sortedPairs(s.BuildArgs) {
 		// --env is how build-time configuration reaches the detection, which
 		// matters for frameworks that build differently per environment.
-		fmt.Fprintf(&b, " --env %q", pair[0]+"="+pair[1])
+		fmt.Fprintf(&b, " --env %s", shellsafe.Quote(pair[0]+"="+pair[1]))
 	}
 	b.WriteString("\n")
 	b.WriteString("echo '==> Build plan ready'\n")
@@ -373,12 +374,12 @@ func nixpacksContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container 
 	var b strings.Builder
 	b.WriteString("set -e\n")
 	b.WriteString("echo '==> Working out how to build this repository'\n")
-	fmt.Fprintf(&b, "nixpacks build %q --out %s", context, workspace)
+	fmt.Fprintf(&b, "nixpacks build %s --out %s", shellsafe.Quote(context), workspace)
 	for _, pair := range sortedPairs(s.BuildArgs) {
 		// The same reason as railpack prepare: a framework that builds
 		// differently per environment needs these during detection, not only
 		// during the build.
-		fmt.Fprintf(&b, " --env %q", pair[0]+"="+pair[1])
+		fmt.Fprintf(&b, " --env %s", shellsafe.Quote(pair[0]+"="+pair[1]))
 	}
 	b.WriteString("\n")
 	b.WriteString("echo '==> Build plan ready'\n")
@@ -549,8 +550,12 @@ func ImageName(registry, namespace, appSlug, tag string) string {
 
 // flag renders one buildctl option with its value quoted, so a value
 // containing a space or a shell metacharacter cannot change the command.
+//
+// Single-quoted rather than %q, which is Go's quoting and not the shell's: a
+// shell expands $ and a backtick inside a double-quoted string, and a build
+// argument is a value somebody typed into the panel. See internal/shellsafe.
 func flag(name, value string) string {
-	return fmt.Sprintf("%s %q", name, value)
+	return name + " " + shellsafe.Quote(value)
 }
 
 func sortedPairs(m map[string]string) [][2]string {

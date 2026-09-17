@@ -37,7 +37,10 @@ type TestServer struct {
 }
 
 // installedKeyPattern matches the key in the script that installs it.
-var installedKeyPattern = regexp.MustCompile(`KEY="(ssh-[^"]+)"`)
+// Single-quoted, because that is what the panel generates: see
+// internal/shellsafe. A pattern matching the double-quoted form would keep
+// passing while the real script had changed shape.
+var installedKeyPattern = regexp.MustCompile(`KEY='(ssh-[^']+)'`)
 
 type responseRule struct {
 	match    string

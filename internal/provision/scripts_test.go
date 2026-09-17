@@ -61,7 +61,7 @@ func TestFirewallScriptOpensOnlyToMembers(t *testing.T) {
 	script := FirewallScript([]string{"203.0.113.10"}, false)
 
 	// The API server and the pod network must never be open to the world.
-	if !strings.Contains(script, `allow_from "203.0.113.10" 6443 "tcp"`) {
+	if !strings.Contains(script, `allow_from '203.0.113.10' 6443 'tcp'`) {
 		t.Fatal("the API server port was not opened to the other cluster member")
 	}
 	if strings.Contains(script, "allow_public 6443") {
@@ -80,7 +80,7 @@ func TestFirewallScriptOpensOnlyToMembers(t *testing.T) {
 	}
 
 	controlPlane := FirewallScript([]string{"203.0.113.10"}, true)
-	if !strings.Contains(controlPlane, `allow_from "203.0.113.10" 2380 "tcp"`) {
+	if !strings.Contains(controlPlane, `allow_from '203.0.113.10' 2380 'tcp'`) {
 		t.Fatal("etcd peer port was not opened on a control plane server")
 	}
 }
@@ -130,7 +130,7 @@ func TestInstallScriptsCarryTheRightFlags(t *testing.T) {
 	}
 
 	pinned := InstallServerScript("v1.33.1+k3s1", "tok", "203.0.113.10", nil)
-	if !strings.Contains(pinned, `INSTALL_K3S_VERSION="v1.33.1+k3s1"`) {
+	if !strings.Contains(pinned, `INSTALL_K3S_VERSION='v1.33.1+k3s1'`) {
 		t.Fatal("the pinned version was ignored")
 	}
 	if strings.Contains(pinned, "INSTALL_K3S_CHANNEL") {
@@ -138,18 +138,18 @@ func TestInstallScriptsCarryTheRightFlags(t *testing.T) {
 	}
 
 	agent := JoinAgentScript("", "tok", "https://203.0.113.10:6443", "203.0.113.12", nil)
-	if !strings.Contains(agent, `K3S_URL="https://203.0.113.10:6443"`) {
+	if !strings.Contains(agent, `K3S_URL='https://203.0.113.10:6443'`) {
 		t.Fatal("the agent does not know which server to join")
 	}
 	if strings.Contains(agent, "--cluster-init") {
 		t.Fatal("an agent was given --cluster-init, which would try to start a second cluster")
 	}
-	if !strings.Contains(agent, `INSTALL_K3S_EXEC="agent`) {
+	if !strings.Contains(agent, `INSTALL_K3S_EXEC='agent`) {
 		t.Fatal("the agent role was not set")
 	}
 
 	controlPlane := JoinServerScript("", "tok", "https://203.0.113.10:6443", "203.0.113.11")
-	if !strings.Contains(controlPlane, `INSTALL_K3S_EXEC="server`) {
+	if !strings.Contains(controlPlane, `INSTALL_K3S_EXEC='server`) {
 		t.Fatal("a promoted server was not installed in server mode")
 	}
 	if strings.Contains(controlPlane, "--cluster-init") {
@@ -216,5 +216,59 @@ func TestTheInstallerAndThePanelStartTheSameKindOfCluster(t *testing.T) {
 		if !strings.Contains(panel, flag) {
 			t.Errorf("the panel no longer passes %s", flag)
 		}
+	}
+}
+
+func TestNothingATypedValueContainsBecomesACommand(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("no shell available")
+	}
+
+	// Every generated script used %q, which is Go's quoting and not the
+	// shell's: a shell expands $ and a backtick inside a double-quoted string
+	// and Go escapes neither, so `1.2.3.4$(id)` ran id. These are the values
+	// that reach a script, with the payload that used to work.
+	hostile := `x$(touch /tmp/skifity-injection-marker)` + "`id`"
+
+	scripts := map[string]string{
+		"InstallKeyScript":    InstallKeyScript("ssh-ed25519 AAAA test", hostile),
+		"FirewallScript":      FirewallScript([]string{hostile}, true),
+		"ConnectivityScript":  ConnectivityScript(hostile, 6443),
+		"InstallServerScript": InstallServerScript(hostile, hostile, "203.0.113.10", nil),
+		"JoinAgentScript":     JoinAgentScript("", hostile, hostile, "203.0.113.12", nil),
+	}
+	for name, script := range scripts {
+		// Still valid shell after quoting, which is the first thing quoting
+		// gets wrong.
+		cmd := exec.Command("sh", "-n")
+		cmd.Stdin = strings.NewReader(script)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s is not valid shell after quoting: %v\n%s", name, err, output)
+			continue
+		}
+		// And the payload is inert: inside single quotes a shell reads $( and
+		// a backtick as characters. Finding the text is expected; finding it
+		// in a form the shell would run is not.
+		for _, escape := range []string{`"` + hostile, hostile + `"`} {
+			if strings.Contains(script, escape) {
+				t.Errorf("%s left a value where a shell would expand it:\n%s", name, script)
+			}
+		}
+	}
+}
+
+func TestTheInstallKeyScriptQuotesTheAccountName(t *testing.T) {
+	// The account names a home directory and is handed to chown, in a script
+	// that runs as root on the server being added.
+	script := InstallKeyScript("ssh-ed25519 AAAA test", "deploy")
+	if !strings.Contains(script, `HOME_DIR='/home/deploy'`) {
+		t.Fatalf("the home directory is not quoted:\n%s", script)
+	}
+	if !strings.Contains(script, `chown -R 'deploy' "$HOME_DIR/.ssh"`) {
+		t.Fatalf("the account name reaches chown unquoted:\n%s", script)
+	}
+	// root keeps its own home, which is not under /home.
+	if !strings.Contains(InstallKeyScript("k", "root"), `HOME_DIR='/root'`) {
+		t.Error("root was given a home under /home")
 	}
 }

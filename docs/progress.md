@@ -568,8 +568,17 @@ that do not collide, since the UI picks a translation by code.
 
 ## Open issues
 
-* Cluster smoke tests cannot run in this sandbox. The scripts exist and are
-  reviewed, not executed.
+* **Nothing has ever run against a real cluster.** `test/smoke` holds exactly
+  two scripts — the panel and the installer — and neither touches Kubernetes.
+  This entry used to say the cluster smoke tests "exist and are reviewed, not
+  executed", and `panel.sh` used to name four of them in its header. They were
+  never written. Everything that talks to a cluster — `internal/cluster`,
+  `internal/deploy`, `internal/dbsvc`, `internal/backup`, the parts of
+  `internal/kube` beyond manifest generation — is checked against the objects it
+  renders and against a fake clientset, never against an API server. That is the
+  largest single gap in this repository, it is a consequence of ADR-0010, and
+  writing scripts that could not be run here would have widened it rather than
+  closed it.
 * The installer references `ghcr.io/skifity/skifity`, which is not published
   until the first tag. Until then an install needs `SKIFITY_IMAGE` pointed at an
   image built locally with `make image`.

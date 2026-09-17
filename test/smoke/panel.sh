@@ -2,8 +2,11 @@
 # Smoke test: the panel starts, first-run setup works, sign-in works, an API
 # token works, and the CLI can use it.
 #
-# This one needs no cluster, so it runs anywhere, including in CI. The four
-# cluster smoke tests in this directory need a Docker-capable host.
+# It needs no cluster, so it runs anywhere, including in CI. Neither does
+# installer.sh beside it, which checks the installer's logic without installing
+# anything. Those two are the whole of test/smoke: there is no smoke test that
+# exercises a real cluster, because none could ever have been run where this was
+# built (ADR-0010). This header used to claim four of them.
 set -eu
 
 BINARY="${BINARY:-./bin/skifity}"

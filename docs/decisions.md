@@ -156,12 +156,23 @@ real interfaces, and keep the cluster-dependent smoke tests as runnable scripts.
 * The SSH provisioning flow is tested against a real in-process SSH server (`golang.org/x/crypto/ssh`)
   that records the commands it receives, so command construction, idempotency and error handling are
   genuinely verified.
-* The four cluster smoke tests live in `test/smoke/` as scripts that require a Docker-capable host.
-  `docs/progress.md` records exactly which have been executed and which have not.
+* `test/smoke/` holds two scripts, `panel.sh` and `installer.sh`. Neither touches a cluster: one runs
+  the real binary through first-run setup, sign-in, tokens and the CLI, the other checks the
+  installer's logic without installing anything.
+
+  This bullet used to say four cluster smoke tests lived there and that `docs/progress.md` recorded
+  which had been run. Neither was true — they were never written — and the claim survived because
+  nothing checks that a document's description of the repository matches the repository. Something
+  does now. The gap itself stays: writing scripts that could not be run here would have widened it.
 
 **Consequences.** Anything that can only fail against a real kernel (k3s installation itself, WireGuard,
-UFW) is verified by script review and by the installer's own preflight, not by execution here. This is
-recorded honestly rather than papered over.
+UFW) is verified by script review and by the installer's own preflight, not by execution here.
+
+And more than that: no part of this product has ever spoken to a Kubernetes API server. The fakes
+exercise the same code path, which is worth something and is not the same thing. Deploying an app,
+provisioning a database, taking a backup and restoring one are each written, unit-tested against the
+objects they render, and unrun. `docs/progress.md` says so plainly, which is the whole of what this
+ADR can offer.
 
 ---
 

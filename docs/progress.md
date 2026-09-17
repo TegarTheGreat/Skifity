@@ -1087,6 +1087,17 @@ request rather than twelve.
 Neither is a person. A tool that agrees with the author is not evidence that the
 author was right, and the roadmap still says so.
 
+**And it was switched off.** The workflow said `branches: ["main"]`, and this
+repository has no `main` — the work is on a branch, and Dependabot opens its
+pull requests against that branch. So the scan never ran once. The first green
+pull request is what made it visible: eight checks passed and CodeQL was not one
+of them. It runs on every branch now, like CI does.
+
+That is the same shape as `make check` not running `audit`, as the four cluster
+smoke tests that were named and never written, as `make image` never having
+worked: **a gate with a hole in it looks exactly like a gate**, and this one was
+added in the same session that wrote that sentence down again.
+
 ## Phase 31 — the check that settles it, written
 
 The largest open item in this repository is that nothing has ever run against a

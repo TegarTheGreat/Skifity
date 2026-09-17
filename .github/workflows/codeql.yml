@@ -13,10 +13,17 @@ name: CodeQL
 # seconds, and a scheduled run finds a query that was added after the commit.
 
 on:
+  # Every branch, like ci.yml, not just main.
+  #
+  # This said `branches: ["main"]` on the day it was added, and this repository
+  # has no main: the work is on a branch, and Dependabot opens its pull requests
+  # against that branch. So the scan never ran once — a second pair of eyes that
+  # was switched off, which looks exactly like a second pair of eyes. The first
+  # green pull request is what made it visible: eight checks passed and CodeQL
+  # was not one of them.
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
-    branches: ["main"]
   schedule:
     # Weekly, so a new query reaches old code. Wednesday, away from the hour
     # everybody else schedules.

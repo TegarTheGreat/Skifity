@@ -208,9 +208,17 @@ func (m *Manager) Restore(ctx context.Context, backupID string, overwrite bool) 
 
 	// Restoring over live data is destructive and irreversible, so it has to be
 	// asked for explicitly rather than being the default.
+	//
+	// A failure to read the links is not an empty list of them. This used to
+	// treat it as one, which turned the check that stands between a restore and
+	// somebody else's live database into a check that disappears when a query
+	// fails.
 	if !overwrite {
 		links, err := m.db.ListLinksForDatabase(ctx, record.ID)
-		if err == nil && len(links) > 0 {
+		if err != nil {
+			return store.Operation{}, err
+		}
+		if len(links) > 0 {
 			return store.Operation{}, errdoc.RestoreRefused(record.Name).
 				With("apps_using_it", fmt.Sprint(len(links)))
 		}

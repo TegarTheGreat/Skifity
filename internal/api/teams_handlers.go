@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -162,9 +163,24 @@ func (s *Server) handleAddMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Demoting the last owner would leave a team nobody can administer.
-	if existing, err := s.db.GetMembership(r.Context(), teamID, target.ID); err == nil &&
-		existing.Role == store.RoleOwner && req.Role != store.RoleOwner {
-		if count, err := s.db.CountOwners(r.Context(), teamID); err == nil && count <= 1 {
+	//
+	// Not being a member yet is the ordinary case — that is what adding one is
+	// — and there is nothing to demote. Any other failure is a check that did
+	// not run, and a guard that stops guarding when a query fails is not a
+	// guard, so it refuses rather than assuming the answer it wanted.
+	existing, err := s.db.GetMembership(r.Context(), teamID, target.ID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+	case err != nil:
+		writeError(w, r, err)
+		return
+	case existing.Role == store.RoleOwner && req.Role != store.RoleOwner:
+		count, err := s.db.CountOwners(r.Context(), teamID)
+		if err != nil {
+			writeError(w, r, err)
+			return
+		}
+		if count <= 1 {
 			writeError(w, r, errdoc.New("team.last_owner", "A team needs at least one owner").
 				WithCause("%s is the only owner of this team.", target.Email).
 				WithImpact("Nothing was changed.").
@@ -210,9 +226,12 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 				WithStatus(http.StatusConflict))
 			return
 		}
-		// Only an owner may remove another owner.
-		if actorMembership, err := s.db.GetMembership(r.Context(), teamID, actor.ID); err == nil &&
-			actorMembership.Role != store.RoleOwner {
+		// Only an owner may remove another owner. An actor whose own
+		// membership cannot be read is not an owner as far as this is
+		// concerned: a permission check that passes when the lookup fails is
+		// the wrong way round.
+		actorMembership, err := s.db.GetMembership(r.Context(), teamID, actor.ID)
+		if err != nil || actorMembership.Role != store.RoleOwner {
 			writeError(w, r, errdoc.Forbidden("removing an owner"))
 			return
 		}

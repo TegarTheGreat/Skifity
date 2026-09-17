@@ -88,18 +88,29 @@ func (s *Server) handleDeleteDatabase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if s.databases == nil {
-		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
+	// Deleting a database that apps still use breaks them silently, so say so.
+	// Before the capability check, not after: a safety check that only runs on
+	// a configured panel is one nothing can test without a cluster, which is
+	// how this class of mistake keeps surviving review.
+	//
+	// A query that failed is not "no apps use it": it is a check that did not
+	// run, and treating it as permission to delete is how a guard stops
+	// guarding exactly when the panel is already unwell.
+	links, err := s.db.ListLinksForDatabase(r.Context(), record.ID)
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
-	// Deleting a database that apps still use breaks them silently, so say so.
-	links, err := s.db.ListLinksForDatabase(r.Context(), record.ID)
-	if err == nil && len(links) > 0 && !queryBool(r, "force") {
+	if len(links) > 0 && !queryBool(r, "force") {
 		writeError(w, r, errdoc.New("database.still_linked", "This database is still used by an app").
 			WithCause("%d app(s) have a connection string from this database injected.", len(links)).
 			WithImpact("Nothing was changed.").
 			WithFix("Unlink the apps first, or confirm that you want to delete it anyway.").
 			WithStatus(http.StatusConflict))
+		return
+	}
+	if s.databases == nil {
+		writeError(w, r, errdoc.NotConfigured("Managed databases", "the panel's cluster connection"))
 		return
 	}
 	if err := s.databases.Delete(r.Context(), record.ID); err != nil {

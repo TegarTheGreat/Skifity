@@ -117,6 +117,29 @@ func (h *harness) newTenant(name string) tenant {
 	return tenant{user: user, team: team, project: project, env: env, token: token}
 }
 
+// newMember adds a second person to an existing tenant's team, with their own
+// token, so a test can act as somebody who is in the team but not its owner.
+func (h *harness) newMember(of tenant, name string, role store.Role) tenant {
+	h.t.Helper()
+	ctx := h.t.Context()
+
+	user := store.User{Email: name + "@example.test", Name: name, PasswordHash: "x"}
+	if err := h.db.CreateUser(ctx, &user); err != nil {
+		h.t.Fatalf("create user: %v", err)
+	}
+	if err := h.db.AddMember(ctx, of.team.ID, user.ID, role); err != nil {
+		h.t.Fatalf("add member: %v", err)
+	}
+	_, token, err := h.auth.CreateAPIToken(ctx, user.ID, of.team.ID, "test", "", 24*time.Hour)
+	if err != nil {
+		h.t.Fatalf("create token: %v", err)
+	}
+
+	member := of
+	member.user, member.token = user, token
+	return member
+}
+
 // app creates an app in a tenant's environment.
 func (h *harness) app(owner tenant, name string) store.App {
 	h.t.Helper()

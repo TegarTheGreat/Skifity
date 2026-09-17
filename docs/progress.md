@@ -497,6 +497,37 @@ a page that had drifted.
   struct and fails when any of them is missing from `docs/configuration.md` —
   which two of them already were.
 
+### The guards that stopped guarding
+
+Four safety checks were written as `if err == nil && <the dangerous
+condition>`, which reads as caution and means the opposite: the moment the query
+behind the check fails, the check disappears and the destructive path runs. This
+is the same shape as the capability-before-check pattern from Phase 18 — a
+safety check that only runs when everything else is already well — and one of
+these four was that pattern as well.
+
+* **Deleting a database** skipped the "apps still use this" check when the links
+  could not be read, and ran that check after the cluster capability check, so
+  nothing could test it without a cluster. Both fixed; a test drops the
+  `database_links` table and asks for the delete.
+* **Restoring a backup** over a live database did the same thing with the same
+  query. A failure to read the links is not an empty list of them.
+* **Demoting the last owner** skipped the last-owner check when the membership
+  or the owner count could not be read, leaving a team nobody can administer.
+  Not being a member yet is the ordinary case and still passes; anything else
+  now refuses. A test drops the `memberships` table.
+* **Removing an owner** allowed it when the actor's own role could not be read.
+  Nothing can reach that branch — `authorizeTeam` refuses a caller with no
+  readable membership first — so there is no test for it, only the change. The
+  ordinary guard, that an admin may not remove an owner, had no test either and
+  has one now.
+
+`internal/errdoc` also had no tests. The catalogue is the product's central
+promise — cause, impact and fix on every failure — and an entry missing one of
+those still compiles and still renders. A test now reads the file as source and
+checks every entry for all three, for a code shaped like a code, and for codes
+that do not collide, since the UI picks a translation by code.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

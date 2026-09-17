@@ -59,6 +59,24 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 			FailureThreshold: 40, // up to two minutes to start
 			TimeoutSeconds:   3,
 		}
+		// The other half of a zero-downtime deploy.
+		//
+		// maxUnavailable: 0 keeps the capacity, and on its own it still drops
+		// requests. Removing a pod from the Service and telling it to stop
+		// happen at the same moment, and the ingress controller finds out
+		// through a watch — so for a fraction of a second it is still sending
+		// requests to a process that has already begun shutting down. Five
+		// seconds of doing nothing before SIGTERM is what closes that window:
+		// by then every proxy has seen the endpoint go.
+		//
+		// A sleep action rather than a command, because it needs no shell in
+		// the image — a distroless container has none. It comes out of the same
+		// 30-second grace period, which leaves 25 for connections in flight.
+		container.Lifecycle = &corev1.Lifecycle{
+			PreStop: &corev1.LifecycleHandler{
+				Sleep: &corev1.SleepAction{Seconds: 5},
+			},
+		}
 	}
 
 	if s.EnvFromSecret != "" {

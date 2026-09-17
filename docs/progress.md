@@ -1267,6 +1267,34 @@ and it puts an app to sleep, sends one request through the real ingress and
 fails unless the app answers and comes back. The second used to be a sentence
 telling the operator to try it by hand.
 
+### The other half of a zero-downtime deploy
+
+`maxUnavailable: 0` keeps the capacity, and the test that checks it said that is
+"what makes a deploy zero-downtime". It is half of it. A pod is removed from its
+Service and told to stop at the same moment, and the ingress controller learns
+about the removal through a watch — so for a fraction of a second it is still
+sending requests to a process that has begun shutting down. Every rolling update
+therefore dropped a handful of requests, which is the kind of thing nobody can
+reproduce afterwards.
+
+There is now a five-second `preStop` pause before SIGTERM, out of the same
+thirty-second grace period. A sleep action rather than a shell command, because
+a distroless image has no shell; and only for an app that serves HTTP, because a
+worker has no endpoint for anybody to notice disappearing.
+
+### The front door, said out loud
+
+Every server runs the ingress, so an app answers on every server's address. DNS
+names one. If an app has three instances across three servers and the server the
+domain points at goes down, the app is running and the name is dead — Kubernetes
+moved the work, it cannot move a DNS record.
+
+Nothing in the documentation said this, and `docs/research/competitors.md`
+criticised Coolify for the same thing without admitting it. Both now say it, and
+`docs/adding-servers.md` gives the three ways out: round-robin DNS, a floating
+IP, or a provider's load balancer, with the address going in
+**Settings → Domains → Cluster public IP**.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

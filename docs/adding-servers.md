@@ -44,6 +44,30 @@ Skifity starts placing new instances on the server straight away. Existing
 instances are not moved — that would restart apps for no reason — so a new
 server fills up as you deploy.
 
+## How traffic reaches your apps
+
+Every server runs the ingress, so an app answers on **every** server's address,
+wherever its instances happen to be. What decides which address people use is
+DNS, and DNS names one.
+
+That is the honest limit of a several-server install. If an app has three
+instances across three servers and the server your domain points at goes down,
+the app is still running and the name is still dead. Kubernetes moved the work;
+it cannot move your DNS record.
+
+There are three ways out, and Skifity does not need to know which you chose:
+
+* **Round-robin DNS.** Add an A record per server. Free, and a browser retries
+  the next address on a refused connection, though not always quickly.
+* **A floating IP.** Most providers sell one — Hetzner, DigitalOcean, Vultr. It
+  moves between servers, so the name never changes.
+* **A provider's load balancer.** The most reliable and the one that costs
+  money.
+
+With a floating IP or a load balancer, put its address in **Settings → Domains →
+Cluster public IP**. That is the address the panel then uses for the free
+`sslip.io` names it hands out, instead of a single server's own.
+
 ## Control plane servers
 
 The first server runs the control plane. Others join as workers unless you

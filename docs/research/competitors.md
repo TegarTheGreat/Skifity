@@ -121,6 +121,17 @@ Ordered by how well the evidence supports it.
    endpoint — is the list `ScalingReadiness` reads out of the app's own
    configuration and reports, naming the variable that is wrong.
 
+   **One line of Coolify's list applies here too, and it would be dishonest to
+   let this section imply otherwise.** Skifity does not create or manage an
+   external load balancer either. Every server runs the ingress, so an app
+   answers on every server's address — but DNS names one, and if that server
+   goes down the name is dead while the app is still running elsewhere. Round
+   robin DNS, a floating IP or a provider's load balancer is the operator's
+   choice, and `docs/adding-servers.md` says so. The difference from Coolify is
+   narrower than the rest of this point: it is that the app above that front
+   door genuinely reschedules, rolls and autoscales itself, not that the front
+   door is solved.
+
    The honest limit is the same as everywhere else in this document: none of it
    has run on a real cluster.
 4. **A config change does not rebuild.** The top Coolify complaint, answered by

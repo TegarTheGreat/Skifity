@@ -194,10 +194,30 @@ func TestRollingUpdateKeepsCapacity(t *testing.T) {
 	if d.Spec.Strategy.Type != "RollingUpdate" {
 		t.Fatalf("strategy is %s, want RollingUpdate", d.Spec.Strategy.Type)
 	}
-	// MaxUnavailable 0 is what makes a deploy zero-downtime.
+	// MaxUnavailable 0 keeps the capacity.
 	if d.Spec.Strategy.RollingUpdate.MaxUnavailable.IntValue() != 0 {
 		t.Fatalf("maxUnavailable is %v, which allows a gap in capacity during a deploy",
 			d.Spec.Strategy.RollingUpdate.MaxUnavailable)
+	}
+
+	// And on its own it is not enough. A pod is removed from the Service and
+	// told to stop at the same moment, and the ingress controller learns about
+	// the first through a watch — so it keeps sending requests to a process
+	// that has started shutting down. Without a pause before SIGTERM, every
+	// rolling update drops a handful of requests, which is exactly the thing
+	// nobody can reproduce afterwards.
+	lifecycle := d.Spec.Template.Spec.Containers[0].Lifecycle
+	if lifecycle == nil || lifecycle.PreStop == nil || lifecycle.PreStop.Sleep == nil {
+		t.Fatal("no preStop pause: a rolling update drops the requests already on their way")
+	}
+	grace := *d.Spec.Template.Spec.TerminationGracePeriodSeconds
+	if lifecycle.PreStop.Sleep.Seconds >= grace {
+		t.Fatalf("the preStop pause is %ds against a %ds grace period, so the app is killed "+
+			"before it is asked to stop", lifecycle.PreStop.Sleep.Seconds, grace)
+	}
+	// A shell command would need a shell, and a distroless image has none.
+	if lifecycle.PreStop.Exec != nil {
+		t.Fatal("preStop runs a command, which fails on any image without a shell")
 	}
 }
 
@@ -560,6 +580,17 @@ func TestLabelsCarryOwnership(t *testing.T) {
 	}
 	if labels["app.kubernetes.io/managed-by"] != "skifity" {
 		t.Errorf("managed-by is %q", labels["app.kubernetes.io/managed-by"])
+	}
+}
+
+// TestAWorkerIsNotHeldOpenForNothing: the preStop pause exists so proxies can
+// notice an endpoint disappearing. A worker has no endpoints, so pausing would
+// only make every deploy of it five seconds slower.
+func TestAWorkerIsNotHeldOpenForNothing(t *testing.T) {
+	s := baseSpec()
+	s.Port = 0
+	if l := BuildDeployment(s).Spec.Template.Spec.Containers[0].Lifecycle; l != nil {
+		t.Fatal("a worker was given a preStop pause it has no use for")
 	}
 }
 

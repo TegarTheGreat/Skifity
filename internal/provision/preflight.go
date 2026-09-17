@@ -34,6 +34,14 @@ type Preflight struct {
 	MemoryCgroup string `json:"memory_cgroup"`
 	// PortsInUse are the cluster ports something else is already listening on.
 	PortsInUse []int `json:"ports_in_use"`
+	// UDPPortsInUse are the pod network's UDP ports something else holds.
+	//
+	// Separate from PortsInUse because a TCP listener on 6443 and a UDP
+	// listener on 51820 are different problems with different fixes, and
+	// because the TCP scan cannot see a UDP socket at all — which is why this
+	// went unnoticed: `ss -lnt` lists no UDP and the pod network's ports are
+	// all UDP.
+	UDPPortsInUse []int `json:"udp_ports_in_use"`
 	// K3sInstalled reports whether this machine is already a node, which makes
 	// adding it again a no-op rather than a failure.
 	K3sInstalled bool `json:"k3s_installed"`
@@ -256,6 +264,40 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 		})
 	}
 
+	// A UDP port the pod network needs, held by something else.
+	//
+	// Fatal for the backend this cluster is actually going to use, and a
+	// warning for the other one. 51820 is the one that bites: a VPS running a
+	// WireGuard VPN of its own holds exactly the port flannel's
+	// wireguard-native backend wants, and the failure is a cluster that comes
+	// up with every node Ready and no traffic between pods — which looks like
+	// anything except a port conflict.
+	for _, port := range p.UDPPortsInUse {
+		wireGuardPort := port == 51820 || port == 51821
+		used := wireGuardPort == wireGuardRequired(req)
+		problem := Problem{
+			Check:  "udp_port",
+			Detail: fmt.Sprintf("Something is already using UDP port %d, which the pod network needs.", port),
+			Fatal:  used,
+		}
+		switch {
+		case wireGuardPort && used:
+			problem.Fix = fmt.Sprintf(
+				"That is almost always a WireGuard VPN of your own. Move it to another port, "+
+					"or set the pod network to %q under Settings, then Cluster — every server in "+
+					"the cluster must then use that one. Find the holder with: ss -lnup 'sport = :%d'",
+				settings.FlannelVXLAN, port)
+		case used:
+			problem.Fix = fmt.Sprintf(
+				"Find it with: ss -lnup 'sport = :%d' and stop it, or use a server with that port free.", port)
+		default:
+			problem.Detail = fmt.Sprintf(
+				"Something is using UDP port %d. This cluster's pod network does not use it, so it is only a problem if you ever change that setting.", port)
+			problem.Fix = fmt.Sprintf("Nothing to do now. Find the holder with: ss -lnup 'sport = :%d'", port)
+		}
+		problems = append(problems, problem)
+	}
+
 	// There is no fallback here, and there used to be a message promising one.
 	// Every node in a cluster has to use the same pod network: a node that
 	// joins with vxlan while the others run wireguard-native joins without
@@ -356,6 +398,12 @@ func ParsePreflight(output string) Preflight {
 			for _, portText := range strings.Fields(strings.ReplaceAll(value, ",", " ")) {
 				if port := atoi(portText); port > 0 {
 					p.PortsInUse = append(p.PortsInUse, port)
+				}
+			}
+		case "udp_ports_in_use":
+			for _, portText := range strings.Fields(strings.ReplaceAll(value, ",", " ")) {
+				if port := atoi(portText); port > 0 {
+					p.UDPPortsInUse = append(p.UDPPortsInUse, port)
 				}
 			}
 		}

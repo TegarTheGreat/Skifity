@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -12,6 +14,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -665,6 +668,16 @@ func (s *Server) handleAddDomain(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, errdoc.BadRequest("That does not look like a domain name. Enter something like app.example.com."))
 		return
 	}
+	if s.isPanelHostname(r.Context(), hostname) {
+		writeError(w, r, errdoc.New("domain.is_the_panel", "That is this panel's own address").
+			WithCause("%s is where this panel answers.", hostname).
+			WithImpact("Nothing was changed. Routing an app there would put two things behind one "+
+				"hostname, and which of them answered would be decided by the ingress controller "+
+				"rather than by anybody — including for the requests carrying your sign-in cookie.").
+			WithFix("Give the app a hostname of its own. A subdomain of the panel's is fine.").
+			WithStatus(http.StatusConflict))
+		return
+	}
 
 	tls := true
 	if req.TLS != nil {
@@ -695,6 +708,46 @@ func (s *Server) handleAddDomain(w http.ResponseWriter, r *http.Request) {
 	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
 	s.audit(r, teamID, "domain.added", "app", app.ID, hostname)
 	writeJSON(w, http.StatusCreated, domain)
+}
+
+// isPanelHostname reports whether a hostname is the one the panel answers on.
+//
+// Nothing used to stop a member of any team pointing an app at it. Two Ingresses
+// with the same host in different namespaces is not an error Kubernetes reports:
+// the ingress controller picks one, and which one survives a restart is not
+// something anybody decided. The app would then receive the requests a browser
+// sends to the panel, session cookie included.
+//
+// Both sources are consulted because the panel learns its address in two ways:
+// the installer passes it in the environment, and an operator can set it in
+// Settings afterwards.
+func (s *Server) isPanelHostname(ctx context.Context, hostname string) bool {
+	candidates := []string{s.cfg.PublicURL}
+	if configured, _, err := s.db.GetSetting(ctx, settings.KeyPanelURL); err == nil {
+		candidates = append(candidates, configured)
+	}
+	for _, candidate := range candidates {
+		if host := hostOf(candidate); host != "" && host == hostname {
+			return true
+		}
+	}
+	return false
+}
+
+// hostOf reduces a configured address to a bare lowercase hostname. The value
+// may be a full URL, a host with a port, or a bare host, because three
+// different things write it.
+func hostOf(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	value = strings.TrimPrefix(strings.TrimPrefix(value, "https://"), "http://")
+	value = strings.Split(value, "/")[0]
+	if host, _, err := net.SplitHostPort(value); err == nil {
+		value = host
+	}
+	return strings.TrimSuffix(value, ".")
 }
 
 func (s *Server) handleDeleteDomain(w http.ResponseWriter, r *http.Request) {

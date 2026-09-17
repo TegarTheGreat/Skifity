@@ -126,6 +126,26 @@ for port in 80 443 6443 10250 2379 2380; do
   fi
 done
 echo "ports_in_use=${in_use# }"
+
+# And the UDP ports the pod network needs, which the TCP scan above cannot see.
+#
+# 51820 is the one that bites: a VPS running a WireGuard VPN of its own is
+# holding exactly the port flannel's wireguard-native backend wants, and the
+# failure is a cluster that comes up with every node Ready and no traffic
+# between pods.
+udp_in_use=""
+for port in 8472 51820 51821; do
+  if command -v ss >/dev/null 2>&1; then
+    if ss -lnu 2>/dev/null | awk '{print $5}' | grep -qE "[:.]${port}\$"; then
+      udp_in_use="${udp_in_use} ${port}"
+    fi
+  elif command -v netstat >/dev/null 2>&1; then
+    if netstat -lnu 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}\$"; then
+      udp_in_use="${udp_in_use} ${port}"
+    fi
+  fi
+done
+echo "udp_ports_in_use=${udp_in_use# }"
 `
 
 // InstallKeyScript adds the panel's public key to authorized_keys, once.

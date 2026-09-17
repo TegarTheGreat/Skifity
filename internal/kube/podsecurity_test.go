@@ -214,3 +214,46 @@ func TestDeploymentSecurityContextFollowsTheEnvironment(t *testing.T) {
 		}
 	}
 }
+
+// A one-off command runs in the app's own image, so it has to be confined the
+// same way the app is. An environment lowered so that its app can run an image
+// starting as root, where a migration in that same image was still refused,
+// is a panel saying "your app runs, and you cannot run anything in it".
+func TestARunJobIsConfinedLikeTheAppItRunsIn(t *testing.T) {
+	app := AppSpec{
+		Name: "web", Namespace: "acme-shop-production", Image: "wordpress:6",
+		Port: 80, Replicas: 1, PodSecurity: PodSecurityBaseline,
+	}
+	job, err := BuildRunJob(RunSpec{App: app, Name: "web-run-abc", Command: "wp core update-db"})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+	pod := job.Spec.Template.Spec
+	if pod.SecurityContext.RunAsNonRoot != nil {
+		t.Error("a run in a lowered environment must not demand a non-root image")
+	}
+	if pod.SecurityContext.RunAsUser != nil {
+		t.Errorf("a third-party image was pinned to uid %d", *pod.SecurityContext.RunAsUser)
+	}
+	if caps := pod.Containers[0].SecurityContext.Capabilities; caps != nil {
+		t.Errorf("a root image must keep the runtime's default capabilities; got %+v", caps)
+	}
+
+	// And the strict default is unchanged.
+	app.PodSecurity = ""
+	app.ImageBuiltHere = true
+	job, err = BuildRunJob(RunSpec{App: app, Name: "web-run-abc", Command: "rake db:migrate"})
+	if err != nil {
+		t.Fatalf("BuildRunJob: %v", err)
+	}
+	pod = job.Spec.Template.Spec
+	if pod.SecurityContext.RunAsUser == nil || *pod.SecurityContext.RunAsUser != 1000 {
+		t.Error("a run in an image Skifity built still runs as 1000")
+	}
+	if pod.Containers[0].SecurityContext.Capabilities == nil {
+		t.Error("a run in an image Skifity built still drops every capability")
+	}
+	if pod.AutomountServiceAccountToken == nil || *pod.AutomountServiceAccountToken {
+		t.Error("a run must never be given a Kubernetes API token")
+	}
+}

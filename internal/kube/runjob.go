@@ -100,6 +100,12 @@ func BuildRunJob(s RunSpec) (*batchv1.Job, error) {
 	}
 	podLabels["app.kubernetes.io/name"] = s.Name
 
+	// The same confinement the app itself runs under, and not a second set of
+	// rules. An environment lowered so that its app can run an image that
+	// starts as root, where a migration in that same image was still refused,
+	// is a panel saying "your app runs, and you cannot run anything in it".
+	confinement := s.App.Confinement()
+
 	container := corev1.Container{
 		Name:            "run",
 		Image:           s.App.Image,
@@ -110,10 +116,12 @@ func BuildRunJob(s RunSpec) (*batchv1.Job, error) {
 		Resources: buildResources(s.App),
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr(false),
-			RunAsNonRoot:             ptr(true),
-			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			RunAsNonRoot:             confinement.RunAsNonRoot(),
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
+	}
+	if confinement.DropAllCapabilities() {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
 	}
 	if s.App.EnvFromSecret != "" {
 		// The whole point: the same DATABASE_URL the app runs with.
@@ -137,10 +145,12 @@ func BuildRunJob(s RunSpec) (*batchv1.Job, error) {
 		RestartPolicy: corev1.RestartPolicyNever,
 		Containers:    []corev1.Container{container},
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsNonRoot: ptr(true),
-			RunAsUser:    ptr(int64(1000)),
-			RunAsGroup:   ptr(int64(1000)),
-			FSGroup:      ptr(int64(1000)),
+			RunAsNonRoot: confinement.RunAsNonRoot(),
+			RunAsUser:    confinement.RunAsUser(),
+			RunAsGroup:   confinement.RunAsUser(),
+			// As on the app itself: the group is what makes a mounted volume
+			// writable by a process whose uid nobody here knows.
+			FSGroup: ptr(int64(1000)),
 		},
 		AutomountServiceAccountToken: ptr(false),
 	}

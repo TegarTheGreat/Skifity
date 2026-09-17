@@ -1649,6 +1649,62 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 44 — two things wanting the same name
+
+Asked whether collisions, SSH and the shell were sound. SSH and the shell were.
+Naming was not, in two places, and one of them was a way in.
+
+**Two apps called "web" and only one address.** Every app is given an automatic
+address worked out from its slug and its environment — and from nothing else. So
+two projects each with an app called "web" in Production both wanted
+`web.apps.example.com`. The hostname column is unique, so the second insert was
+refused, and the deployer swallowed that as a log warning: the second app had no
+address at all, and the page showed nothing explaining why. "web", "api" and
+"app" are what people call things, so this was not a corner case but the second
+project. Proved with a test before it was fixed.
+
+The address is now chosen by asking who holds the readable name. Free, or this
+app's own, and it keeps it; somebody else's, and it gets the same name with a
+short suffix derived from the app's id. Derived, not random, because it must be
+the same on every deploy. And an app that took the longer name keeps it when the
+sibling holding the short one is deleted — otherwise a URL would move under the
+user on an unrelated deploy. When there is genuinely no address to be had, the
+deployment log says so, because a person looking at an app with no URL has no
+reason to read the panel's own log and no way to reach it.
+
+**An app could claim the panel's own hostname.** Nothing checked. Two Ingresses
+with the same host in different namespaces is not an error Kubernetes reports:
+the ingress controller picks one, and which one survives a restart is not
+something anybody decided. A member of any team could point an app at the
+panel's address and start receiving the requests a browser sends it, sign-in
+cookie included. It is refused now, against both places the panel learns its own
+address — the installer's environment variable and the Settings value — in every
+shape somebody might type it. A subdomain of it is still somebody's own business
+and still works.
+
+**The confinement fix had not reached the run Job.** Phase 43 changed the
+Deployment and not `BuildRunJob`, which `BuildCronJob` also renders from. So on
+an environment lowered to run an image that starts as root, the app ran and a
+migration in that same image was refused: a panel saying "your app runs, and you
+cannot run anything in it". It uses the app's own confinement now.
+
+**The port scan could not see a UDP socket.** The preflight checked 80, 443,
+6443, 10250, 2379 and 2380 with `ss -lnt`, which lists TCP — and every port the
+pod network uses is UDP. A VPS running a WireGuard VPN of its own holds exactly
+the port flannel's wireguard-native backend wants, and the failure is a cluster
+that comes up with every node Ready and no traffic between pods, which looks
+like anything except a port conflict. 8472, 51820 and 51821 are checked now:
+fatal for the backend this cluster actually uses, with the fix naming the other
+one, and a note rather than a refusal for the backend it does not.
+
+What was read and found sound: the SSH client (modern host key algorithms only,
+trust on first use with the fingerprint stored and a later change refused rather
+than warned about, a handshake deadline of its own, files written through a
+quoted heredoc with a delimiter collision check), `shellsafe` and its use at
+every interpolation in the generated scripts, `runsafe`, and the run Job's own
+isolation — no service account token, no retries, its own labels so a migration
+pod is never counted as an app instance.
+
 ## Phase 43 — the catalogue that could not start
 
 The question was whether autoscaling, deploying and database replicas were

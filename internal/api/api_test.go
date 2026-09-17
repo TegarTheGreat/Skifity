@@ -18,6 +18,7 @@ import (
 	"skifity/internal/config"
 	"skifity/internal/crypto"
 	"skifity/internal/events"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 	"skifity/web"
 )
@@ -687,5 +688,59 @@ func TestTheContentSecurityPolicyAllowsTheScriptThatShips(t *testing.T) {
 	}
 	if strings.Contains(scriptSrc, "'unsafe-inline'") {
 		t.Error("script-src allows 'unsafe-inline', which is what the hashes exist to avoid")
+	}
+}
+
+// Nothing used to stop a member of any team pointing an app at the panel's own
+// hostname. Two Ingresses with the same host in different namespaces is not an
+// error Kubernetes reports: the ingress controller picks one, and which one
+// survives a restart is not something anybody decided. The app would then
+// receive the requests a browser sends to the panel, sign-in cookie included.
+func TestAnAppCannotClaimThePanelsOwnHostname(t *testing.T) {
+	h := newHarness(t)
+	h.api.cfg.PublicURL = "https://panel.example.com"
+	acme := h.newTenant("acme")
+	app := h.app(acme, "web")
+
+	// The panel's address, in each of the shapes somebody might type it.
+	for _, typed := range []string{
+		"panel.example.com",
+		"PANEL.example.com",
+		"https://panel.example.com",
+		"https://panel.example.com/",
+		"panel.example.com.",
+	} {
+		status, body := h.do(acme, "POST", "/api/apps/"+app.ID+"/domains",
+			map[string]any{"hostname": typed})
+		if status != http.StatusConflict {
+			t.Errorf("%q was accepted with %d: %s", typed, status, body)
+		}
+		if !strings.Contains(body, "domain.is_the_panel") {
+			t.Errorf("%q was refused for the wrong reason: %s", typed, body)
+		}
+	}
+
+	// A subdomain of it is somebody's own business and must still work.
+	if status, body := h.do(acme, "POST", "/api/apps/"+app.ID+"/domains",
+		map[string]any{"hostname": "shop.panel.example.com"}); status != http.StatusCreated {
+		t.Errorf("a subdomain was refused with %d: %s", status, body)
+	}
+}
+
+// The panel also learns its address from Settings, which is where an operator
+// puts it when the installer did not.
+func TestTheSettingProtectsThePanelToo(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+	app := h.app(acme, "web")
+
+	if err := h.db.SetSetting(t.Context(), settings.KeyPanelURL,
+		"https://control.example.com", false, ""); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	status, body := h.do(acme, "POST", "/api/apps/"+app.ID+"/domains",
+		map[string]any{"hostname": "control.example.com"})
+	if status != http.StatusConflict {
+		t.Errorf("the configured panel address was claimable: %d %s", status, body)
 	}
 }

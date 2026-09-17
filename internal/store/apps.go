@@ -431,6 +431,28 @@ func (db *DB) CreateDomain(ctx context.Context, d *Domain) error {
 	return nil
 }
 
+// DomainOwner returns the id of the app holding a hostname, or "" when it is
+// free.
+//
+// The panel gives every app an address of its own, worked out from its name.
+// Two projects both calling an app "web" therefore want the same address, and
+// the second one used to lose: the unique constraint refused the row, the
+// deployer logged a warning, and that app simply had no address, with nothing
+// on the page saying why. Asking first is what lets it be given a different one
+// instead.
+func (db *DB) DomainOwner(ctx context.Context, hostname string) (string, error) {
+	var appID string
+	err := db.QueryRowContext(ctx,
+		`SELECT app_id FROM domains WHERE hostname = ?`, hostname).Scan(&appID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("check who holds %q: %w", hostname, err)
+	}
+	return appID, nil
+}
+
 // ListDomains returns an app's domains.
 func (db *DB) ListDomains(ctx context.Context, appID string) ([]Domain, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, app_id, hostname, path, tls, auto, status, status_detail, created_at

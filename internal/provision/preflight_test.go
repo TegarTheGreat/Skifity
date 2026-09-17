@@ -345,3 +345,50 @@ func TestNoMemoryCgroupIsFatalAndSaysWhichLineToChange(t *testing.T) {
 		t.Error("a server whose cgroups could not be read was refused, which is a guess rather than a check")
 	}
 }
+
+// The port scan could not see a UDP socket at all: `ss -lnt` lists TCP, and
+// every port the pod network uses is UDP. A VPS running a WireGuard VPN of its
+// own holds exactly the port flannel's wireguard-native backend wants, and the
+// failure is a cluster that comes up with every node Ready and no traffic
+// between pods.
+func TestAWireGuardVPNOnTheServerIsCaught(t *testing.T) {
+	report := ParsePreflight(realPreflightOutput)
+	report.UDPPortsInUse = []int{51820}
+	problems := Evaluate(report, DefaultRequirements(), false)
+
+	var found *Problem
+	for i := range problems {
+		if problems[i].Check == "udp_port" {
+			found = &problems[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("a VPN holding the pod network's port was not reported")
+	}
+	if !found.Fatal {
+		t.Error("it must stop the server being added, not warn after the fact")
+	}
+	if !strings.Contains(found.Fix, settings.FlannelVXLAN) {
+		t.Errorf("the fix must name the other backend; got %q", found.Fix)
+	}
+
+	// On a cluster that uses vxlan instead, the same VPN is somebody else's
+	// business and must not block anything.
+	vxlan := DefaultRequirements()
+	vxlan.FlannelBackend = settings.FlannelVXLAN
+	problems = Evaluate(report, vxlan, false)
+	for _, p := range problems {
+		if p.Check == "udp_port" && p.Fatal {
+			t.Errorf("a port this cluster does not use stopped the server being added: %q", p.Detail)
+		}
+	}
+}
+
+// And the parser has to read the new line, or the check is a script writing to
+// nobody.
+func TestPreflightReadsTheUDPPorts(t *testing.T) {
+	report := ParsePreflight("os_id=ubuntu\nudp_ports_in_use=8472 51820\n")
+	if len(report.UDPPortsInUse) != 2 {
+		t.Fatalf("parsed %v, want two ports", report.UDPPortsInUse)
+	}
+}

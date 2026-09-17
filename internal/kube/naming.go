@@ -144,10 +144,33 @@ const DefaultAppPort = 8080
 // falls back to a magic DNS service so that a fresh install still gives every app
 // a working URL, which is the difference between "it works" and "now go buy a
 // domain" on the first deploy.
+//
+// discriminator is appended to the label when the plain name is already taken
+// by another app, and is empty the rest of the time. Two projects both calling
+// an app "web" want the same address, which is not a rare case but the usual
+// one — "web", "api" and "app" are what people call things. The caller asks who
+// holds the plain name and passes a short, stable string derived from the app's
+// id when somebody else does, so the second app gets an address of its own
+// rather than none at all.
 func AutoHostname(appSlug, envSlug, wildcardDomain, clusterIP string) string {
+	return autoHostname(appSlug, envSlug, wildcardDomain, clusterIP, "")
+}
+
+// AutoHostnameFor is AutoHostname with a discriminator for an app whose
+// preferred name is taken. It is derived from the app id, so it is the same on
+// every deploy: an address that changed under the user would be worse than a
+// shared one.
+func AutoHostnameFor(appSlug, envSlug, wildcardDomain, clusterIP, appID string) string {
+	return autoHostname(appSlug, envSlug, wildcardDomain, clusterIP, shortHash(appID, 5))
+}
+
+func autoHostname(appSlug, envSlug, wildcardDomain, clusterIP, discriminator string) string {
 	label := appSlug
 	if envSlug != "" && envSlug != "production" {
 		label = appSlug + "-" + envSlug
+	}
+	if discriminator != "" {
+		label += "-" + discriminator
 	}
 	if len(label) > maxLabelLength {
 		label = strings.TrimRight(label[:maxLabelLength-7], "-") + "-" + shortHash(label, 6)

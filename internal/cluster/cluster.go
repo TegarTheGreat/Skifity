@@ -226,7 +226,41 @@ func (c *Cluster) EnsureAutoDomain(ctx context.Context, app store.App, env store
 	if err != nil {
 		return err
 	}
-	hostname := kube.AutoHostname(app.Slug, env.Slug, wildcard, c.clusterAddress(ctx, teamID))
+	address := c.clusterAddress(ctx, teamID)
+	tls := wildcard != ""
+
+	domains, err := c.db.ListDomains(ctx, app.ID)
+	if err != nil {
+		return err
+	}
+	var current *store.Domain
+	for i := range domains {
+		if domains[i].Auto {
+			current = &domains[i]
+			break
+		}
+	}
+
+	// An address this app already has and could still have been given is kept,
+	// whichever of the two shapes it is. Otherwise an app that took the longer
+	// name because a sibling held the short one would silently move to the
+	// short one the day that sibling was deleted — a URL changing under the
+	// user on an unrelated deploy.
+	if current != nil && current.TLS == tls {
+		for _, candidate := range []string{
+			kube.AutoHostname(app.Slug, env.Slug, wildcard, address),
+			kube.AutoHostnameFor(app.Slug, env.Slug, wildcard, address, app.ID),
+		} {
+			if candidate != "" && current.Hostname == candidate {
+				return nil
+			}
+		}
+	}
+
+	hostname, err := c.freeAutoHostname(ctx, app, env, wildcard, address)
+	if err != nil {
+		return err
+	}
 	if hostname == "" {
 		// No wildcard domain and no address to build an sslip.io name from.
 		// Saying nothing is right: a hostname that resolves nowhere is worse
@@ -234,22 +268,11 @@ func (c *Cluster) EnsureAutoDomain(ctx context.Context, app store.App, env store
 		c.log.Debug("no automatic domain for this app yet", "app", app.ID)
 		return nil
 	}
-	tls := wildcard != ""
 
-	domains, err := c.db.ListDomains(ctx, app.ID)
-	if err != nil {
-		return err
-	}
-	for _, domain := range domains {
-		if !domain.Auto {
-			continue
-		}
-		if domain.Hostname == hostname && domain.TLS == tls {
-			return nil
-		}
+	if current != nil {
 		c.log.Info("moving an app's automatic domain",
-			"app", app.ID, "from", domain.Hostname, "to", hostname)
-		return c.db.SetAutoDomain(ctx, domain.ID, hostname, tls)
+			"app", app.ID, "from", current.Hostname, "to", hostname)
+		return c.db.SetAutoDomain(ctx, current.ID, hostname, tls)
 	}
 
 	domain := store.Domain{AppID: app.ID, Hostname: hostname, Path: "/", TLS: tls, Auto: true}
@@ -263,6 +286,47 @@ func (c *Cluster) EnsureAutoDomain(ctx context.Context, app store.App, env store
 	}
 	c.log.Info("gave an app its automatic domain", "app", app.ID, "hostname", hostname)
 	return nil
+}
+
+// freeAutoHostname is the address this app should have: the readable one when
+// nobody else holds it, and one with a short suffix when somebody does.
+//
+// Two projects both calling an app "web" is the usual case rather than a rare
+// one, and it used to mean the second app had no address at all: the unique
+// constraint refused the row and the deployer logged a warning nobody reads.
+//
+// The suffix comes from the app's id, so it is the same on every deploy. An
+// address that changed under the user each time they deployed would be worse
+// than not having one.
+func (c *Cluster) freeAutoHostname(ctx context.Context, app store.App, env store.Environment, wildcard, address string) (string, error) {
+	preferred := kube.AutoHostname(app.Slug, env.Slug, wildcard, address)
+	if preferred == "" {
+		return "", nil
+	}
+	owner, err := c.db.DomainOwner(ctx, preferred)
+	if err != nil {
+		return "", err
+	}
+	if owner == "" || owner == app.ID {
+		return preferred, nil
+	}
+
+	fallback := kube.AutoHostnameFor(app.Slug, env.Slug, wildcard, address, app.ID)
+	owner, err = c.db.DomainOwner(ctx, fallback)
+	if err != nil {
+		return "", err
+	}
+	if owner == "" || owner == app.ID {
+		c.log.Info("an app's preferred address was taken, so it gets a longer one",
+			"app", app.ID, "preferred", preferred, "hostname", fallback)
+		return fallback, nil
+	}
+	// Both taken means the suffix collided with another app's suffix, which is
+	// a 1-in-a-million sha256 prefix clash. Saying so beats looping.
+	return "", errdoc.New("domain.no_free_address", "This app could not be given an address").
+		WithCause("Both %s and %s are already used by other apps.", preferred, fallback).
+		WithImpact("The app is deployed and has no automatic URL. A domain of your own still works.").
+		WithFix("Rename the app, or add a domain of your own under the app's Domains tab.")
 }
 
 // clusterAddress is the public IP apps are reached on.

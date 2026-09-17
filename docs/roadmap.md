@@ -70,6 +70,23 @@ hears, which were hardcoded English in a panel shipping five languages.
 
 ---
 
+## Phase 17 — A second pass over tenant isolation — *done*
+
+Every route proved to reach the store through an authorization helper, every
+second id in a URL checked against the first, and the three other ways into the
+same API — the CLI, the MCP server and the Git webhook — traced to the same
+checks. Three things came out of it, in `docs/progress.md`.
+
+The largest was not an authorization gap at all but an address one: two settings
+hold somewhere the panel's own process then makes a request to, and nothing
+stopped that being the cloud metadata service. `internal/netguard` refuses it at
+connection time.
+
+The lasting part is that the api package now has tests. "Authorization lives in
+one place" was true and unenforced, which is a different thing from being safe.
+
+---
+
 ## What is next
 
 In the order it matters.
@@ -82,10 +99,10 @@ In the order it matters.
 3. **Measure k3s's own footprint.** The panel's is measured, in
    `docs/performance.md`. The cluster's is not, and "runs on a 2 GB VPS" is a
    claim about the pair.
-4. **A second pair of eyes on the security model.** The isolation is written
-   down in `docs/architecture.md` and tested against a fake cluster. Tenant
+4. **A second pair of eyes on the security model.** Phase 17 below was the
+   first pass and found three things. It was still the same eyes. Tenant
    isolation is the one class of bug where being wrong is not recoverable, and
-   it deserves somebody who did not write it.
+   it deserves somebody who did not write any of this.
 
 ## Not on this roadmap, and why
 

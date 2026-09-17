@@ -349,6 +349,39 @@ built.
   English in a panel shipping five languages, and the i18n check now fails the
   build on the next one.
 
+### A second pass over tenant isolation
+
+The roadmap put this next because it is the one class of bug where being wrong
+is not recoverable. Every route was traced to its authorization helper, every
+second id in a URL checked against the first, and the CLI, the MCP server and
+the Git webhook followed back to the same checks — the first two go through the
+HTTP API with the caller's own token, so there is no second surface to get
+wrong, and the webhook skips any app whose team is not the connection's.
+
+Three things came out of it.
+
+* **The panel could be pointed at the cloud metadata service.** A Git
+  connection's base URL and a notification channel's webhook are both settings
+  holding an address the panel's own process requests. The webhook path echoed
+  part of the response back in its error, which turns a test message into a
+  read. `internal/netguard` refuses link-local, loopback, the unspecified
+  address and multicast at connection time, on the resolved address rather than
+  the hostname. Private ranges stay allowed: a self-hosted Gitea on 10.0.0.5 is
+  the ordinary case here, not the attack.
+* **Unlinking a database authorized the database and not the app.** Linking
+  checks both and says so in a comment; unlinking checked one. It removed no
+  variable it did not own, and did re-apply that app's configuration to the
+  cluster.
+* **The api package had no tests.** "Authorization lives in one place" was true
+  and unenforced. Six now run against the real router with a real database and
+  keyring: every shape of id one team can ask another for, the token's team
+  binding, read-only scopes, what is open without credentials, what is
+  administrator-only.
+
+What did not turn anything up: the authorize helpers themselves, the SSE topic
+authorization, the encryption contexts, secret disclosure through the variables
+and credentials endpoints, and the webhook's team scoping.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

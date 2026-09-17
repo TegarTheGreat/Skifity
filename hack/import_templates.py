@@ -11,6 +11,9 @@ afternoon of copying.
 """
 import base64, json, re, sys, yaml
 
+sys.path.insert(0, "hack")
+from import_multi import declared_port, fqdn_marker, known_port, self_check_port
+
 DB_IMAGE = re.compile(r'\b(postgres|postgis|pgvector|mysql|mariadb|redis|valkey|keydb|mongo)\b', re.I)
 ENGINE = [("postgres", ("postgres", "postgis", "pgvector")),
           ("mysql", ("mysql", "mariadb")),
@@ -103,9 +106,19 @@ def convert(key, template, resolved, compose):
     if not pinned:
         return None, "no verified image tag"
 
-    port = template.get("port")
+    # Coolify's own metadata names the port for most templates. Where it does
+    # not, the compose file still says so — in a domain marker, an expose entry,
+    # or the healthcheck the service runs against itself — and reading that is
+    # not the same as guessing.
+    port = (int(template.get("port") or 0) or fqdn_marker(name, body)[1]
+            or declared_port(body) or known_port(body) or self_check_port(body))
     if not port:
         return None, "no port"
+    if not 1 <= port <= 65535:
+        # Coolify's metadata says healthchecks listens on 80000. It does not:
+        # there is no such port. A number out of range is a typo upstream, not
+        # a port to carry into a manifest.
+        return None, f"port {port} is not a port"
 
     slug = re.sub(r'[^a-z0-9-]+', '-', key.lower()).strip("-")
     out = {
@@ -135,7 +148,9 @@ def convert(key, template, resolved, compose):
         engine = engine_of(str(databases[first].get("image", "")))
         out["databases"] = [{
             "name": (slug + "-db")[:40], "engine": engine, "storage_gb": 5,
-            "link_to": out["services"][0]["name"], "var_name": "DATABASE_URL",
+            # A list: a template may install several apps that share it, and a
+            # single name silently linked only the first.
+            "link_to": [out["services"][0]["name"]], "var_name": "DATABASE_URL",
         }]
     return out, "ok"
 

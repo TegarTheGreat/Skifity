@@ -54,7 +54,6 @@ databases:
   link_to:
   - argilla
   - worker
-  - elasticsearch
   var_name: DATABASE_URL
 notes: In the original this stack shares /var/lib/argilla between argilla and worker. Skifity gives each
   app storage of its own, so those are separate directories here. If the apps need to see the same files,

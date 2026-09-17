@@ -54,22 +54,55 @@ def engine_of(image):
 # Sidekiq the web app's port produces a readiness check against something that
 # never answers, and an app that is "starting" forever.
 WORKER_NAME = re.compile(
-    r'(^|[-_])(worker|workers|sidekiq|celery|beat|scheduler|cron|queue|consumer|daemon|'
-    r'runner|supervisor|jobs?)([-_]|$)', re.I)
+    r'(^|[-_])(workers?|sidekiq|celery|beat|scheduler|cron|queue|consumer|daemon|'
+    r'runners?|supervisor|jobs?)([-_]|$)', re.I)
 
 
-def fqdn_marker(name, body):
-    """The SERVICE_FQDN marker for *this* service, if the source set one.
+MARKER = re.compile(r'SERVICE_FQDN_([A-Z0-9_]+?)(?:_(\d+))?\b')
 
-    Coolify writes SERVICE_FQDN_<SERVICE>_<PORT> into the environment of the
-    service that gets a domain. Matching the service name matters: a stack often
-    shares one environment block, so looking only for the prefix marked a
-    Sidekiq worker as the public web app.
+
+def markers_in(body):
+    """Every SERVICE_FQDN marker written into one service's environment."""
+    found = []
+    for match in MARKER.finditer(str(body.get("environment") or "")):
+        found.append((match.group(1), int(match.group(2)) if match.group(2) else 0))
+    return found
+
+
+def marker_owners(services, names):
+    """How many services carry each marker.
+
+    A marker names the service that gets a domain, and the port it answers on:
+    SERVICE_FQDN_CWA_8083 is the whole declaration. The first version of this
+    insisted the marker's name equal the service's, which is true often enough
+    to look right and is not the rule — calibre-web-automated carries CWA, and
+    the stack was dropped for having no port when the port was written down.
+
+    What the name check was really defending against is a shared environment
+    block: a web app and its Sidekiq declared with one YAML anchor both carry
+    the web app's marker, and taking it at face value puts a worker on a port
+    it never listens on. That case is visible in the data — the identical
+    marker appears under more than one service — so count them and fall back to
+    the name only there.
     """
+    count = {}
+    for name in names:
+        for marker in set(markers_in(services[name])):
+            count[marker] = count.get(marker, 0) + 1
+    return count
+
+
+def fqdn_marker(name, body, shared=None):
+    """The marker that belongs to this service: (public, port)."""
     wanted = re.sub(r'[^A-Z0-9]', "_", name.upper())
-    for match in re.finditer(r'SERVICE_FQDN_([A-Z0-9_]+?)(?:_(\d+))?\b', str(body.get("environment") or "")):
-        if match.group(1) == wanted:
-            return True, int(match.group(2)) if match.group(2) else 0
+    found = markers_in(body)
+    for label, port in found:
+        if label == wanted:
+            return True, port
+    for label, port in found:
+        if shared is not None and shared.get((label, port), 1) > 1:
+            continue  # one environment block, several services: not a declaration
+        return True, port
     return False, 0
 
 
@@ -92,7 +125,61 @@ KNOWN_PORT = {
     "opensearchproject/opensearch": 9200,
     "qdrant/qdrant": 6333,
     "typesense/typesense": 8108,
+    "memcached": 11211,
+    "guacamole/guacd": 4822,
+    "ollama/ollama": 11434,
+    "ghcr.io/browserless/chrome": 3000,
+    "elastic/elasticsearch": 9200,
+    "kuzzleio/elasticsearch": 9200,
+    "percona/percona-server-mongodb": 27017,
+    # ZooKeeper serves clients on 2181. Its healthcheck talks to the admin
+    # server on 8080, which answers `ruok` and nothing a peer wants — reading
+    # the healthcheck gave SigNoz a ZooKeeper that ClickHouse could not reach.
+    "signoz/zookeeper": 2181,
+    "zookeeper": 2181,
+    "bitnami/zookeeper": 2181,
 }
+
+
+def self_check_port(body):
+    """The port this service's own healthcheck talks to.
+
+    `curl -fs http://localhost:8083` is the compose file stating, in the
+    service's own words, where it listens. It is not an inference about the
+    image; it is a line in the file that only makes sense if that port is open.
+    """
+    text = str(body.get("healthcheck") or "")
+    for match in re.finditer(r'(?:localhost|127\.0\.0\.1|0\.0\.0\.0)[:/](\d{2,5})\b', text):
+        port = int(match.group(1))
+        if 1 <= port <= 65535:
+            return port
+    return 0
+
+
+def peer_port(name, body, services):
+    """The port another service in the same stack says it reaches this one on.
+
+    Compose files wire themselves up in the open: changedetection carries
+    `PLAYWRIGHT_DRIVER_URL=ws://browser-sockpuppet-chrome:3000`, and Kibana
+    carries `ELASTICSEARCH_HOSTS=http://elasticsearch:9200`. Each names a
+    service and the port it answers on. Matching the host against the service's
+    own name — or the hostname it sets — is what keeps this from being the
+    environment-scanning that once handed n8n Postgres's port: a bare
+    `DB_PORT=5432` names nothing, and is ignored.
+    """
+    aliases = {name}
+    if body.get("hostname"):
+        aliases.add(str(body["hostname"]))
+    if body.get("container_name"):
+        aliases.add(str(body["container_name"]))
+    pattern = re.compile(r'(?:^|[/@\s"\'(])(' + "|".join(re.escape(a) for a in sorted(aliases))
+                         + r'):(\d{2,5})(?![\d.])')
+    for other, peer in services.items():
+        for match in pattern.finditer(str(peer.get("environment") or "")):
+            port = int(match.group(2))
+            if 1 <= port <= 65535:
+                return port
+    return 0
 
 
 def declared_port(body, image_is_unique=True):
@@ -107,13 +194,30 @@ def declared_port(body, image_is_unique=True):
         if digits:
             return int(digits)
     for entry in body.get("ports") or []:
-        text = str(entry).split("/")[0]
-        parts = text.split(":")
+        text = str(entry)
+        if text.endswith("/udp"):
+            # Skifity publishes an app over an HTTP ingress. A UDP port is a
+            # game server's, and giving Palworld an ingress on 8211 produces a
+            # domain that will never answer.
+            continue
+        parts = text.split("/")[0].split(":")
         if parts and parts[-1].isdigit():
             return int(parts[-1])
     # The table is about an image, so it can only answer for a service that is
     # the only one running that image. seaweedfs runs a master and an admin from
     # one image on different ports, and answering 8333 for both was wrong twice.
+    if not image_is_unique:
+        return 0
+    return 0
+
+
+def known_port(body, image_is_unique=True):
+    """What the image itself publishes, for images whose port is a fact.
+
+    The table is about an image, so it can only answer for a service that is
+    the only one running that image. seaweedfs runs a master and an admin from
+    one image on different ports, and answering 8333 for both was wrong twice.
+    """
     if not image_is_unique:
         return 0
     return KNOWN_PORT.get((body.get("image") or "").split(":")[0], 0)
@@ -175,7 +279,7 @@ def convert(key, template, compose, pinned):
     oneshot = [n for n in apps
                if ONESHOT.search(n) or str(services[n].get("restart", "")).lower() in ("no", '"no"')]
     real = [n for n in apps if n not in oneshot]
-    if not 2 <= len(real) <= MAX_SERVICES:
+    if not 1 <= len(real) <= MAX_SERVICES:
         return None, f"{len(real)} long-running services"
 
     # How many services share each image, so the table above knows when it can
@@ -185,15 +289,36 @@ def convert(key, template, compose, pinned):
         base = (services[name].get("image") or "").split(":")[0]
         image_count[base] = image_count.get(base, 0) + 1
 
+    shared_markers = marker_owners(services, real)
+    marked_public = [n for n in real
+                     if fqdn_marker(n, services[n], shared_markers)[0]
+                     and not WORKER_NAME.search(n)]
+
     out_services, names = [], set()
     for name in real:
         body = services[name]
         image = pinned.get(f"{key}::{name}") or pinned.get(body.get("image", ""))
         if not image:
             return None, f"no verified image for {name}"
-        public, marked_port = fqdn_marker(name, body)
+        public, marked_port = fqdn_marker(name, body, shared_markers)
         unique = image_count.get((body.get("image") or "").split(":")[0], 0) == 1
-        port = marked_port or declared_port(body, unique)
+        # In order of how directly the source says it: the domain marker, an
+        # explicit ports/expose entry, the port a peer dials, the image's own
+        # published port, and last the port its healthcheck talks to.
+        port = (marked_port or declared_port(body, unique)
+                or peer_port(name, body, services)
+                or known_port(body, unique) or self_check_port(body))
+        if WORKER_NAME.search(name) and not (marked_port or declared_port(body, unique)):
+            # A worker's readiness probe would be pointed at a port nothing is
+            # listening on. A healthcheck that shells out, or a peer reference
+            # that names the web app, is not this service declaring a port.
+            port, public = 0, False
+        if port == 0 and public and len(marked_public) == 1:
+            # The source says this service is the one with a domain, and says
+            # separately which port the template publishes. Both come from the
+            # file; neither is inferred. Only when it is the only public one,
+            # or the number would be right for at most one of them.
+            port = int(template.get("port") or 0)
         if not public and port == 0 and WORKER_NAME.search(name):
             pass  # a worker: no port, and none invented
         elif port == 0:
@@ -242,7 +367,14 @@ def convert(key, template, compose, pinned):
         "services": out_services,
     }
 
-    if databases:
+    infrastructure = set()
+    for name in real:
+        base = (services[name].get("image") or "").split(":")[0]
+        if base in KNOWN_PORT or DB_IMAGE.search(base):
+            infrastructure.add(slug(name))
+    linkable = {s["name"] for s in out_services} - infrastructure
+
+    if databases and linkable:
         first = list(databases)[0]
         out["databases"] = [{
             "name": (slug(key) + "-db")[:40],
@@ -251,7 +383,12 @@ def convert(key, template, compose, pinned):
             # Every app in the stack, not just the first: a web app and its
             # worker share one database, and linking only one of them leaves
             # the other without the variable it cannot run without.
-            "link_to": [s["name"] for s in out_services],
+            #
+            # Not the datastores and sidecars, though. ClickHouse, MinIO,
+            # Meilisearch and a headless Chrome are not applications that read a
+            # DATABASE_URL, and handing one to ClickHouse says this stack's
+            # analytics store depends on its Postgres, which is not true.
+            "link_to": [s["name"] for s in out_services if s["name"] in linkable],
             "var_name": "DATABASE_URL",
         }]
 
@@ -293,7 +430,46 @@ def convert(key, template, compose, pinned):
     return out, "ok"
 
 
+def align_versions(key, compose, pinned):
+    """Give services that shared one version variable one version again.
+
+    Immich's compose writes ${IMMICH_VERSION:-release} as the tag of both the
+    server and the machine-learning image: upstream requires the two to match,
+    and the file says so by using the same variable twice. Resolving each on its
+    own produced a v1.132.3 server beside a v1.106.4 model runner — two tags
+    that exist, one stack that does not work. Take the newest tag any member
+    resolved to and use it for all of them, but only after the registry confirms
+    every repository has it.
+    """
+    import resolve_tags
+
+    groups = {}
+    for name, body in (compose.get("services") or {}).items():
+        ref = str(body.get("image") or "")
+        _, _, tag = ref.rpartition(":")
+        if "$" not in tag or "/" in tag:
+            continue
+        groups.setdefault(tag, []).append(name)
+
+    for tag, names in groups.items():
+        entries = [(n, pinned.get(f"{key}::{n}")) for n in names]
+        have = [(n, v) for n, v in entries if v]
+        if len(have) < 2 or len(have) != len(entries):
+            continue
+        picked = sorted({v.rpartition(":")[2] for _, v in have},
+                        key=lambda t: [int(p) if p.isdigit() else 0
+                                       for p in re.findall(r'\d+', t)] or [0])[-1]
+        aligned = {n: v.rpartition(":")[0] + ":" + picked for n, v in have}
+        if all(resolve_tags.exists(image) for image in aligned.values()):
+            for name, image in aligned.items():
+                pinned[f"{key}::{name}"] = image
+        else:
+            print(f"  {key}: {tag} does not resolve to one tag all of "
+                  f"{', '.join(names)} have", file=sys.stderr)
+
+
 if __name__ == "__main__":
+    sys.path.insert(0, "hack")
     coolify = json.load(open("/tmp/tpl/coolify.json"))
     pinned = {}
     for source in ("/tmp/tpl/multi-resolved.json",):
@@ -309,6 +485,7 @@ if __name__ == "__main__":
             compose = yaml.safe_load(base64.b64decode(template["compose"]).decode())
         except Exception:
             continue
+        align_versions(key, compose, pinned)
         out, why = convert(key, template, compose, pinned)
         if out:
             made[key] = out

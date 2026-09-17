@@ -754,6 +754,90 @@ services where getting startup order and shared state right without ever running
 them is not a bet worth making; the rest have an image whose version could not be
 verified or a service nothing says the port of.
 
+## Phase 25 — the rest of the catalogue, and five resolver bugs
+
+Seven multi-service stacks out of seventy-two, and 44 single-service templates
+dropped for an unverifiable image, both looked like the source being awkward.
+Most of it was this code being wrong, and each bug read in the log as somebody
+else's fault.
+
+**A tag can contain a colon.** `${IMMICH_VERSION:-release}` does, so splitting
+the reference on the last colon produced the repository name
+`ghcr.io/immich-app/immich-server:${IMMICH_VERSION`, and every registry answered
+403. In the log that is the registry refusing us. It was eleven images, Immich,
+Outline, Ente and Campfire among them.
+
+**A registry's token comes from its own challenge.** ghcr.io and codeberg.org
+were hardcoded and everything else — flipt, rocket.chat, weaviate, gcr.io,
+outline, the Docker Hub mirrors — read as "unauthorized", which is what a
+registry says when nobody asked it for a token. Reading `WWW-Authenticate` and
+asking the realm it names works everywhere.
+
+**A 429 is not "no".** Several vanity registries are pull-through caches in front
+of Docker Hub and share its anonymous rate limit. Treating the rate limit as "the
+image does not exist" dropped templates whose images were fine. It now backs off
+and retries, and a question the registry never answered is recorded as
+unverified rather than as absent.
+
+**A tags listing is paginated.** Reading the first page picked
+immich-machine-learning v1.132.3's server beside a v1.106.4 model runner — both
+tags exist, the stack does not work, and upstream requires the two to match.
+`Link` is followed now, and where a Compose file uses one version variable for
+several images, the resolved tags are aligned and re-verified before any of them
+is used.
+
+**Not every project ships semver.** GitLab ships `19.1.8-ce.0`, SearXNG and
+Excalidraw ship dates, DokuWiki ships `version-2026-07-14c`. Each names a build
+exactly; insisting on semver threw all of them away. The fallback only applies
+where the listing is newest-first, which the Hub API promises and a v2
+`tags/list` does not, and it refuses an architecture (`linux-arm-v7`), a runtime
+(`php8.3-apache`), a branch build (`…-chore-dependabot-security-36cd703`), a
+toolchain variant (`3.8-python3.14-conda`) and anything longer than four parts.
+Cockpit publishes `core-` and `pro-` from one repository, so the original tag's
+prefix is kept as well.
+
+And the converter stopped needing a port to be in `ports:` to count as written
+down:
+
+* **A `SERVICE_FQDN` marker does not have to match the service name.** Coolify
+  writes `SERVICE_FQDN_CWA_8083` on a service called `calibre-web-automated`.
+  Requiring the names to match was really defending against a shared environment
+  block — a web app and its Sidekiq declared with one YAML anchor carry the same
+  marker — and that case is visible in the data, so it is counted instead.
+* **A healthcheck against localhost states a port.** `curl -fs
+  http://localhost:8083` only makes sense if 8083 is open.
+* **A peer states a port.** `PLAYWRIGHT_DRIVER_URL=ws://browser-sockpuppet-chrome:3000`
+  and `ELASTICSEARCH_HOSTS=http://elasticsearch:9200` each name a service and the
+  port it answers on. Matching the host against the service's own name is what
+  keeps this from being the environment-scanning that once gave n8n Postgres's
+  port: a bare `DB_PORT=5432` names nothing and is ignored.
+
+A peer beats a healthcheck, because the peer's port is the one other apps have to
+reach: ZooKeeper's healthcheck talks to its admin server on 8080, which answers
+`ruok` and nothing ClickHouse wants.
+
+**279 templates**, up from 230 — 37 of them multi-service, up from seven. Three
+more fixes to the output rather than the converter:
+
+* **A worker keeps no port it did not declare.** A healthcheck that shells out,
+  or a peer reference naming the web app, is not a worker declaring a port, and
+  `openpanel-worker` was public on 3000 before this. A test now refuses any
+  service named for a worker that is public.
+* **A datastore is not linked to the database.** ClickHouse, MinIO, Meilisearch
+  and a headless Chrome do not read a `DATABASE_URL`, and handing one to
+  ClickHouse says the analytics store depends on the Postgres, which is not true.
+* **A UDP port is not an ingress, and 80000 is not a port.** Palworld publishes
+  `8211/udp` and Coolify's metadata says healthchecks listens on 80000. Both
+  would have produced a domain that never answers.
+
+What remains dropped, and why it stays dropped: 8 stacks need the Docker socket,
+which cannot run under a restricted pod security policy; 4 are five to
+twenty-three services; 23 single-service and 20 multi-service images have no tag
+this could verify — a repository that 401s anonymously, a registry that only
+rate-limits, or a project that publishes nothing but `latest`. Shipping any of
+them means guessing, and the whole point of the previous phase was that guessing
+is worse than dropping.
+
 ## Next tasks
 
 1. Run the installer end to end on a real Ubuntu server and measure idle memory.

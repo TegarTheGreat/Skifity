@@ -53,7 +53,16 @@ answers, and an app that is "starting" forever.
 
 `link_to` is a list because the web app and the worker usually share one
 database, and linking only the first leaves the other without the variable it
-cannot run without.
+cannot run without. List the applications, not the datastores: a ClickHouse, a
+MinIO or a Meilisearch in the same template does not read a connection string
+for the Postgres next to it.
+
+A port has to come from somewhere. Where a template was converted, the order was:
+the source's own domain marker, an `expose` or `ports` entry, the port a sibling
+service dials (`ELASTICSEARCH_HOSTS=http://elasticsearch:9200` says one), a short
+table of ports that are documented facts about an image, and last the port the
+service's healthcheck talks to. Writing one because it is the usual one for that
+kind of app is how a search index ends up with a dashboard's port.
 
 One thing does not carry over: a volume shared between services. A Compose
 volume is shared; a Skifity volume belongs to one app and is read-write-once, so
@@ -67,7 +76,13 @@ run different software, a rollback would restore a tag rather than the thing
 that worked, and an upstream release would arrive on a restart nobody asked for.
 Use a series tag where upstream publishes one — `1`, `5-alpine`, `6-apache` —
 and an exact version where it does not. A test refuses anything ending in
-`latest`, and the image must exist: check before you commit.
+`latest`, `main`, `master`, `stable`, `edge`, `release` or `dev`, and the image
+must exist: check before you commit.
+
+Not every project ships semver, and that is fine. `19.1.8-ce.0`,
+`2026.9.17-c49771992` and `version-2026-07-14c` each name one build exactly. An
+architecture (`linux-arm-v7`), a runtime (`php8.3-apache`) or a build of
+somebody's branch is not a version of the application, however precise it looks.
 
 **Do not wire the database by hand.** A Compose file points services at each
 other by name (`DB_HOST=mariadb`). There is no sibling container here — the
@@ -81,7 +96,8 @@ crash-loop with a hostname nobody recognises. A test refuses those too.
 description and an https website, at least one service somebody can open, ports
 in range, requests that do not exceed limits, variable names a container can
 carry, absolute mount paths, every `link_to` naming a real service, every engine
-one Skifity provisions, no floating tags, and no database wiring.
+one Skifity provisions, no floating tags, no service named for a worker that is
+public, and no database wiring.
 
 Run `make check` before opening a pull request. A template that fails is not a
 template.

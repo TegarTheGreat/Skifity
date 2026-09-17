@@ -113,6 +113,25 @@ func TestEveryServiceCouldRun(t *testing.T) {
 	}
 }
 
+// TestNoWorkerIsTreatedAsAWebApp: a queue consumer, a Sidekiq, a scheduler —
+// nothing about it answers HTTP. Giving one a domain produces a certificate, an
+// ingress rule and a readiness probe pointed at a port that will never open,
+// and the app stays "starting" until somebody reads the events. The converter
+// that built this catalogue marked one worker public twice before this existed.
+func TestNoWorkerIsTreatedAsAWebApp(t *testing.T) {
+	worker := regexp.MustCompile(
+		`(^|[-_])(workers?|sidekiq|celery|beat|scheduler|cron|queue|consumer|` +
+			`runners?|supervisor|jobs?)([-_]|$)`)
+	for _, tpl := range All() {
+		for _, svc := range tpl.Services {
+			if worker.MatchString(svc.Name) && svc.Public {
+				t.Errorf("%s/%s is named for a worker and is public; a queue consumer has no page to open",
+					tpl.ID, svc.Name)
+			}
+		}
+	}
+}
+
 // TestEveryDatabaseReachesTheServiceItIsFor: a LinkTo that names no service is
 // the worst kind of mistake here, because everything appears to work. The
 // database is created, the link is skipped, and the app starts without the one
@@ -154,7 +173,12 @@ func TestEveryDatabaseReachesTheServiceItIsFor(t *testing.T) {
 }
 
 // floatingTag matches a tag that means "whatever is newest".
-var floatingTag = regexp.MustCompile(`(^|-)latest$`)
+//
+// `latest` is only the most honest spelling of it. `main`, `main-stable`,
+// `16-master`, `release` and `postgresql-edge` all move under the app, and the
+// first version of this caught none of them: litellm reached the catalogue on
+// `main-stable`, which is a branch with a nicer name.
+var floatingTag = regexp.MustCompile(`(^|[-_.])(latest|main|master|stable|edge|nightly|release|dev)$`)
 
 // TestNoTemplateRunsWhateverIsNewest: an image on a floating tag is not a
 // version. Two deploys of the same app run different software, a rollback

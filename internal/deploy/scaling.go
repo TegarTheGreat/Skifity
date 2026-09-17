@@ -82,6 +82,25 @@ func (d *Deployer) ScalingReadiness(ctx context.Context, appID string) ([]api.Sc
 		})
 	}
 
+	// Autoscaling on CPU or memory reads the metrics API. Without it the HPA
+	// sits at `<unknown>/70%` forever: the app never scales up under load and
+	// never scales back down, and neither Kubernetes nor the panel says why.
+	// This is the failure this whole checker exists for — something that looks
+	// configured and does nothing.
+	if app.Autoscale && !app.ScaleToZero && (app.CPUTarget > 0 || app.MemoryTarget > 0) &&
+		d.cluster != nil && !d.cluster.Client().MetricsAvailable(ctx) {
+		findings = append(findings, api.ScalingFinding{
+			Code:     "no_metrics",
+			Severity: "error",
+			Title:    "The cluster is not reporting CPU and memory",
+			Detail: "Autoscaling on a CPU or memory target reads those numbers from metrics-server, " +
+				"and nothing is answering. The app will stay at its minimum number of instances " +
+				"however busy it gets, and nothing will say so.",
+			Fix: "k3s installs metrics-server by default. Check that it is running in kube-system, " +
+				"or set a fixed number of instances until it is.",
+		})
+	}
+
 	// A single instance with no autoscaling has no redundancy at all.
 	if app.Replicas == 1 && !app.Autoscale {
 		findings = append(findings, api.ScalingFinding{

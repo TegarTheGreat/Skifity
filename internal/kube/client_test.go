@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -641,5 +642,45 @@ func TestQuotaUsageIsReadableWithoutParsingKubernetes(t *testing.T) {
 	}
 	if none.Found {
 		t.Error("a namespace with no quota reported one")
+	}
+}
+
+// TestMetricsAvailableSaysNoWhenNothingIsServingThem.
+//
+// A HorizontalPodAutoscaler on a CPU or memory target reads the metrics API.
+// Without it the HPA sits at `<unknown>/70%` and never scales, which is the
+// most common reason autoscaling silently does nothing — so the panel has to be
+// able to tell the difference and say so.
+func TestMetricsAvailableSaysNoWhenNothingIsServingThem(t *testing.T) {
+	if (&Client{}).MetricsAvailable(t.Context()) {
+		t.Error("a client with no metrics clientset reported metrics available")
+	}
+
+	empty := &Client{metrics: metricsfake.NewSimpleClientset()}
+	if empty.MetricsAvailable(t.Context()) {
+		t.Error("a metrics API with no nodes in it reported metrics available")
+	}
+
+	// The generated metrics fake serves no seeded object through List — the
+	// API is read-only, so its tracker has nothing to read back — and a
+	// reactor is the supported way to say what the API answers.
+	answering := metricsfake.NewSimpleClientset()
+	answering.PrependReactor("list", "nodes", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, &metricsv1beta1.NodeMetricsList{
+			Items: []metricsv1beta1.NodeMetrics{{ObjectMeta: metav1.ObjectMeta{Name: "node-1"}}},
+		}, nil
+	})
+	if !(&Client{metrics: answering}).MetricsAvailable(t.Context()) {
+		t.Error("a metrics API reporting a node was read as unavailable")
+	}
+
+	// An error from the API is "no metrics", not a crash: metrics-server can be
+	// there and not ready.
+	refusing := metricsfake.NewSimpleClientset()
+	refusing.PrependReactor("list", "nodes", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("the server is currently unable to handle the request")
+	})
+	if (&Client{metrics: refusing}).MetricsAvailable(t.Context()) {
+		t.Error("a metrics API that answered with an error was read as available")
 	}
 }

@@ -366,6 +366,22 @@ func (c *Client) podUsage(ctx context.Context, namespace string) map[string]node
 	return out
 }
 
+// MetricsAvailable reports whether the cluster is serving resource metrics.
+//
+// A HorizontalPodAutoscaler that scales on CPU or memory reads them from the
+// metrics API. Without it the HPA sits at `<unknown>/70%` and never scales, and
+// nothing in Kubernetes says so out loud — it is the most common reason
+// autoscaling silently does nothing. k3s ships metrics-server by default, so
+// this is false when an operator disabled it, brought their own cluster, or it
+// is crash-looping on a small node.
+func (c *Client) MetricsAvailable(ctx context.Context) bool {
+	if c.metrics == nil {
+		return false
+	}
+	list, err := c.metrics.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
+	return err == nil && len(list.Items) > 0
+}
+
 func (c *Client) podCountsByNode(ctx context.Context) map[string]int {
 	out := map[string]int{}
 	pods, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{

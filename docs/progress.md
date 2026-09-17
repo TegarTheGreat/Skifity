@@ -977,6 +977,24 @@ is what RFC 6238 specifies, the CSRF cookie is readable by the frontend because
 that is how double-submit works, and `skifity.toml` is 0644 because it is meant
 to be committed.
 
+## Phase 28 — the one thing autoscaling needed and did not check
+
+Scaling on a CPU or memory target reads the metrics API. Without it the
+HorizontalPodAutoscaler sits at `<unknown>/70%`: the app never scales up under
+load, never scales back down, and neither Kubernetes nor the panel says why.
+k3s ships metrics-server by default and this install does not disable it, so
+the common case is fine — but an operator who brought their own cluster,
+disabled it, or is watching it crash-loop on a small node would have had
+autoscaling that looked configured and did nothing.
+
+That is the exact failure the scaling readiness checker exists for, and it was
+the one thing the checker did not look at. It checks the eight ways an app
+breaks when it is scaled — a read-write-once volume, SQLite, in-memory
+sessions, a local-disk cache, local uploads, in-app cron, no health path, a
+single instance — and not whether the cluster can supply the number it is meant
+to scale on. It does now, as an error rather than a warning, with what to do
+about it. Scale-to-zero is exempt: KEDA counts requests, not CPU.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size

@@ -55,6 +55,20 @@ func embeddedHandler() http.Handler {
 
 		file, err := root.Open(upath)
 		if err != nil {
+			// A path that names a file and has no file is a 404, not the
+			// single-page app.
+			//
+			// Falling back to index.html for everything is the usual shortcut
+			// and it hurts exactly where it is hardest to diagnose: a browser
+			// holding a cached page asks for a chunk that a new deploy has
+			// renamed, gets HTML with `Content-Type: text/html` and a 200, and
+			// the JavaScript parser fails on `<!doctype html>`. What the person
+			// sees is a white page and a syntax error in a file they did not
+			// write. A 404 says what happened, and the app reloads.
+			if looksLikeAFile(upath) {
+				http.NotFound(w, r)
+				return
+			}
 			// Not a file: this is a route inside the single-page app.
 			serveIndex(w, r, root)
 			return
@@ -62,6 +76,10 @@ func embeddedHandler() http.Handler {
 		info, statErr := file.Stat()
 		_ = file.Close()
 		if statErr != nil || info.IsDir() {
+			if looksLikeAFile(upath) {
+				http.NotFound(w, r)
+				return
+			}
 			serveIndex(w, r, root)
 			return
 		}
@@ -75,6 +93,28 @@ func embeddedHandler() http.Handler {
 		}
 		fileServer.ServeHTTP(w, r)
 	})
+}
+
+// looksLikeAFile reports whether a path is asking for a file rather than for a
+// page in the app.
+//
+// Anything under assets/ always is — Vite puts every fingerprinted chunk there
+// — and so is any last segment with an extension that is not .html. A route in
+// this panel is /apps/app_123 or /settings: none of them has a dot in the last
+// segment, and an app id cannot contain one.
+func looksLikeAFile(upath string) bool {
+	if strings.HasPrefix(upath, "assets/") {
+		return true
+	}
+	last := upath
+	if i := strings.LastIndex(upath, "/"); i >= 0 {
+		last = upath[i+1:]
+	}
+	dot := strings.LastIndex(last, ".")
+	if dot <= 0 {
+		return false
+	}
+	return !strings.EqualFold(last[dot:], ".html")
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request, root fs.FS) {

@@ -231,6 +231,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		// Nothing here is meant to be loaded by another site: not the panel's
+		// own assets, and certainly not an API response. Without this a page
+		// somewhere else can still pull them in with a plain <img> or <script>
+		// tag, which is where a side-channel starts.
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 		if !s.cfg.DevMode {
 			// The dev server runs over plain http, where HSTS would lock the

@@ -50,7 +50,7 @@ func autoDomainFixture(t *testing.T) (*Cluster, *store.DB, store.App, store.Envi
 
 	// No Kubernetes client: giving an app its address is a decision made from
 	// settings and the database, and nothing here talks to a cluster.
-	c := New(nil, db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	c := New(nil, db, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	return c, db, app, env, team.ID
 }
 

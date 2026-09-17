@@ -7,6 +7,8 @@
 package settings
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -86,6 +88,15 @@ const (
 	FlannelVXLAN = "vxlan"
 )
 
+// IngressServiceAddress is what a Cloudflare tunnel's public hostname points at.
+//
+// k3s ships Traefik in kube-system under this name. It is the address of the
+// thing that already routes every app by Host header, so one route here is
+// every app, for ever, with nothing to update when an app is added. It lives
+// here rather than beside the connector because the operator has to type it
+// into Cloudflare, which means the help text and the code must not drift.
+const IngressServiceAddress = "traefik.kube-system.svc.cluster.local:80"
+
 // Groups, in the order the UI shows them.
 const (
 	GroupGeneral       = "general"
@@ -103,40 +114,41 @@ const (
 // Keys used elsewhere in the panel. Referring to a constant rather than a string
 // literal means a rename is a compile error rather than a silent misconfiguration.
 const (
-	KeyPanelURL          = "general.panel_url"
-	KeyK3sVersion        = "cluster.k3s_version"
-	KeyFlannelBackend    = "cluster.flannel_backend"
-	KeyPreviewTTLDays    = "cluster.preview_ttl_days"
-	KeyWildcardDomain    = "domains.wildcard"
-	KeyClusterIP         = "domains.cluster_ip"
-	KeyACMEEmail         = "domains.acme_email"
-	KeyACMEServer        = "domains.acme_server"
-	KeyS3Endpoint        = "storage.s3_endpoint"
-	KeyS3Region          = "storage.s3_region"
-	KeyS3Bucket          = "storage.s3_bucket"
-	KeyS3AccessKey       = "storage.s3_access_key"
-	KeyS3SecretKey       = "storage.s3_secret_key"
-	KeyS3PathStyle       = "storage.s3_path_style"
-	KeyDNSProvider       = "dns.provider"
-	KeyDNSAPIToken       = "dns.api_token"
-	KeyDNSZone           = "dns.zone"
-	KeySMTPHost          = "email.smtp_host"
-	KeySMTPPort          = "email.smtp_port"
-	KeySMTPUser          = "email.smtp_user"
-	KeySMTPPassword      = "email.smtp_password"
-	KeySMTPFrom          = "email.smtp_from"
-	KeySMTPTLS           = "email.smtp_tls"
-	KeyRegistryURL       = "registry.url"
-	KeyRegistryUser      = "registry.username"
-	KeyRegistryPassword  = "registry.password"
-	KeySSOIssuer         = "signin.oidc_issuer"
-	KeySSOClientID       = "signin.oidc_client_id"
-	KeySSOClientSecret   = "signin.oidc_client_secret"
-	KeySSOButtonLabel    = "signin.oidc_button_label"
-	KeySSODomains        = "signin.oidc_allowed_domains"
-	KeySSOAutoCreate     = "signin.oidc_auto_create"
-	KeyBuilderDefault    = "general.default_builder"
-	KeyTelemetryDisabled = "general.telemetry_disabled"
+	KeyPanelURL              = "general.panel_url"
+	KeyK3sVersion            = "cluster.k3s_version"
+	KeyFlannelBackend        = "cluster.flannel_backend"
+	KeyPreviewTTLDays        = "cluster.preview_ttl_days"
+	KeyWildcardDomain        = "domains.wildcard"
+	KeyClusterIP             = "domains.cluster_ip"
+	KeyACMEEmail             = "domains.acme_email"
+	KeyACMEServer            = "domains.acme_server"
+	KeyCloudflareTunnelToken = "domains.cloudflare_tunnel_token"
+	KeyS3Endpoint            = "storage.s3_endpoint"
+	KeyS3Region              = "storage.s3_region"
+	KeyS3Bucket              = "storage.s3_bucket"
+	KeyS3AccessKey           = "storage.s3_access_key"
+	KeyS3SecretKey           = "storage.s3_secret_key"
+	KeyS3PathStyle           = "storage.s3_path_style"
+	KeyDNSProvider           = "dns.provider"
+	KeyDNSAPIToken           = "dns.api_token"
+	KeyDNSZone               = "dns.zone"
+	KeySMTPHost              = "email.smtp_host"
+	KeySMTPPort              = "email.smtp_port"
+	KeySMTPUser              = "email.smtp_user"
+	KeySMTPPassword          = "email.smtp_password"
+	KeySMTPFrom              = "email.smtp_from"
+	KeySMTPTLS               = "email.smtp_tls"
+	KeyRegistryURL           = "registry.url"
+	KeyRegistryUser          = "registry.username"
+	KeyRegistryPassword      = "registry.password"
+	KeySSOIssuer             = "signin.oidc_issuer"
+	KeySSOClientID           = "signin.oidc_client_id"
+	KeySSOClientSecret       = "signin.oidc_client_secret"
+	KeySSOButtonLabel        = "signin.oidc_button_label"
+	KeySSODomains            = "signin.oidc_allowed_domains"
+	KeySSOAutoCreate         = "signin.oidc_auto_create"
+	KeyBuilderDefault        = "general.default_builder"
+	KeyTelemetryDisabled     = "general.telemetry_disabled"
 
 	// Written by the panel rather than by a person: when the registry was last
 	// swept, and how long finished records are kept. They are settings because
@@ -271,6 +283,15 @@ var Definitions = []Definition{
 		Kind:        KindURL,
 		Validate:    validateURL,
 	},
+	{
+		Key: KeyCloudflareTunnelToken, Label: "Cloudflare tunnel token", Group: GroupDomains, Secret: true,
+		Help: "Lets your apps answer on the internet without a public IP, a port open, or a fixed address for DNS to point at. " +
+			"Create a tunnel in the Cloudflare dashboard under Zero Trust, Networks, Tunnels; choose the Cloudflared connector and copy the token it shows. " +
+			"Then add one public hostname on that tunnel — a wildcard such as *.apps.example.com covers every app at once — with the service set to " +
+			"HTTP and the address " + IngressServiceAddress + ". Install Cloudflare tunnel under Components once the token is saved.",
+		Placeholder: "eyJhIjoi...",
+		Validate:    validateCloudflareTunnelToken,
+	},
 	// A GitHub App needs five more settings than these, and had them: an App
 	// ID, a slug, a client id, a client secret and a private key. Nothing ever
 	// read one of them. There is no JWT signed with that key and no
@@ -394,6 +415,8 @@ var Components = []Component{
 		Description: "Stops idle apps and starts them again on the first request. The HTTP add-on is beta upstream.", MemoryMB: 180},
 	{Name: "longhorn", Title: "Cross-node storage", Optional: true,
 		Description: "Replicates volumes between servers so an app with storage survives a node failure. Uses a noticeable amount of memory on every node.", MemoryMB: 700},
+	{Name: "cloudflare-tunnel", Title: "Cloudflare tunnel", Optional: true,
+		Description: "Puts your apps on the internet with no public IP and no port open, through Cloudflare. Needs a tunnel token in Settings, under Domains and HTTPS.", MemoryMB: 64},
 	{Name: "monitoring", Title: "Full monitoring", Optional: true, External: true,
 		Description: "Prometheus and Grafana, installed with Helm rather than by the panel. Skifity shows CPU and memory for every server and every instance without it.",
 		Docs:        "/docs/troubleshooting#full-monitoring", MemoryMB: 900},
@@ -435,6 +458,42 @@ func validateK3sVersion(value string) error {
 	}
 	return nil
 }
+
+// validateCloudflareTunnelToken refuses what people paste instead of the token.
+//
+// The token is base64 of a small JSON object with three keys: the account, the
+// tunnel and its secret. Two things get pasted in its place often enough to be
+// worth naming — the whole `cloudflared service install <token>` command line
+// that the dashboard shows above it, and the tunnel's UUID from the URL. Both
+// are refused here, in a text box, rather than by a connector that starts,
+// fails to authenticate, and restarts for ever.
+func validateCloudflareTunnelToken(value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.ContainsAny(value, " \t\n") {
+		return errors.New("paste the token only, not the whole cloudflared command it is shown inside")
+	}
+	if tunnelIDPattern.MatchString(value) {
+		return errors.New("that is the tunnel's ID, not its token; the token is the long string under \"Install and run a connector\"")
+	}
+	decoded, err := base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(strings.TrimRight(value, "="))
+	if err != nil {
+		return errors.New("that is not a Cloudflare tunnel token; they are one long line of letters, digits and + or /")
+	}
+	var claims struct {
+		Account string `json:"a"`
+		Tunnel  string `json:"t"`
+		Secret  string `json:"s"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil || claims.Account == "" || claims.Tunnel == "" || claims.Secret == "" {
+		return errors.New("that token is not one Cloudflare issued; copy it again from Zero Trust, Networks, Tunnels")
+	}
+	return nil
+}
+
+// tunnelIDPattern is a UUID, which is what the dashboard's own URL contains.
+var tunnelIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func validateURL(value string) error {
 	if value == "" {

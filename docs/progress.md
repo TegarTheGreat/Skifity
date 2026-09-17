@@ -1602,6 +1602,53 @@ Round-robin DNS is also described for what it is now: a failover for a server
 that is **off**, not one that is **sick**. A machine that accepts a connection
 and then answers nothing is one DNS keeps handing out.
 
+## Phase 42 — the front door, built
+
+Phase 41 wrote down that Cloudflare Tunnel was the right answer for this
+audience and left the reader to install it. That is the shape every dead
+integration in this repository started as: a paragraph of documentation and five
+settings nothing read.
+
+So it is a component now. **Settings → Components → Cloudflare tunnel** renders
+a Secret and a Deployment into the panel's own namespace: two replicas, spread
+across hosts with `ScheduleAnyway` so a one-server cluster still gets both,
+`maxUnavailable: 0` so a rollout never takes a connector away before its
+replacement is connected, `/ready` as the readiness and liveness probe because
+"connected to Cloudflare" is not the same as "the process is running", no
+service account token, and the token itself only ever in a Secret.
+
+Three things make it a component rather than a page:
+
+* **It refuses without a token.** `cloudflared` with no token starts, fails to
+  authenticate, and restarts for ever while the panel says installed. Installing
+  with nothing in the box returns `tunnel.no_token` with the four clicks that
+  produce one.
+* **The setting is validated where it is typed.** The dashboard shows the token
+  inside a `cloudflared service install <token>` command line, and the tunnel's
+  UUID is in the address bar above it. Both get pasted. Both are refused in the
+  text box, each with the sentence that says which one this is.
+* **Saving a new token changes what is running.** The token reaches the
+  container as an environment variable, and an environment variable is read once
+  at startup — so applying a new Secret under a running pod changes nothing at
+  all. A fingerprint of the token is an annotation on the pod template, which
+  makes a new token a new template and rolls the connectors the ordinary way.
+  Clearing the token stops them and puts the component back to not installed,
+  which is how every other integration in Settings is disconnected.
+
+Nothing is needed per app. `cloudflared` forwards the Host header untouched and
+the ingress routes on exactly that, so one wildcard public hostname pointed at
+`traefik.kube-system.svc.cluster.local:80` covers every app that exists and
+every app that ever will. That address is a constant in `internal/settings`
+rather than a string in two places, because the operator has to type it into
+Cloudflare and the help text must not drift from the code.
+
+What is still manual, and is written down where somebody looking for it will
+find it: creating the tunnel and adding that hostname. Doing those from the
+panel needs a Cloudflare API token with Zero Trust permissions, which is a
+second credential and a second integration — and this one has never been pointed
+at a real Cloudflare account, so it is not the moment to add a third thing that
+cannot be run here either.
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size
@@ -1640,6 +1687,11 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
+* **The Cloudflare tunnel has never reached Cloudflare.** The manifests, the
+  refusal without a token, the validator and the rollover on a changed token are
+  unit-tested; connecting requires a real Cloudflare account, which this sandbox
+  does not have. It is the same gap as everything else in ADR-0010, and it is
+  named in `docs/adding-servers.md` where the instructions are.
 * The interface test needs a Chromium. It uses one already on the machine when
   `CHROMIUM_PATH` is set, and CI installs its own.
 * k3s's memory footprint is not measured; the panel's is, in

@@ -61,6 +61,8 @@ func (c *Cluster) installComponent(ctx context.Context, name string) error {
 		return c.installKEDA(ctx)
 	case "longhorn":
 		return c.installFromURL(ctx, name, "longhorn-system", "longhorn-driver-deployer")
+	case "cloudflare-tunnel":
+		return c.installCloudflareTunnel(ctx)
 	case "monitoring":
 		// Refused earlier, in the API, with a message that says where to look.
 		// This is the second lock on the same door.

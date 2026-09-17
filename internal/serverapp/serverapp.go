@@ -75,7 +75,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 		log.Warn("not connected to a cluster; the panel will run with cluster features unavailable",
 			"error", err)
 	} else {
-		clusterAdapter = cluster.New(kubeClient, db, log)
+		clusterAdapter = cluster.New(kubeClient, db, keyring, log)
 		if err := clusterAdapter.Ping(ctx); err != nil {
 			log.Warn("the cluster is not answering yet", "error", err)
 		} else {

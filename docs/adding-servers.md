@@ -69,16 +69,44 @@ worth trying them.
 
 ### Cloudflare Tunnel — automatic, free, and needs no public IP at all
 
-Run `cloudflared` in the cluster as an ordinary Deployment with two or three
-replicas. Each one makes **outbound** connections to Cloudflare — four of them,
-to servers in at least two data centres — and traffic arrives through those.
-Kubernetes already spreads those replicas across your servers, so if one server
-goes the others carry the traffic, with nothing to configure and no health check
-to set up.
+`cloudflared` runs in the cluster as an ordinary Deployment with two replicas.
+Each one makes **outbound** connections to Cloudflare — four of them, to servers
+in at least two data centres — and traffic arrives through those. Kubernetes
+already spreads those replicas across your servers, so if one server goes the
+other carries the traffic, with nothing to configure and no health check to set
+up.
 
 What it buys, beyond failover: **no inbound ports and no public IP**. It works
 on a server behind NAT, on a home connection, and on a provider that charges for
 IPv4. Your servers' addresses stop being public at all.
+
+**Skifity installs it for you.** Three steps, once:
+
+1. In the Cloudflare dashboard, go to **Zero Trust → Networks → Tunnels** and
+   create a tunnel. Choose the **Cloudflared** connector and copy the token it
+   shows. It is one long line; do not copy the `cloudflared service install`
+   command it sits inside, and do not copy the tunnel's ID from the address bar.
+   Skifity refuses both and says which one you pasted.
+2. On the same tunnel, add a **public hostname**. Use a wildcard — `*.apps.example.com`
+   — so that every app you ever deploy is covered by this one route. Set the
+   service to **HTTP** and the address to:
+
+   ```
+   traefik.kube-system.svc.cluster.local:80
+   ```
+
+3. In the panel, paste the token into **Settings → Domains and HTTPS →
+   Cloudflare tunnel token**, then press **Install** next to **Cloudflare
+   tunnel** under **Settings → Components**.
+
+That is all of it. Nothing is needed per app: `cloudflared` forwards the Host
+header untouched and the ingress routes on exactly that, so an app that has a
+domain works the moment its Ingress exists.
+
+Changing the token later is the same box. Saving a new one reaches the cluster
+straight away and the connectors roll over to it without a gap; clearing it
+stops them and puts the component back to not installed, which is how this
+integration is disconnected.
 
 The trade, and it is a real one: every request goes through Cloudflare, and your
 domain has to be on their DNS. Replicas are also not load balanced in the
@@ -87,6 +115,10 @@ where it arrived, which is failover rather than spreading. And the free plan
 caps an upload at 100 MB, which matters if your app takes large files.
 
 Free for up to 25 replicas per tunnel.
+
+> **Not run against a real tunnel.** The manifests, the refusals and the
+> rollover are covered by tests, and no one has yet pointed this at a Cloudflare
+> account. See the Status section of the README.
 
 ### Round-robin DNS — free, nothing to install
 

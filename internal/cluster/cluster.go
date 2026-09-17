@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"skifity/internal/api"
+	"skifity/internal/crypto"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
 	"skifity/internal/settings"
@@ -28,6 +29,10 @@ type Cluster struct {
 	client *kube.Client
 	db     *store.DB
 	log    *slog.Logger
+	// keyring opens the sealed settings a component needs to be installed at
+	// all. Only the Cloudflare tunnel has one; it is nil in tests that do not
+	// reach it, and the one place that reads it says so when it is.
+	keyring *crypto.Keyring
 
 	// installMu serialises component installation, so two apps enabling
 	// scale-to-zero at the same moment do not both install KEDA.
@@ -41,8 +46,8 @@ type Cluster struct {
 }
 
 // New builds a Cluster.
-func New(client *kube.Client, db *store.DB, log *slog.Logger) *Cluster {
-	return &Cluster{client: client, db: db, log: log}
+func New(client *kube.Client, db *store.DB, keyring *crypto.Keyring, log *slog.Logger) *Cluster {
+	return &Cluster{client: client, db: db, keyring: keyring, log: log}
 }
 
 // Client exposes the underlying Kubernetes client to the orchestrators.

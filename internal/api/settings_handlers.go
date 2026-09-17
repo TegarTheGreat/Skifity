@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -107,6 +109,23 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		// The key is audited; the value never is.
 		s.audit(r, "", "settings.updated", "setting", key, def.Label)
+	}
+
+	// A setting that something in the cluster is already running on has to
+	// reach the cluster too, or saving it does nothing a user can see.
+	if _, changed := req.Values[settings.KeyCloudflareTunnelToken]; changed && s.cluster != nil {
+		// The save has happened; this is the cluster catching up, and it must
+		// not be abandoned because the browser navigated away.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Minute)
+		defer cancel()
+		if err := s.cluster.RefreshCloudflareTunnel(ctx); err != nil {
+			writeError(w, r, errdoc.New("tunnel.not_applied", "The token was saved, but the tunnel was not updated").
+				WithCause("%s", err).
+				WithImpact("The connectors are still running on the previous token, so traffic keeps flowing until they are restarted.").
+				WithFix("Fix what the cause says and save the token again, or install Cloudflare tunnel under Components.").
+				WithStatus(http.StatusBadGateway))
+			return
+		}
 	}
 	writeOK(w)
 }

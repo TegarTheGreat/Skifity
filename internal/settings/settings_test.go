@@ -107,3 +107,53 @@ func TestK3sVersionPinAcceptsOnlyReleasesThatExist(t *testing.T) {
 		}
 	}
 }
+
+// What people paste instead of the tunnel token, and what happens to it.
+//
+// The dashboard shows the token inside a `cloudflared service install <token>`
+// command line, and the tunnel's UUID is in the address bar above it. Both get
+// pasted. Catching them in a text box is the difference between a message and a
+// connector that restarts for ever.
+func TestValidateCloudflareTunnelToken(t *testing.T) {
+	// Obviously fake: the account, the tunnel and the secret are all zeroes.
+	const good = "eyJhIjoiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMCIsInQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDAiLCJzIjoiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAifQ=="
+
+	cases := []struct {
+		name  string
+		value string
+		ok    bool
+	}{
+		{"a token", good, true},
+		{"nothing, which is how an integration is disconnected", "", true},
+		{"the whole install command", "cloudflared service install " + good, false},
+		{"the tunnel's ID from the dashboard URL", "3a7f1b2c-4d5e-6f70-8192-a3b4c5d6e7f8", false},
+		{"a sentence", "my cloudflare token", false},
+		{"base64 of something else entirely", "aGVsbG8gdGhlcmUsIG5vdCBhIHRva2Vu", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateCloudflareTunnelToken(tc.value)
+			if tc.ok && err != nil {
+				t.Fatalf("rejected a value it should accept: %v", err)
+			}
+			if !tc.ok && err == nil {
+				t.Fatal("accepted a value that is not a tunnel token")
+			}
+		})
+	}
+}
+
+// Every setting the panel offers has to have a validator, or saving one is a
+// field that accepts anything and fails somewhere else.
+func TestCloudflareTunnelTokenIsASecret(t *testing.T) {
+	def, ok := Lookup(KeyCloudflareTunnelToken)
+	if !ok {
+		t.Fatal("the tunnel token is not in the catalogue")
+	}
+	if !def.Secret {
+		t.Error("a credential that opens somebody's Cloudflare account must be stored sealed")
+	}
+	if def.Group != GroupDomains {
+		t.Errorf("group = %q, want %q", def.Group, GroupDomains)
+	}
+}

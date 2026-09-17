@@ -104,6 +104,9 @@ type Cluster interface {
 	Manifests(ctx context.Context, app store.App, env store.Environment) (string, error)
 	// InstallComponent installs an optional add-on on first use.
 	InstallComponent(ctx context.Context, name string) error
+	// RefreshCloudflareTunnel re-applies the tunnel token from Settings, so
+	// that changing it in the panel changes what the connectors are using.
+	RefreshCloudflareTunnel(ctx context.Context) error
 	// ComponentStatus reports whether an add-on is present.
 	ComponentStatus(ctx context.Context, name string) (store.ClusterComponent, error)
 	// QuotaUsage reports how much of an environment's limits are in use.

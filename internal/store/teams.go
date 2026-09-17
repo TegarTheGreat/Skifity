@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"skifity/internal/kube"
 )
 
 // --- teams ---
@@ -260,12 +262,13 @@ func (db *DB) DeleteProject(ctx context.Context, id string) error {
 
 // --- environments ---
 
-const envColumns = `id, project_id, name, slug, kind, namespace, source_ref, created_at`
+const envColumns = `id, project_id, name, slug, kind, namespace, source_ref, pod_security, created_at`
 
 func scanEnvironment(row interface{ Scan(...any) error }) (Environment, error) {
 	var e Environment
 	var created string
-	err := row.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Kind, &e.Namespace, &e.SourceRef, &created)
+	err := row.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Kind, &e.Namespace, &e.SourceRef,
+		&e.PodSecurity, &created)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return e, ErrNotFound
@@ -285,9 +288,13 @@ func (db *DB) CreateEnvironment(ctx context.Context, e *Environment) error {
 	if e.Kind == "" {
 		e.Kind = EnvStandard
 	}
+	if e.PodSecurity == "" {
+		e.PodSecurity = string(kube.PodSecurityRestricted)
+	}
 	now := Now()
-	_, err := db.Exec(ctx, `INSERT INTO environments (id, project_id, name, slug, kind, namespace, source_ref, created_at)
-		VALUES (?,?,?,?,?,?,?,?)`, e.ID, e.ProjectID, e.Name, e.Slug, e.Kind, e.Namespace, e.SourceRef, now)
+	_, err := db.Exec(ctx, `INSERT INTO environments (id, project_id, name, slug, kind, namespace, source_ref, pod_security, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		e.ID, e.ProjectID, e.Name, e.Slug, e.Kind, e.Namespace, e.SourceRef, e.PodSecurity, now)
 	if err != nil {
 		if errors.Is(err, ErrConflict) {
 			return fmt.Errorf("%w: this project already has an environment named %s", ErrConflict, e.Name)
@@ -345,6 +352,22 @@ func (db *DB) ListPreviewEnvironments(ctx context.Context) ([]Environment, error
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// SetEnvironmentPodSecurity changes how strictly an environment confines its pods.
+//
+// The column has a CHECK constraint, so a value the panel does not offer is
+// refused by SQLite rather than reaching a namespace label, where Kubernetes
+// would take "strict" as an unknown level and quietly enforce nothing.
+func (db *DB) SetEnvironmentPodSecurity(ctx context.Context, id, level string) error {
+	res, err := db.Exec(ctx, `UPDATE environments SET pod_security = ? WHERE id = ?`, level, id)
+	if err != nil {
+		return fmt.Errorf("set the pod security level: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // DeleteEnvironment removes an environment and everything in it.

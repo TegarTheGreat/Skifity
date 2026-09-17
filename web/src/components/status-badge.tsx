@@ -52,11 +52,12 @@ export function toneFor(status: string): Tone {
     case "updating":
     case "removing":
       return "busy"
+    // "degraded" is up, and one failure away from not being. It is not success
+    // and it is not a failure, and showing it as either is the whole reason it
+    // is here rather than folded into one of them.
     case "pending":
     case "queued":
     case "not_ready":
-    // Up, and one failure away from not being. It is not success and it is not
-    // a failure, and showing it as either is the whole reason this case exists.
     case "degraded":
       return "warning"
     case "failed":

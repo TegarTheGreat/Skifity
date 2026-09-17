@@ -34,6 +34,41 @@ Environments are isolated from each other: each is a namespace with
 default-deny networking, so an app in staging cannot reach production's database
 by accident.
 
+### How strictly an environment confines its apps
+
+Each environment chooses one of two levels, and **Strictest** is the default.
+
+**Strictest** refuses a container whose image starts as root. That is the right
+answer for an app Skifity builds from your code, because the builder produces an
+image that already runs as an ordinary user.
+
+It is the wrong answer for a great many off-the-shelf images. WordPress,
+Nextcloud, MediaWiki and phpMyAdmin all start as root and drop privileges
+themselves, which is an ordinary and long-standing thing for a container to do,
+and this level has no way to permit it. An app like that never starts, and the
+panel says exactly that on the app's page rather than leaving you with the
+kubelet's wording.
+
+**Accepts root images** is the other level, chosen per environment under the
+project. It permits that one thing and nothing else. Still refused, at both
+levels:
+
+* a privileged container;
+* the server's network, process list or paths — an app cannot see or mount
+  anything belonging to the machine it runs on;
+* any capability beyond the set every container gets from the runtime;
+* gaining privileges the process did not start with.
+
+Two things stay true whichever level an environment is on. An app **Skifity
+built from your code** is held to the strict rules either way: lowering an
+environment so a third-party image can run is not a reason to stop checking the
+one image whose contents are known. And the namespace keeps *recording* at the
+strict level even when it stops *enforcing* it, so the cluster's own audit log
+still lists everything the strict profile would have refused.
+
+Changing the level changes the environment's namespace immediately, and reaches
+each app the next time it is deployed.
+
 ## Variables, and why some rebuild and some do not
 
 An app's variables become environment variables inside it. There are two kinds,

@@ -674,5 +674,18 @@
     "notValidTitle": "Undangan ini tidak bisa dipakai",
     "notValidHelp": "Tautannya kedaluwarsa, sudah dipakai, atau ditarik kembali. Minta tautan baru dari yang mengundang Anda.",
     "goToSignIn": "Ke halaman masuk"
+  },
+  "environments": {
+    "confinement": "Pembatasan",
+    "confinementRestrictedHelp": "Pod di sini dipegang pada profil paling ketat. Image yang mulai sebagai root ditolak, dan itu sebagian besar image siap pakai.",
+    "confinementBaselineHelp": "Environment ini menerima image yang mulai sebagai root. Container privileged, jaringan host, dan path host tetap ditolak, jadi app tetap tidak bisa menyentuh server tempatnya berjalan.",
+    "confinementLower": "Terima image root",
+    "confinementRaise": "Kembali paling ketat",
+    "confinementLowerTitle": "Terima image yang mulai sebagai root?",
+    "confinementLowerConfirm": "App di environment ini akan boleh mulai sebagai root di dalam containernya sendiri, seperti yang dilakukan image resmi WordPress, Nextcloud, dan MediaWiki. Container privileged, jaringan host, path host, dan kapabilitas tambahan tetap ditolak. Deploy ulang setiap app agar perubahannya sampai.",
+    "podSecurity": {
+      "restricted": "Paling ketat",
+      "baseline": "Terima image root"
+    }
   }
 }

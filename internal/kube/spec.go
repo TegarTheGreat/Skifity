@@ -70,6 +70,30 @@ type AppSpec struct {
 	// SpreadAcrossServers adds a topology spread constraint so instances do not
 	// all land on one server.
 	SpreadAcrossServers bool
+
+	// Confinement
+	// PodSecurity is the environment's Pod Security Admission level. Empty
+	// means the strict one.
+	PodSecurity PodSecurity
+	// ImageBuiltHere is true when Skifity's own builder produced this image.
+	//
+	// It is the difference between knowing what is inside a container and
+	// guessing. Railpack and Nixpacks both produce an image whose process runs
+	// as uid 1000, so for those the panel can pin the user, drop every
+	// capability and be sure the result starts. For an image somebody else
+	// built — a template, or a registry reference the user typed — pinning a
+	// uid is a guess, and it was wrong for 120 of the 124 catalogue images
+	// whose configuration could be read from their registries.
+	ImageBuiltHere bool
+}
+
+// Confinement is how a pod's security context is written for this app.
+func (s AppSpec) Confinement() Confinement {
+	return Confinement{
+		Level:     NormalizePodSecurity(string(s.PodSecurity)),
+		BuiltHere: s.ImageBuiltHere,
+		Port:      s.Port,
+	}
 }
 
 // VolumeSpec is a persistent volume attached to an app.

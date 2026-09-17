@@ -328,7 +328,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cluster != nil {
-		if err := s.cluster.EnsureNamespace(r.Context(), env.Namespace, teamID, project.ID); err != nil {
+		if err := s.cluster.EnsureNamespace(r.Context(), env, teamID, project.ID); err != nil {
 			s.log.Warn("could not create namespace", "namespace", env.Namespace, "error", err)
 		}
 	}
@@ -459,7 +459,7 @@ func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if s.cluster != nil {
-		if err := s.cluster.EnsureNamespace(r.Context(), env.Namespace, project.TeamID, project.ID); err != nil {
+		if err := s.cluster.EnsureNamespace(r.Context(), env, project.TeamID, project.ID); err != nil {
 			s.log.Warn("could not create namespace", "namespace", env.Namespace, "error", err)
 		}
 	}
@@ -472,6 +472,60 @@ func (s *Server) handleGetEnvironment(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, r, err)
 		return
+	}
+	writeJSON(w, http.StatusOK, env)
+}
+
+type updateEnvironmentRequest struct {
+	PodSecurity string `json:"pod_security"`
+}
+
+// handleUpdateEnvironment changes how strictly an environment confines its pods.
+//
+// Admin rather than member: this is the one control in the panel that decides
+// what a container in this namespace is allowed to be, and a member who can
+// deploy should not be able to widen it for everybody else in the team.
+func (s *Server) handleUpdateEnvironment(w http.ResponseWriter, r *http.Request) {
+	env, _, err := s.authorizeEnvironment(r, chi.URLParam(r, "envID"), store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	project, err := s.db.GetProject(r.Context(), env.ProjectID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var req updateEnvironmentRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if !kube.ValidPodSecurity(req.PodSecurity) {
+		writeError(w, r, errdoc.BadRequest(
+			"That is not a confinement level. It is \"restricted\" or \"baseline\"."))
+		return
+	}
+	if err := s.db.SetEnvironmentPodSecurity(r.Context(), env.ID, req.PodSecurity); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	env.PodSecurity = req.PodSecurity
+	s.audit(r, project.TeamID, "environment.pod_security_changed", "environment", env.ID,
+		env.Name+" → "+req.PodSecurity)
+
+	// The label on the live namespace is what Kubernetes actually enforces, so
+	// a saved row that never reached the cluster is the setting doing nothing.
+	if s.cluster != nil {
+		if err := s.cluster.EnsureNamespace(r.Context(), env, project.TeamID, project.ID); err != nil {
+			writeError(w, r, errdoc.New("environment.level_not_applied",
+				"The level was saved, but the namespace was not changed").
+				WithCause("%s", err).
+				WithImpact("Kubernetes is still enforcing the previous level, so a deploy will behave as it did before.").
+				WithFix("Fix what the cause says and save the level again.").
+				WithStatus(http.StatusBadGateway))
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, env)
 }

@@ -114,3 +114,26 @@ func ExplainImagePull(message string) string {
 		return "The image could not be pulled."
 	}
 }
+
+// ExplainImageRunsAsRoot turns the kubelet's refusal into the one sentence that
+// says what to do.
+//
+// The message is `container has runAsNonRoot and image will run as root`, and
+// on its own it reads like a fault in the image. It is not: starting as root
+// and dropping privileges is what the official WordPress, Nextcloud, MediaWiki
+// and phpMyAdmin images all do, and it is what this environment's confinement
+// level refuses. The fix is one switch on the environment, and nobody finds it
+// from the kubelet's wording.
+func ExplainImageRunsAsRoot() string {
+	return "This image starts as root and drops privileges itself, which is ordinary for " +
+		"an off-the-shelf container and is what this environment refuses. Change the " +
+		"environment's confinement to \"baseline\" under the project, then deploy again. " +
+		"Baseline still refuses a privileged container, host networking and host paths, " +
+		"so the app still cannot reach the server it runs on."
+}
+
+// RunsAsRootRefusal reports whether a container's message is that refusal.
+func RunsAsRootRefusal(message string) bool {
+	lower := strings.ToLower(message)
+	return strings.Contains(lower, "runasnonroot") && strings.Contains(lower, "will run as root")
+}

@@ -645,7 +645,7 @@ func TestManifestsAreDeterministic(t *testing.T) {
 }
 
 func TestNamespaceIsolation(t *testing.T) {
-	ns := BuildNamespace("acme-shop-production", "team_1", "prj_1")
+	ns := BuildNamespace("acme-shop-production", "team_1", "prj_1", PodSecurityRestricted)
 	if ns.Labels["pod-security.kubernetes.io/enforce"] != "restricted" {
 		t.Fatal("the namespace does not enforce the restricted pod security profile")
 	}

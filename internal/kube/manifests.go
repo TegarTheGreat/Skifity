@@ -26,6 +26,8 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 	replicas := s.DesiredReplicas()
 	labels := s.Labels()
 
+	confinement := s.Confinement()
+
 	container := corev1.Container{
 		Name:            s.Name,
 		Image:           s.Image,
@@ -34,13 +36,18 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 		Args:            s.Args,
 		Resources:       buildResources(s),
 		SecurityContext: &corev1.SecurityContext{
-			// A container that cannot gain privileges and does not run as root
-			// limits what a compromised app can do to the node it shares.
+			// No new privileges, at every level and for every image: a process
+			// gaining more than it started with is what an exploit is for, and
+			// nothing legitimate in a container needs it. Dropping privileges,
+			// which is what an image starting as root does, is the opposite
+			// direction and is unaffected.
 			AllowPrivilegeEscalation: ptr(false),
-			RunAsNonRoot:             ptr(true),
-			Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
+			RunAsNonRoot:             confinement.RunAsNonRoot(),
 			SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 		},
+	}
+	if confinement.DropAllCapabilities() {
+		container.SecurityContext.Capabilities = &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}
 	}
 
 	if s.Port > 0 {
@@ -98,12 +105,19 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 	podSpec := corev1.PodSpec{
 		Containers: []corev1.Container{container},
 		SecurityContext: &corev1.PodSecurityContext{
-			RunAsNonRoot: ptr(true),
-			// 1000 is the conventional first non-root user, and is what the
-			// builders produce images for.
-			RunAsUser:  ptr(int64(1000)),
-			RunAsGroup: ptr(int64(1000)),
-			FSGroup:    ptr(int64(1000)),
+			RunAsNonRoot: confinement.RunAsNonRoot(),
+			// The uid is pinned only for an image Skifity built, where 1000 is
+			// what the builders produce. Pinning it for anybody else's image
+			// overrode the USER that image declares, which is a guess — and it
+			// was the wrong one for 120 of the 124 catalogue images whose
+			// configuration could be read from their registries.
+			RunAsUser:  confinement.RunAsUser(),
+			RunAsGroup: confinement.RunAsUser(),
+			// FSGroup stays at 1000 whatever the image runs as. It sets the
+			// group on a mounted volume and adds that group to the container's
+			// supplementary groups, which is what makes a volume writable by a
+			// process whose uid nobody here knows.
+			FSGroup: ptr(int64(1000)),
 		},
 		// An app has no business talking to the Kubernetes API, and a mounted
 		// token is the first thing an attacker looks for.
@@ -111,6 +125,12 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 		// Long enough for a web server to finish in-flight requests, short
 		// enough that a deploy does not feel stuck.
 		TerminationGracePeriodSeconds: ptr(int64(30)),
+	}
+
+	if start := confinement.UnprivilegedPortStart(); start != "" {
+		podSpec.SecurityContext.Sysctls = []corev1.Sysctl{
+			{Name: "net.ipv4.ip_unprivileged_port_start", Value: start},
+		}
 	}
 
 	for _, v := range s.Volumes {

@@ -234,7 +234,7 @@ func (s *Server) deployPreview(r *http.Request, app store.App, event gitsrc.Push
 			return "", err
 		}
 		if s.cluster != nil {
-			if err := s.cluster.EnsureNamespace(r.Context(), env.Namespace, team.ID, project.ID); err != nil {
+			if err := s.cluster.EnsureNamespace(r.Context(), env, team.ID, project.ID); err != nil {
 				return "", err
 			}
 		}

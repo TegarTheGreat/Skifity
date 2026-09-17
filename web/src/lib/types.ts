@@ -45,8 +45,13 @@ export type Environment = {
   kind: "standard" | "preview"
   namespace: string
   source_ref?: string
+  /** How strictly this environment's pods are confined. */
+  pod_security: PodSecurity
   created_at: string
 }
+
+/** The Pod Security Admission level an environment's namespace enforces. */
+export type PodSecurity = "restricted" | "baseline"
 
 export type ServerStatus =
   "pending" | "provisioning" | "ready" | "not_ready" | "failed" | "removing"

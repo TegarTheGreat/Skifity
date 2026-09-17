@@ -131,8 +131,14 @@ func (c *Cluster) DeleteApp(ctx context.Context, namespace, appSlug string) erro
 }
 
 // EnsureNamespace creates an environment's namespace with its guards.
-func (c *Cluster) EnsureNamespace(ctx context.Context, namespace, teamID, projectID string) error {
-	return c.client.EnsureNamespace(ctx, namespace, teamID, projectID)
+//
+// The whole environment rather than its namespace string: the Pod Security
+// level is a column on that row, and a signature that takes only the name is a
+// signature where a caller can forget it. Forgetting it here would silently put
+// a lowered environment back to the strict level on the next deploy.
+func (c *Cluster) EnsureNamespace(ctx context.Context, env store.Environment, teamID, projectID string) error {
+	return c.client.EnsureNamespace(ctx, env.Namespace, teamID, projectID,
+		kube.NormalizePodSecurity(env.PodSecurity))
 }
 
 // DeleteNamespace removes an environment's namespace.
@@ -320,6 +326,12 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 		// Spreading matters as soon as there is more than one instance, and
 		// costs nothing when there is one.
 		SpreadAcrossServers: true,
+		PodSecurity:         kube.NormalizePodSecurity(env.PodSecurity),
+		// An app whose source is a Git repository runs an image this panel's
+		// own builder produced, so what is inside it is known. Anything else is
+		// an image reference somebody typed or a template chose, and the only
+		// honest thing to say about its user is what the image itself says.
+		ImageBuiltHere: app.SourceType == "git",
 	}
 	if app.StartCommand != "" {
 		// A start command is a shell line, so it runs through a shell rather

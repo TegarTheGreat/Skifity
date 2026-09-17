@@ -83,7 +83,11 @@ type Environment struct {
 	Kind      EnvironmentKind `json:"kind"`
 	Namespace string          `json:"namespace"`
 	SourceRef string          `json:"source_ref,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
+	// PodSecurity is the Pod Security Admission level this environment's
+	// namespace enforces: "restricted", or "baseline" for an environment that
+	// has to run an image starting as root. See kube.PodSecurity.
+	PodSecurity string    `json:"pod_security"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // ServerStatus is the lifecycle of a machine the panel manages.

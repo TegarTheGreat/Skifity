@@ -249,7 +249,7 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 	if err != nil {
 		return err
 	}
-	if err := d.cluster.EnsureNamespace(ctx, env.Namespace, project.TeamID, project.ID); err != nil {
+	if err := d.cluster.EnsureNamespace(ctx, env, project.TeamID, project.ID); err != nil {
 		return err
 	}
 

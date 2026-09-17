@@ -203,7 +203,7 @@ func (s *Server) handleSetupComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.cluster != nil {
-		if err := s.cluster.EnsureNamespace(r.Context(), env.Namespace, team.ID, project.ID); err != nil {
+		if err := s.cluster.EnsureNamespace(r.Context(), env, team.ID, project.ID); err != nil {
 			// A cluster that is not ready yet must not block setup: the
 			// namespace is created again whenever the environment is used.
 			s.log.Warn("could not create the first namespace yet", "namespace", env.Namespace, "error", err)

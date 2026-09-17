@@ -1649,6 +1649,61 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 43 — the catalogue that could not start
+
+The question was whether autoscaling, deploying and database replicas were
+sound. Two of the three had defects, and one of them was the largest thing found
+in this repository.
+
+**Every app's pod was pinned to uid 1000.** `BuildDeployment` wrote
+`runAsUser: 1000`, `runAsNonRoot: true` and `drop: ALL` into every pod spec,
+including every one-click template, in namespaces enforcing the `restricted`
+Pod Security profile. That is exactly right for an app Skifity builds — Railpack
+and Nixpacks both produce a process running as 1000 — and it is a guess for
+anybody else's image.
+
+It was measured rather than assumed. Of the catalogue's 295 unique images, 124
+had their config blob read straight from their registries before Docker Hub's
+rate limit ended the run: **120 of the 124 do not run as uid 1000**, and 87 of
+those declare no non-root user at all, which `restricted` refuses outright.
+Separately, **51 of the catalogue's 334 services listen on a port below 1024** —
+WordPress, Nextcloud, Vaultwarden, GitLab, MediaWiki, phpMyAdmin — and with
+every capability dropped, no `CAP_NET_BIND_SERVICE`, and containerd leaving
+`net.ipv4.ip_unprivileged_port_start` at the kernel default of 1024 where Docker
+sets it to 0, not one of them could bind its port. The product's front page was
+a catalogue that mostly could not start, and nothing anywhere said so.
+
+The fix is three parts.
+
+**The uid is pinned only for an image Skifity built.** For anybody else's, the
+`USER` the image declares is the right answer, and leaving the field unset is
+how you say that.
+
+**A low port gets one safe sysctl.** `net.ipv4.ip_unprivileged_port_start: "0"`
+is narrower than handing back `CAP_NET_BIND_SERVICE`: it lets this pod's
+processes bind a low port in this pod's own network namespace and grants no
+capability to anything. Kubernetes has called it safe since 1.22 — namespaced,
+unable to affect another pod or the node — so no kubelet configuration is needed,
+and it is on the list both the baseline and the restricted profile allow.
+
+**The confinement level belongs to the environment**, defaulting to the strict
+one, changed by an admin under the project. At the lower level a third-party
+image may start as root and keeps the runtime's default capability set, because
+an image that drops to its own user calls setuid and needs `CAP_SETUID` and
+`CAP_SETGID` — dropping ALL from a root container breaks the very images the
+level exists to run. Everything else stays refused at both levels: privileged
+containers, host namespaces, host paths, capabilities beyond the runtime's set,
+and gaining privileges the process did not start with. An app Skifity built is
+held to the strict rules at either level. And a lowered namespace still carries
+`audit` and `warn` at `restricted`, so lowering the bar does not also turn off
+the measurement.
+
+The kubelet's own words for the failure are `container has runAsNonRoot and
+image will run as root`, which reads like a fault in the image. It is not, and
+the panel now replaces it with the sentence that names the switch.
+
+## Phase 42 — the front door, built
+
 ## The repository itself
 
 `CONTRIBUTING.md` and a pull request template, which a repository this size
@@ -1687,6 +1742,11 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
+* **The confinement levels have never been enforced by a real API server.**
+  The rendered pod specs, the namespace labels and the rules that choose between
+  them are unit-tested; whether the kubelet accepts the sysctl and whether a
+  root image then starts needs a cluster, which is the same gap as everything
+  else in ADR-0010.
 * **The Cloudflare tunnel has never reached Cloudflare.** The manifests, the
   refusal without a token, the validator and the rollover on a changed token are
   unit-tested; connecting requires a real Cloudflare account, which this sandbox

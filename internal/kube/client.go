@@ -477,6 +477,9 @@ func describePod(pod corev1.Pod) Instance {
 			// screen: CrashLoopBackOff, ImagePullBackOff, CreateContainerError.
 			inst.Status = cs.State.Waiting.Reason
 			inst.Message = cs.State.Waiting.Message
+			if RunsAsRootRefusal(inst.Message) {
+				inst.Message = ExplainImageRunsAsRoot()
+			}
 		case cs.State.Terminated != nil:
 			inst.Status = cs.State.Terminated.Reason
 			inst.Message = cs.State.Terminated.Message
@@ -531,6 +534,11 @@ func summarisePhase(deployment *appsv1.Deployment, status AppStatus) (string, st
 			}
 			if strings.Contains(inst.Status, "ImagePull") || strings.Contains(inst.Status, "ErrImage") {
 				return "failed", ExplainImagePull(inst.Message)
+			}
+			// describePod has already replaced the kubelet's wording, so this
+			// matches what the panel will show rather than what it was sent.
+			if inst.Message == ExplainImageRunsAsRoot() {
+				return "failed", inst.Message
 			}
 			// describePod has already turned the scheduler's own message into
 			// a sentence with the fix in it. Replacing that with a guess about
@@ -793,9 +801,9 @@ func (c *Client) deleteRuns(ctx context.Context, namespace, appSlug string) erro
 }
 
 // EnsureNamespace creates an environment's namespace with its guards.
-func (c *Client) EnsureNamespace(ctx context.Context, namespace, teamID, projectID string) error {
+func (c *Client) EnsureNamespace(ctx context.Context, namespace, teamID, projectID string, level PodSecurity) error {
 	objects := []any{
-		BuildNamespace(namespace, teamID, projectID),
+		BuildNamespace(namespace, teamID, projectID, level),
 		BuildLimitRange(namespace),
 		BuildResourceQuota(namespace, DefaultQuota()),
 	}

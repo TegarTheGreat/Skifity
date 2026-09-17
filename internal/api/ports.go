@@ -97,7 +97,7 @@ type Cluster interface {
 	// DeleteApp removes an app's Kubernetes objects.
 	DeleteApp(ctx context.Context, namespace, appSlug string) error
 	// EnsureNamespace creates a namespace with its quota, limits and policies.
-	EnsureNamespace(ctx context.Context, namespace, teamID, projectID string) error
+	EnsureNamespace(ctx context.Context, env store.Environment, teamID, projectID string) error
 	// DeleteNamespace removes an environment's namespace and everything in it.
 	DeleteNamespace(ctx context.Context, namespace string) error
 	// Manifests renders the Kubernetes objects for an app, for the Advanced tab.

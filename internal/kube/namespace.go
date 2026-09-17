@@ -40,7 +40,10 @@ func DefaultQuota() NamespaceQuota {
 }
 
 // BuildNamespace renders the Namespace object for an environment.
-func BuildNamespace(name, teamID, projectID string) *corev1.Namespace {
+func BuildNamespace(name, teamID, projectID string, level PodSecurity) *corev1.Namespace {
+	if level == "" {
+		level = PodSecurityRestricted
+	}
 	return &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -49,12 +52,14 @@ func BuildNamespace(name, teamID, projectID string) *corev1.Namespace {
 				"app.kubernetes.io/managed-by": version.Binary,
 				version.LabelKey("team-id"):    teamID,
 				version.LabelKey("project-id"): projectID,
-				// Pod Security Admission. "restricted" is the strictest
-				// profile, and is what the rendered pod specs already satisfy,
-				// so this catches anything that bypasses them.
-				"pod-security.kubernetes.io/enforce": "restricted",
-				"pod-security.kubernetes.io/audit":   "restricted",
-				"pod-security.kubernetes.io/warn":    "restricted",
+				// Pod Security Admission. Enforcement is the environment's
+				// chosen level; audit and warn stay at the strictest one, so a
+				// namespace that has been lowered still records in the API
+				// server's own log every pod restricted would have refused.
+				// Lowering the bar should not also turn off the measurement.
+				"pod-security.kubernetes.io/enforce": string(level),
+				"pod-security.kubernetes.io/audit":   string(PodSecurityRestricted),
+				"pod-security.kubernetes.io/warn":    string(PodSecurityRestricted),
 			},
 		},
 	}

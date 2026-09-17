@@ -685,5 +685,18 @@
     "notValidTitle": "This invitation cannot be used",
     "notValidHelp": "The link has expired, has been used already, or was withdrawn. Ask whoever invited you for a new one.",
     "goToSignIn": "Go to sign in"
+  },
+  "environments": {
+    "confinement": "Confinement",
+    "confinementRestrictedHelp": "Pods here are held to the strictest profile. An image that starts as root is refused, which is most off-the-shelf images.",
+    "confinementBaselineHelp": "This environment accepts an image that starts as root. A privileged container, host networking and host paths are still refused, so an app still cannot reach the server it runs on.",
+    "confinementLower": "Accept root images",
+    "confinementRaise": "Back to strictest",
+    "confinementLowerTitle": "Accept images that start as root?",
+    "confinementLowerConfirm": "Apps in this environment will be allowed to start as root inside their own container, which is what the official WordPress, Nextcloud and MediaWiki images do. A privileged container, host networking, host paths and extra capabilities stay refused. Redeploy each app for the change to reach it.",
+    "podSecurity": {
+      "restricted": "Strictest",
+      "baseline": "Accepts root images"
+    }
   }
 }

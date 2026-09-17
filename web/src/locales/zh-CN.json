@@ -674,5 +674,18 @@
     "notValidTitle": "此邀请无法使用",
     "notValidHelp": "链接已过期、已被使用，或已被撤回。请向邀请你的人索取新链接。",
     "goToSignIn": "前往登录"
+  },
+  "environments": {
+    "confinement": "约束级别",
+    "confinementRestrictedHelp": "这里的 Pod 受最严格的配置约束。以 root 启动的镜像会被拒绝，而大多数现成镜像正是如此。",
+    "confinementBaselineHelp": "该环境接受以 root 启动的镜像。特权容器、主机网络和主机路径仍被拒绝，因此应用依然碰不到它所运行的服务器。",
+    "confinementLower": "接受 root 镜像",
+    "confinementRaise": "恢复最严格",
+    "confinementLowerTitle": "接受以 root 启动的镜像？",
+    "confinementLowerConfirm": "该环境中的应用将获准在自己的容器内以 root 启动，官方的 WordPress、Nextcloud 和 MediaWiki 镜像都是这样做的。特权容器、主机网络、主机路径和额外权能仍然被拒绝。请重新部署每个应用，改动才会生效。",
+    "podSecurity": {
+      "restricted": "最严格",
+      "baseline": "接受 root 镜像"
+    }
   }
 }

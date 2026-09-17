@@ -117,7 +117,8 @@ func (s Spec) Validate() error {
 	// would ever say which was true.
 	if s.Engine != EnginePostgres && s.Instances > 1 {
 		return fmt.Errorf(
-			"Skifity runs one instance of %s; only PostgreSQL is replicated, because CloudNativePG does the replication and there is no operator here for the others",
+			"%s runs as a single instance here. Only PostgreSQL is replicated, "+
+				"because CloudNativePG does that replication and there is no operator for the others",
 			s.Engine)
 	}
 	return nil

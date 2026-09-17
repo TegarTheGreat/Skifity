@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
+import { EnvironmentConfinement } from "@/components/environment-confinement"
 import { EnvironmentQuota } from "@/components/environment-quota"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
@@ -103,6 +104,9 @@ export function ProjectDetailPage() {
     ? chosen!
     : (items[0]?.id ?? "")
   const setEnvironmentId = setChosen
+  // Derived from the same list rather than fetched again: the row is already
+  // here, and a second query would be a second source of truth for it.
+  const chosenEnvironment = items.find((environment) => environment.id === environmentId)
 
   const remove = useMutation({
     mutationFn: () => api.delete(`/api/projects/${projectId}`),
@@ -206,7 +210,12 @@ export function ProjectDetailPage() {
           {environments.isLoading ? (
             <Skeleton className="h-40" />
           ) : environmentId ? (
-            <EnvironmentServices environmentId={environmentId} />
+            <>
+              {chosenEnvironment && (
+                <EnvironmentConfinement environment={chosenEnvironment} />
+              )}
+              <EnvironmentServices environmentId={environmentId} />
+            </>
           ) : null}
         </TabsContent>
 

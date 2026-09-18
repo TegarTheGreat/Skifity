@@ -18,13 +18,14 @@ import { EmptyState } from "@/components/empty-state"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
+import { ScheduleField } from "@/components/schedule-field"
 import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Field, FieldLabel } from "@/components/ui/field"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -457,21 +458,19 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">{t("databases.backupScheduleHelp")}</p>
+          {/* Three controls used to be labelled "Automatic backups": the card,
+              the switch and the schedule. Each says what it is now. */}
           <label className="flex items-center justify-between gap-4">
-            <span className="text-sm">{t("databases.backupSchedule")}</span>
+            <span className="text-sm">{t("databases.backupsOn")}</span>
             <Switch checked={enabledValue} onCheckedChange={setEnabled} />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="backup-schedule">{t("databases.backupSchedule")}</FieldLabel>
-              <Input
-                id="backup-schedule"
-                value={scheduleValue}
-                onChange={(event) => setSchedule(event.target.value)}
-                className="font-mono"
-                placeholder="0 3 * * *"
-              />
-            </Field>
+            <ScheduleField
+              id="backup-schedule"
+              value={scheduleValue}
+              onChange={setSchedule}
+              description={t("databases.backupScheduleFieldHelp")}
+            />
             <Field>
               <FieldLabel htmlFor="backup-retention">{t("databases.retention")}</FieldLabel>
               <Input
@@ -481,6 +480,7 @@ function BackupsPanel({ databaseId }: { databaseId: string }) {
                 value={retentionValue}
                 onChange={(event) => setRetention(event.target.value)}
               />
+              <FieldDescription>{t("databases.retentionHelp")}</FieldDescription>
             </Field>
           </div>
           {savePolicy.error != null && <ErrorDisplay error={savePolicy.error} compact />}

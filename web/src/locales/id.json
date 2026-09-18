@@ -171,6 +171,7 @@
   },
   "projects": {
     "title": "Proyek",
+    "subtitle": "Setiap aplikasi dan database berada di dalam sebuah proyek, pada salah satu environment-nya.",
     "newProject": "Proyek baru",
     "projectName": "Nama proyek",
     "description": "Deskripsi",
@@ -198,9 +199,21 @@
       "requests.storage": "Penyimpanan"
     }
   },
+  "schedule": {
+    "label": "Jadwal",
+    "everyHour": "Setiap jam",
+    "everyDay": "Setiap hari pukul 03:00 UTC",
+    "everyWeek": "Setiap Senin pukul 03:00 UTC",
+    "everyMonth": "Setiap tanggal 1 pukul 03:00 UTC",
+    "custom": "Khusus…",
+    "customLabel": "Ekspresi cron",
+    "customHelp": "Lima kolom cron dalam UTC: menit, jam, tanggal, bulan, hari."
+  },
   "apps": {
     "title": "Aplikasi",
     "newApp": "Aplikasi baru",
+    "newAppSubtitle": "Deploy dari repositori Git, atau jalankan image container yang sudah ada.",
+    "startFromTemplate": "Mulai dari template",
     "appName": "Nama aplikasi",
     "source": "Sumber",
     "sourceGit": "Repositori Git",
@@ -218,6 +231,8 @@
     "healthPath": "Path health check",
     "healthPathHelp": "Path yang mengembalikan 200 saat aplikasi siap melayani, misalnya /healthz.",
     "startCommand": "Perintah start",
+    "dockerfilePath": "Lokasi Dockerfile",
+    "startCommandHelp": "Kosongkan untuk memakai perintah start bawaan image.",
     "builder": "Builder",
     "builderAuto": "Deteksi otomatis",
     "builderDockerfile": "Dockerfile",
@@ -264,6 +279,9 @@
       "created": "Belum di-deploy"
     },
     "runCommand": "Jalankan perintah",
+    "noOutputYet": "Belum ada keluaran",
+    "noOutputYetHelp": "Hasil cetak sebuah perintah akan muncul di sini.",
+    "nothingScheduled": "Belum ada jadwal",
     "runCommandHelp": "Dijalankan sekali, di image aplikasi ini, dengan variabel aplikasi ini. Migrasi, pengisian data, atau sekadar melihat data.",
     "run": "Jalankan",
     "running": "Menjalankan...",
@@ -390,6 +408,7 @@
   },
   "servers": {
     "title": "Server",
+    "subtitle": "Mesin tempat aplikasi Anda berjalan. Skifity menyatukannya menjadi satu cluster.",
     "addServer": "Tambah server",
     "addServerIntro": "Masukkan alamat dan cara masuknya. Sisanya dikerjakan {{product}}.",
     "host": "Alamat IP atau hostname",
@@ -464,6 +483,7 @@
   },
   "databases": {
     "title": "Database",
+    "subtitle": "Database terkelola, dicadangkan dan tersambung ke aplikasi Anda.",
     "newDatabase": "Database baru",
     "engine": "Jenis",
     "postgres": "PostgreSQL",
@@ -487,6 +507,9 @@
     "backups": "Cadangan",
     "backupNow": "Cadangkan sekarang",
     "backupSchedule": "Cadangan otomatis",
+    "backupsOn": "Ambil cadangan otomatis",
+    "backupScheduleFieldHelp": "Kapan pencadangan berjalan. Waktu dalam UTC.",
+    "retentionHelp": "Cadangan lama dihapus setelah yang baru berhasil.",
     "backupScheduleHelp": "Cadangan ditulis ke penyimpanan yang Anda atur di Pengaturan.",
     "retention": "Simpan yang terakhir",
     "restore": "Pulihkan",

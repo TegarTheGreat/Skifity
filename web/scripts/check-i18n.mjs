@@ -207,6 +207,45 @@ function checkSourceStrings() {
   }
 }
 
+/**
+ * A call site that does not pass what its string asks for.
+ *
+ * `t("apps.portHelp")` for a string containing "{{product}}" renders the braces
+ * to the user, on the page, in every language. It shipped: the app's settings
+ * tab read "which {{product}} sets for you" while the same key on another page
+ * read correctly, because that one passed the value.
+ *
+ * The source's placeholders are the truth; the call has to name each of them.
+ * The window is generous because the options object is usually on the next
+ * line, and the check is deliberately one-sided: passing a value a string does
+ * not use is harmless, leaving one out is not.
+ */
+function checkInterpolations() {
+  const needed = new Map()
+  for (const [key, { value }] of sourceGroups) {
+    const names = [...placeholders(value)].filter((name) => name !== "count")
+    if (names.length > 0) needed.set(key, names)
+  }
+
+  for (const file of walk(srcDir)) {
+    if (!file.endsWith(".tsx") && !file.endsWith(".ts")) continue
+    const contents = readFileSync(file, "utf8")
+    for (const match of contents.matchAll(/\bt\(\s*"([\w.]+)"/g)) {
+      const names = needed.get(match[1])
+      if (!names) continue
+      const window = contents.slice(match.index + match[0].length, match.index + match[0].length + 300)
+      const missing = names.filter((name) => !new RegExp(`\\b${name}\\s*[:,}]`).test(window))
+      if (missing.length > 0) {
+        const line = contents.slice(0, match.index).split("\n").length
+        problems.push(
+          `${file.slice(srcDir.length + 1)}:${line} calls t("${match[1]}") without ` +
+            `${missing.map((name) => `{{${name}}}`).join(", ")}, which renders the braces to the user`,
+        )
+      }
+    }
+  }
+}
+
 function* walk(directory) {
   let entries = []
   try {
@@ -222,6 +261,7 @@ function* walk(directory) {
 }
 
 checkSourceStrings()
+checkInterpolations()
 
 if (problems.length > 0) {
   console.error(`\n${problems.length} translation problem(s):\n`)

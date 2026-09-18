@@ -5,6 +5,7 @@ import { ClockIcon, PlayIcon, PlusIcon, TerminalIcon, Trash2Icon } from "lucide-
 
 import { useConfirm } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
+import { ScheduleField, scheduleWords } from "@/components/schedule-field"
 import { ErrorDisplay } from "@/components/error-display"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -94,10 +95,13 @@ export function ConsoleTab({ app }: { app: App }) {
 
       {output === null ? (
         !run.isPending && (
+          // What this panel is for is output, so that is what its empty state
+          // says. It used to repeat the field's label and its help text word
+          // for word, sixty pixels below them.
           <EmptyState
             icon={TerminalIcon}
-            title={t("apps.runCommand")}
-            description={t("apps.runCommandHelp")}
+            title={t("apps.noOutputYet")}
+            description={t("apps.noOutputYetHelp")}
           />
         )
       ) : (
@@ -206,17 +210,12 @@ function ScheduledCommands({ app }: { app: App }) {
                     autoFocus
                   />
                 </Field>
-                <Field>
-                  <FieldLabel htmlFor="job-schedule">{t("apps.schedule")}</FieldLabel>
-                  <Input
-                    id="job-schedule"
-                    value={schedule}
-                    onChange={(event) => setSchedule(event.target.value)}
-                    className="font-mono"
-                    required
-                  />
-                  <FieldDescription>{t("apps.scheduleHelp")}</FieldDescription>
-                </Field>
+                <ScheduleField
+                  id="job-schedule"
+                  value={schedule}
+                  onChange={setSchedule}
+                  description={t("apps.scheduleHelp")}
+                />
               </div>
               <Field>
                 <FieldLabel htmlFor="job-command">{t("apps.runCommand")}</FieldLabel>
@@ -249,7 +248,7 @@ function ScheduledCommands({ app }: { app: App }) {
           <EmptyState
             bordered={false}
             icon={ClockIcon}
-            title={t("apps.scheduledCommands")}
+            title={t("apps.nothingScheduled")}
             description={t("apps.scheduledCommandsHelp")}
           />
         ) : (
@@ -258,8 +257,13 @@ function ScheduledCommands({ app }: { app: App }) {
               <Item key={job.id} variant="outline" className="mb-2">
                 <ItemContent>
                   <ItemTitle>{job.name}</ItemTitle>
-                  <ItemDescription className="font-mono">
-                    {job.schedule} · {job.command}
+                  <ItemDescription>
+                    {/* The words when it is one of the four, the expression
+                        when it is not: a row reading "0 3 * * *" asks the
+                        reader to parse cron to find out when their job runs. */}
+                    <span>{scheduleWords(t, job.schedule)}</span>
+                    <span className="mx-1">·</span>
+                    <span className="font-mono">{job.command}</span>
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>

@@ -151,7 +151,7 @@ export function DatabasesPage() {
     <Page>
       <PageHeader
         title={t("databases.title")}
-        description={t("databases.emptyHelp")}
+        description={t("databases.subtitle")}
         actions={environments.length > 0 && newDatabaseButton}
       />
 
@@ -173,10 +173,11 @@ export function DatabasesPage() {
                 </Link>
               </Button>
             ) : (
-              <Button onClick={() => setCreating(environments[0]?.environment.id ?? null)}>
-                <PlusIcon className="size-4" />
-                {t("databases.newDatabase")}
-              </Button>
+              // The same control as the header, not a second one that behaves
+              // differently: with several environments the header asks where
+              // and this used to pick the first, and with none it set null,
+              // which is a button that does nothing at all.
+              newDatabaseButton
             )
           }
         />

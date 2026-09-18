@@ -171,6 +171,7 @@
   },
   "projects": {
     "title": "项目",
+    "subtitle": "每个应用和数据库都属于某个项目的某个环境。",
     "newProject": "新建项目",
     "projectName": "项目名称",
     "description": "描述",
@@ -198,9 +199,21 @@
       "requests.storage": "存储"
     }
   },
+  "schedule": {
+    "label": "计划",
+    "everyHour": "每小时",
+    "everyDay": "每天 03:00 UTC",
+    "everyWeek": "每周一 03:00 UTC",
+    "everyMonth": "每月 1 日 03:00 UTC",
+    "custom": "自定义…",
+    "customLabel": "Cron 表达式",
+    "customHelp": "UTC 时区的五个 cron 字段：分钟、小时、日、月、星期。"
+  },
   "apps": {
     "title": "应用",
     "newApp": "新建应用",
+    "newAppSubtitle": "从 Git 仓库部署，或运行你已有的容器镜像。",
+    "startFromTemplate": "从模板开始",
     "appName": "应用名称",
     "source": "来源",
     "sourceGit": "Git 仓库",
@@ -218,6 +231,8 @@
     "healthPath": "健康检查路径",
     "healthPathHelp": "应用准备好提供服务后返回 200 的路径，例如 /healthz。",
     "startCommand": "启动命令",
+    "dockerfilePath": "Dockerfile 路径",
+    "startCommandHelp": "留空则使用镜像自带的启动命令。",
     "builder": "构建器",
     "builderAuto": "自动识别",
     "builderDockerfile": "Dockerfile",
@@ -264,6 +279,9 @@
       "created": "尚未部署"
     },
     "runCommand": "运行命令",
+    "noOutputYet": "还没有输出",
+    "noOutputYetHelp": "命令打印的内容会显示在这里。",
+    "nothingScheduled": "没有计划任务",
     "runCommandHelp": "在该应用自己的镜像中、带着该应用的变量运行一次。用于迁移、回填数据，或查看数据。",
     "run": "运行",
     "running": "正在运行...",
@@ -390,6 +408,7 @@
   },
   "servers": {
     "title": "服务器",
+    "subtitle": "运行你的应用的机器。Skifity 会把它们组成一个集群。",
     "addServer": "添加服务器",
     "addServerIntro": "填写地址和登录方式，其余交给 {{product}}。",
     "host": "IP 地址或主机名",
@@ -464,6 +483,7 @@
   },
   "databases": {
     "title": "数据库",
+    "subtitle": "托管数据库，自动备份并连接到你的应用。",
     "newDatabase": "新建数据库",
     "engine": "类型",
     "postgres": "PostgreSQL",
@@ -487,6 +507,9 @@
     "backups": "备份",
     "backupNow": "立即备份",
     "backupSchedule": "自动备份",
+    "backupsOn": "自动备份",
+    "backupScheduleFieldHelp": "备份运行的时间，使用 UTC。",
+    "retentionHelp": "新备份成功后会删除更早的备份。",
     "backupScheduleHelp": "备份会写入你在设置中配置的存储。",
     "retention": "保留最近",
     "restore": "恢复",

@@ -43,7 +43,7 @@ export function ProjectsPage() {
     <Page>
       <PageHeader
         title={t("projects.title")}
-        description={t("projects.emptyHelp")}
+        description={t("projects.subtitle")}
         actions={
           <Button onClick={() => setCreating(true)}>
             <PlusIcon />

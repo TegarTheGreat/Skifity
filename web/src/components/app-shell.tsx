@@ -7,12 +7,13 @@ import {
   BookOpenIcon,
   BoxesIcon,
   ChevronsUpDownIcon,
-  PuzzleIcon,
   DatabaseIcon,
+  ExternalLinkIcon,
   FolderIcon,
   InfoIcon,
   LayoutGridIcon,
   LogOutIcon,
+  PuzzleIcon,
   SearchIcon,
   ServerIcon,
   SettingsIcon,
@@ -54,7 +55,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -239,8 +239,9 @@ function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        {/* No group label: there is one group, and it used to be headed
+            "Overview" above an item called "Overview". */}
         <SidebarGroup>
-          <SidebarGroupLabel>{t("nav.overview")}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {links.map((link) => (
@@ -281,9 +282,12 @@ function AppSidebar() {
           )}
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip={t("nav.documentation")}>
+              {/* The one link in the sidebar that leaves the panel, so it says
+                  so rather than surprising somebody with a new tab. */}
               <a href="/docs/" target="_blank" rel="noreferrer">
                 <BookOpenIcon />
                 <span>{t("nav.documentation")}</span>
+                <ExternalLinkIcon className="ml-auto size-3.5 opacity-50" />
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

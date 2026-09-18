@@ -179,6 +179,7 @@
   },
   "projects": {
     "title": "Projects",
+    "subtitle": "Every app and database lives in a project, in one of its environments.",
     "newProject": "New project",
     "projectName": "Project name",
     "description": "Description",
@@ -206,9 +207,21 @@
       "requests.storage": "Storage"
     }
   },
+  "schedule": {
+    "label": "Schedule",
+    "everyHour": "Every hour",
+    "everyDay": "Every day at 03:00 UTC",
+    "everyWeek": "Every Monday at 03:00 UTC",
+    "everyMonth": "On the 1st of each month at 03:00 UTC",
+    "custom": "Custom…",
+    "customLabel": "Cron expression",
+    "customHelp": "Five cron fields in UTC: minute, hour, day of month, month, day of week."
+  },
   "apps": {
     "title": "Apps",
     "newApp": "New app",
+    "newAppSubtitle": "Deploy from a Git repository, or run a container image you already have.",
+    "startFromTemplate": "Start from a template",
     "appName": "App name",
     "source": "Source",
     "sourceGit": "Git repository",
@@ -226,6 +239,8 @@
     "healthPath": "Health check path",
     "healthPathHelp": "A path that returns 200 once the app is ready to serve, such as /healthz.",
     "startCommand": "Start command",
+    "dockerfilePath": "Dockerfile path",
+    "startCommandHelp": "Leave empty to use the image’s own start command.",
     "builder": "Builder",
     "builderAuto": "Detect automatically",
     "builderDockerfile": "Dockerfile",
@@ -272,6 +287,9 @@
       "created": "Not deployed yet"
     },
     "runCommand": "Run a command",
+    "noOutputYet": "No output yet",
+    "noOutputYetHelp": "What a command prints appears here.",
+    "nothingScheduled": "Nothing scheduled",
     "runCommandHelp": "Runs once, in this app's image, with this app's variables. A migration, a backfill, a look at the data.",
     "run": "Run",
     "running": "Running...",
@@ -398,6 +416,7 @@
   },
   "servers": {
     "title": "Servers",
+    "subtitle": "The machines your apps run on. Skifity joins them into one cluster.",
     "addServer": "Add a server",
     "addServerIntro": "Enter the address and how to sign in. {{product}} does the rest.",
     "host": "IP address or hostname",
@@ -473,6 +492,7 @@
   },
   "databases": {
     "title": "Databases",
+    "subtitle": "Managed databases, backed up and connected to your apps.",
     "newDatabase": "New database",
     "engine": "Type",
     "postgres": "PostgreSQL",
@@ -496,6 +516,9 @@
     "backups": "Backups",
     "backupNow": "Back up now",
     "backupSchedule": "Automatic backups",
+    "backupsOn": "Take a backup automatically",
+    "backupScheduleFieldHelp": "When the backup runs. Times are UTC.",
+    "retentionHelp": "Older backups are deleted when a new one succeeds.",
     "backupScheduleHelp": "Backups are written to the storage you configured in Settings.",
     "retention": "Keep the last",
     "restore": "Restore",

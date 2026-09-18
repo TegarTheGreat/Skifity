@@ -179,6 +179,7 @@
   },
   "projects": {
     "title": "प्रोजेक्ट",
+    "subtitle": "हर ऐप और डेटाबेस किसी प्रोजेक्ट के किसी एक एनवायरनमेंट में रहता है।",
     "newProject": "नया प्रोजेक्ट",
     "projectName": "प्रोजेक्ट का नाम",
     "description": "विवरण",
@@ -206,9 +207,21 @@
       "requests.storage": "भंडारण"
     }
   },
+  "schedule": {
+    "label": "शेड्यूल",
+    "everyHour": "हर घंटे",
+    "everyDay": "हर दिन 03:00 UTC पर",
+    "everyWeek": "हर सोमवार 03:00 UTC पर",
+    "everyMonth": "हर महीने की 1 तारीख़ को 03:00 UTC पर",
+    "custom": "कस्टम…",
+    "customLabel": "क्रॉन एक्सप्रेशन",
+    "customHelp": "UTC में पाँच क्रॉन फ़ील्ड: मिनट, घंटा, तारीख़, महीना, सप्ताह का दिन।"
+  },
   "apps": {
     "title": "ऐप",
     "newApp": "नया ऐप",
+    "newAppSubtitle": "किसी Git रिपॉज़िटरी से डिप्लॉय करें, या अपनी मौजूदा कंटेनर इमेज चलाएँ।",
+    "startFromTemplate": "टेम्पलेट से शुरू करें",
     "appName": "ऐप का नाम",
     "source": "स्रोत",
     "sourceGit": "Git रिपॉज़िटरी",
@@ -226,6 +239,8 @@
     "healthPath": "हेल्थ चेक पाथ",
     "healthPathHelp": "ऐसा पाथ जो ऐप के तैयार होते ही 200 लौटाए, जैसे /healthz।",
     "startCommand": "स्टार्ट कमांड",
+    "dockerfilePath": "Dockerfile का पथ",
+    "startCommandHelp": "इमेज की अपनी स्टार्ट कमांड इस्तेमाल करने के लिए खाली छोड़ें।",
     "builder": "बिल्डर",
     "builderAuto": "अपने आप पहचानें",
     "builderDockerfile": "Dockerfile",
@@ -272,6 +287,9 @@
       "created": "अभी डिप्लॉय नहीं हुआ"
     },
     "runCommand": "कमांड चलाएँ",
+    "noOutputYet": "अभी कोई आउटपुट नहीं",
+    "noOutputYetHelp": "कमांड जो छापेगी वह यहाँ दिखेगा।",
+    "nothingScheduled": "कुछ भी शेड्यूल नहीं है",
     "runCommandHelp": "इसी ऐप की इमेज में, इसी ऐप के वेरिएबल के साथ, एक बार चलता है। माइग्रेशन, बैकफ़िल, या डेटा देखना।",
     "run": "चलाएँ",
     "running": "चल रहा है...",
@@ -400,6 +418,7 @@
   },
   "servers": {
     "title": "सर्वर",
+    "subtitle": "वे मशीनें जिन पर आपके ऐप्स चलते हैं। Skifity उन्हें एक क्लस्टर में जोड़ता है।",
     "addServer": "सर्वर जोड़ें",
     "addServerIntro": "पता और साइन इन करने का तरीका दर्ज करें। बाकी काम {{product}} कर देगा।",
     "host": "IP पता या होस्टनाम",
@@ -475,6 +494,7 @@
   },
   "databases": {
     "title": "डेटाबेस",
+    "subtitle": "प्रबंधित डेटाबेस — बैकअप सहित और आपके ऐप्स से जुड़े हुए।",
     "newDatabase": "नया डेटाबेस",
     "engine": "प्रकार",
     "postgres": "PostgreSQL",
@@ -498,6 +518,9 @@
     "backups": "बैकअप",
     "backupNow": "अभी बैकअप लें",
     "backupSchedule": "स्वचालित बैकअप",
+    "backupsOn": "अपने आप बैकअप लें",
+    "backupScheduleFieldHelp": "बैकअप कब चलेगा। समय UTC में है।",
+    "retentionHelp": "नया बैकअप सफल होने पर पुराने हटा दिए जाते हैं।",
     "backupScheduleHelp": "बैकअप उसी स्टोरेज में लिखे जाते हैं जो आपने सेटिंग्स में दिया है।",
     "retention": "पिछले कितने रखें",
     "restore": "पुनर्स्थापित करें",

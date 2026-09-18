@@ -253,6 +253,7 @@ test("capture", async ({ page, request }) => {
     "overview",
     "deployments",
     "logs",
+    "console",
     "variables",
     "domains",
     "scaling",

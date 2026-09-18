@@ -1,14 +1,15 @@
 import { useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ContainerIcon, GitBranchIcon, SparklesIcon } from "lucide-react"
+import { ChevronRightIcon, ContainerIcon, GitBranchIcon, SparklesIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -51,7 +52,6 @@ export function NewAppPage() {
   const [healthPath, setHealthPath] = useState("")
   const [startCommand, setStartCommand] = useState("")
   const [deployNow, setDeployNow] = useState(true)
-  const [advanced, setAdvanced] = useState(false)
   const [gitSourceID, setGitSourceID] = useState("")
   // The Compose service this app is, when the repository has a Compose file.
   // A file describes several services and an app runs one, so this is a choice
@@ -145,7 +145,21 @@ export function NewAppPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title={t("apps.newApp")} description={t("apps.emptyHelp")} />
+      {/* The description used to be the apps empty state, which ends "or start
+          from a template" — a third path the form does not offer. It is a
+          button now, and the sentence says what this page actually does. */}
+      <PageHeader
+        title={t("apps.newApp")}
+        description={t("apps.newAppSubtitle")}
+        actions={
+          <Button variant="outline" asChild>
+            <Link to="/templates">
+              <SparklesIcon />
+              {t("apps.startFromTemplate")}
+            </Link>
+          </Button>
+        }
+      />
 
       <form
         className="space-y-6"
@@ -287,15 +301,17 @@ export function NewAppPage() {
           </CardContent>
         </Card>
 
-        <div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setAdvanced(!advanced)}>
-            {advanced ? t("common.hideAdvanced") : t("common.showAdvanced")}
-          </Button>
-        </div>
-
-        {advanced && (
-          <Card>
-            <CardContent className="space-y-4 pt-6">
+        {/* The same control as the one on Add a server: a bordered row with a
+            chevron. It used to be a bare ghost button that said "Show advanced"
+            and then "Hide advanced", which is a different affordance for the
+            same idea two pages apart in one flow. */}
+        <Collapsible className="rounded-md border">
+          <CollapsibleTrigger className="group/advanced flex w-full items-center gap-2 p-3 text-sm font-medium">
+            <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]/advanced:rotate-90" />
+            {t("common.showAdvanced")}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="space-y-4 border-t p-4">
               <Field>
                 <FieldLabel htmlFor="port">{t("apps.port")}</FieldLabel>
                 <Input
@@ -352,9 +368,7 @@ export function NewAppPage() {
 
                   {builder === "dockerfile" && (
                     <Field>
-                      <FieldLabel htmlFor="dockerfile-path">
-                        {t("apps.builderDockerfile")}
-                      </FieldLabel>
+                      <FieldLabel htmlFor="dockerfile-path">{t("apps.dockerfilePath")}</FieldLabel>
                       <Input
                         id="dockerfile-path"
                         value={dockerfilePath}
@@ -375,10 +389,11 @@ export function NewAppPage() {
                   onChange={(event) => setStartCommand(event.target.value)}
                   className="font-mono"
                 />
+                <FieldDescription>{t("apps.startCommandHelp")}</FieldDescription>
               </Field>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
 
         <label className="flex items-center gap-2.5 text-sm">
           <Checkbox

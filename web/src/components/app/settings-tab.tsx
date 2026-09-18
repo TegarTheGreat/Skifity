@@ -124,7 +124,7 @@ export function SettingsTab({ app }: { app: App }) {
                 value={port}
                 onChange={(event) => setPort(event.target.value)}
               />
-              <FieldDescription>{t("apps.portHelp")}</FieldDescription>
+              <FieldDescription>{t("apps.portHelp", { product: "Skifity" })}</FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="settings-health">{t("apps.healthPath")}</FieldLabel>

@@ -83,7 +83,7 @@ export function ServersPage() {
     <Page>
       <PageHeader
         title={t("servers.title")}
-        description={t("servers.requirementsList")}
+        description={t("servers.subtitle")}
         badge={
           needsAttention.length > 0 && (
             <Badge variant="outline" className="border-destructive/40 text-destructive">

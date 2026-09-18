@@ -1649,6 +1649,87 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 53 — the braces on the page, cron in a text box, and four sentences said twice
+
+An interface pass, looking for what a person meets rather than what a test
+covers: placeholders, flows, repeated words, and the controls that ask somebody
+to know a syntax.
+
+### `{{product}}`, on the page, in five languages
+
+The app's Settings tab read "Most frameworks read it from the PORT variable,
+which **{{product}}** sets for you". The same string on the New app page reads
+correctly, because that call passes the value and this one did not. i18next has
+nothing to say about a missing interpolation: it renders the braces and carries
+on.
+
+So `check:i18n` reads the call sites now. Every `t("…")` for a string with a
+placeholder has to name each one, and the check is deliberately one-sided —
+passing a value a string does not use is harmless; leaving one out is what
+shipped.
+
+### A schedule that asked you to know cron
+
+A backup schedule and a scheduled command were both a text box containing
+`0 3 * * *`. That asks every user to know five fields in the right order, and to
+find out they were wrong at three in the morning when the backup they thought
+they had did not happen.
+
+Four presets cover what people pick — hourly, daily, weekly, monthly — and cron
+stays behind "Custom" for the times they do not. The times say UTC, because a
+schedule that quietly meant the server's idea of local time is a different
+failure in every timezone. The list of scheduled commands shows the words rather
+than the expression: a row reading `0 3 * * *` asks whoever is looking at it to
+parse cron in their head.
+
+One piece of local state survives the "derive, do not synchronise" rule, and it
+is written down: which mode the control is in is derived from the value, except
+for the moment somebody picks "Custom" while the box still holds a preset, which
+is an intent no value can carry.
+
+### The same sentence, twice on one screen
+
+Four screens introduced themselves and then said it again:
+
+* **Databases** used the apps' empty-state help as the page's own description,
+  so the subtitle and the empty state were the same sentence.
+* **Projects** and **Servers** did the same. Servers went further: its page
+  description was the list of what a server needs — Ubuntu, a gigabyte, SSH as
+  root — which belongs on the page where you add one, and already is there.
+* The **Console** tab showed "Run a command" as a field label and again as a
+  panel title, with its help text repeated word for word sixty pixels below.
+  What that panel is for is output, so it says so now.
+* The backup card labelled three different controls "Automatic backups": the
+  card, the switch and the schedule. And "Keep the last" was a number with no
+  unit.
+
+### Two controls for one action
+
+On Databases with more than one environment, the header button asks which one
+and the empty state picked the first — and with no environments at all it called
+`setCreating(null)`, which is a button that does nothing. Both are the same
+control now.
+
+### Advanced, two ways
+
+Add a server opens its advanced section with a bordered row and a chevron. New
+app had a bare ghost button that said "Show advanced" and then "Hide advanced" —
+a different affordance for the same idea, two pages apart in one flow. It is the
+same control now, and the dead `advanced` state is gone with it.
+
+### The rest of what the pass found
+
+New app described itself with the apps' empty-state text, which ends "or start
+from a template" — a third path the form does not offer. The sentence says what
+the page does, and the template path is a button beside it. The Dockerfile path
+field was labelled "Dockerfile", which is the name of the builder option above
+it. The sidebar had one group, headed "Overview", above an item called
+"Overview". Documentation is the one link that leaves the panel and now says so.
+
+**Verified by looking:** the screenshots are recaptured from the real binary,
+and the console tab is in them now — the scheduled commands card had never been
+photographed.
+
 ## Phase 52 — a command nobody waited for, an error cached forever, and a path the panel chose
 
 An audit of `internal/mcpserver`, `internal/cli` and `internal/templates`.

@@ -49,6 +49,14 @@ type Problem struct {
 	Impact string `json:"impact,omitempty"`
 	// Fix is what to do about it, with exact commands where they exist.
 	Fix string `json:"fix,omitempty"`
+	// Args are the values interpolated into Cause, Impact and Fix.
+	//
+	// The panel shows a sentence from its own locale rather than the English
+	// one above, and a translated sentence needs the same values in it. They
+	// are carried separately, each rendered by the verb that produced it, so
+	// the interface fills "%s is where this panel answers." in Russian with the
+	// hostname the English one carries.
+	Args Args `json:"args,omitzero"`
 	// DocsPath links to the relevant documentation page.
 	DocsPath string `json:"docs_path,omitempty"`
 	// Severity drives presentation.
@@ -89,22 +97,100 @@ func New(code, title string) *Problem {
 	}
 }
 
+// Args are the values that went into a Problem's sentences.
+//
+// Positional, because that is what the Go call sites already are: a hundred
+// and seventeen of them pass their values to a format string, and naming every
+// one of them would be a hundred and seventeen edits for no gain. The locale
+// writes {{0}} and {{1}} where the English writes %s and %d, in the same order.
+type Args struct {
+	Title  []string `json:"title,omitempty"`
+	Cause  []string `json:"cause,omitempty"`
+	Impact []string `json:"impact,omitempty"`
+	Fix    []string `json:"fix,omitempty"`
+}
+
+// Newf starts a Problem whose title carries a value.
+//
+// Four errors named the thing they were about — "That deployment does not
+// exist", "Cloudflare tunnel is not installed by the panel" — by concatenating
+// a variable into the title. That reads well and cannot be translated: the
+// locale has no way to say where the value goes, and the test that checks every
+// error has words could not read the English either, so all four were missing
+// from the catalogue and from the list of what was missing.
+func Newf(code, format string, args ...any) *Problem {
+	p := New(code, fmt.Sprintf(format, args...))
+	p.Args.Title = renderArgs(format, args)
+	return p
+}
+
 // WithCause sets the explanation of what went wrong.
 func (p *Problem) WithCause(format string, args ...any) *Problem {
 	p.Cause = fmt.Sprintf(format, args...)
+	p.Args.Cause = renderArgs(format, args)
 	return p
 }
 
 // WithImpact sets what this means for the user.
 func (p *Problem) WithImpact(format string, args ...any) *Problem {
 	p.Impact = fmt.Sprintf(format, args...)
+	p.Args.Impact = renderArgs(format, args)
 	return p
 }
 
 // WithFix sets the suggested remedy.
 func (p *Problem) WithFix(format string, args ...any) *Problem {
 	p.Fix = fmt.Sprintf(format, args...)
+	p.Args.Fix = renderArgs(format, args)
 	return p
+}
+
+// renderArgs formats each argument on its own, with the verb that was going to
+// print it.
+//
+// Not "%v" for everything: %q puts the quotes on, %d would print a rune as a
+// number, and the value the panel shows has to be the value the English
+// sentence shows. An argument with no verb left to match — which means the
+// format string and the call disagree, and fmt has already written %!s(MISSING)
+// into the sentence — falls back to %v rather than being dropped.
+func renderArgs(format string, args []any) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	verbs := verbsIn(format)
+	out := make([]string, len(args))
+	for i, arg := range args {
+		verb := "%v"
+		if i < len(verbs) {
+			verb = verbs[i]
+		}
+		out[i] = fmt.Sprintf(verb, arg)
+	}
+	return out
+}
+
+// verbsIn returns the formatting verbs a format string uses, in order.
+func verbsIn(format string) []string {
+	var verbs []string
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			continue
+		}
+		// "%%" is a literal per cent and consumes no argument.
+		if i+1 < len(format) && format[i+1] == '%' {
+			i++
+			continue
+		}
+		end := i + 1
+		for end < len(format) && strings.ContainsRune("+-# 0123456789.", rune(format[end])) {
+			end++
+		}
+		if end < len(format) {
+			verbs = append(verbs, format[i:end+1])
+			i = end
+		}
+	}
+	return verbs
 }
 
 // WithDocs links a documentation page.

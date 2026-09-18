@@ -1649,6 +1649,74 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 59 — the error catalogue, in five languages
+
+The last part of the interface that was English in every language. Ninety-odd
+`errdoc` problems — a title, a cause, an impact and a fix each, the best writing
+in this repository — reached a Russian or Indonesian operator exactly as a Go
+file wrote them.
+
+### Why it was not just another locale file
+
+The settings page, in Phase 55, was a table of static strings: label and help,
+looked up by the setting's key. An error is not static. Two thirds of them
+interpolate a value — the hostname, the exit code, how many instances were
+ready — through `fmt.Sprintf`, and a translated sentence needs the same values
+in the same places.
+
+Naming every argument would have been a hundred and seventeen call-site edits
+for no gain, so they stay positional. `WithCause`, `WithImpact` and `WithFix`
+now record each argument alongside the sentence they built, **rendered by the
+verb that was going to print it** — `%q` keeps its quotes, `%d` stays a number —
+and the locale writes `{{0}}` and `{{1}}` where the English writes `%s` and `%d`,
+in the same order. The server's English is unchanged: it is still the fallback,
+still what the CLI prints, and still what the "copy for AI" button copies.
+
+A literal `%%` consumes no argument and must not shift the rest along; a verb
+with a width or a flag is read whole. Both have a test.
+
+### Four errors that were invisible to everything
+
+`New("resource.not_found", "That "+kind+" does not exist")` builds its title
+from a variable. The catalogue's own test skipped those calls, the extractor
+written for this phase skipped them, and so the list of what was missing did not
+contain them either — they were missing from the translation *and* from the
+report of what was missing. Four of them: `resource.not_found`,
+`config.missing`, `component.external` and `firewall.no_geo_database`.
+
+There is a `Newf` now, which takes the title as a format string and records its
+values like the three sentences do, and both tests read it. That is 116 codes,
+not the 112 the first pass found.
+
+### The gate
+
+The codes are not in a list anywhere — they are the first argument to a hundred
+and seventeen `errdoc.New` calls across thirty files. So the test parses the
+source with `go/ast`, collects every code with the format strings chained onto
+it, and requires each to have `errors.catalogue.<code>` in all five locales,
+with a `title`, and a `cause`, `impact` and `fix` wherever the Go has one. It
+refuses a locale key no Go file can raise, which is what a code renamed in Go
+leaves behind. Proven by deleting one field and renaming one key.
+
+A second proof, in the browser, because a complete locale file does not mean the
+running panel resolves it: the interface test switches to Russian, opens an app
+id that cannot exist, and checks that the 404 comes out as the Russian sentence
+with the server's own value in it — and that the English it replaced is nowhere
+on the page. Proven by putting `problem.title` back and watching it fail.
+
+### What is left in English, said plainly
+
+* **The CLI**, on purpose. It has one language, and `CLAUDE.md` says so.
+* **The catalogue's `Context` map** — the host, the exit code, the command —
+  which is data, not prose.
+* **The template catalogue's names and descriptions**, which are mostly
+  upstream product copy; the categories are translated.
+* **A plugin's own manifest**, which belongs to whoever wrote it.
+* **Scaling findings and provisioning step names**, which are the next two of
+  these and are much smaller: 14 and 40 strings against this one's 463.
+
+1418 keys, five languages. `make check` green, 15 interface tests pass.
+
 ## Phase 58 — what the reference screens actually show, read at full size
 
 Phase 56 and 57 were written from Mobbin's inline previews, which are low

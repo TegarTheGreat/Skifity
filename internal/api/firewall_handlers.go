@@ -186,7 +186,7 @@ func (s *Server) geoAvailable(r *http.Request) bool {
 }
 
 func missingGeoDatabase(which, field string) error {
-	return errdoc.New("firewall.no_geo_database", "This panel does not look up a visitor's "+which).
+	return errdoc.Newf("firewall.no_geo_database", "This panel does not look up a visitor's %s", which).
 		WithCause("A rule tests %s, and looking up a visitor's country and network is switched off.", field).
 		WithImpact("Nothing was saved. A rule that cannot be evaluated is skipped on every request, " +
 			"so it would have looked configured and protected nothing.").

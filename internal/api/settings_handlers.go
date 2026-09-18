@@ -178,7 +178,7 @@ func (s *Server) handleInstallComponent(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if def.External {
-		writeError(w, r, errdoc.New("component.external", def.Title+" is not installed by the panel").
+		writeError(w, r, errdoc.Newf("component.external", "%s is not installed by the panel", def.Title).
 			WithCause("It is installed with Helm, because it is several dozen objects with their own release cadence and the panel would be a worse installer than the one its authors wrote.").
 			WithImpact("Nothing was changed.").
 			WithFix("The documentation has the command.").

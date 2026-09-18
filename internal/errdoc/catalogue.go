@@ -44,7 +44,7 @@ func Forbidden(action string) *Problem {
 
 // NotFound means the resource does not exist, or the caller may not see it.
 func NotFound(kind, id string) *Problem {
-	return New("resource.not_found", "That "+kind+" does not exist").
+	return Newf("resource.not_found", "That %s does not exist", kind).
 		WithCause("No %s with the id %s is visible to you.", kind, id).
 		WithImpact("Nothing was changed.").
 		WithFix("Check the id, or go back to the list and pick it again.").
@@ -419,7 +419,7 @@ func RestoreRefused(target string) *Problem {
 
 // NotConfigured reports a feature used before its settings were filled in.
 func NotConfigured(feature, where string) *Problem {
-	return New("config.missing", feature+" is not set up yet").
+	return Newf("config.missing", "%s is not set up yet", feature).
 		WithCause("%s needs configuration that has not been provided.", feature).
 		WithImpact("The action was not performed.").
 		WithFix("Open %s and fill it in. Nothing needs to be changed in code or on the server.", where).

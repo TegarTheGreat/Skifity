@@ -104,7 +104,7 @@ func catalogueEntries(t *testing.T) map[string]entry {
 			}
 			switch target := call.Fun.(type) {
 			case *ast.Ident:
-				if target.Name == "New" && len(call.Args) == 2 {
+				if (target.Name == "New" || target.Name == "Newf") && len(call.Args) >= 2 {
 					found.code, found.codeComplete = text(call.Args[0])
 					found.title, found.titleComplete = text(call.Args[1])
 					found.titleEndsLiteral = endsLiteral(call.Args[1])

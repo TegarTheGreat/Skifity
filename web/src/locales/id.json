@@ -948,7 +948,705 @@
     "reload": "Muat ulang",
     "offline": "Panel tidak bisa dihubungi",
     "offlineHelp": "Aplikasi Anda tetap berjalan. Halaman ini akan tersambung kembali dengan sendirinya.",
-    "reconnecting": "Menyambungkan ulang..."
+    "reconnecting": "Menyambungkan ulang...",
+    "catalogue": {
+      "admin_backup_failed": {
+        "title": "Database tidak bisa disalin",
+        "cause": "{{0}}",
+        "impact": "Tidak ada salinan yang ditulis.",
+        "fix": "Pastikan direktorinya ada, filenya belum ada, dan disknya masih muat."
+      },
+      "admin_no_database": {
+        "title": "Database panel tidak ada di sini",
+        "cause": "Tidak ada file di {{0}}.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Jalankan ini di server tempat panel dipasang, sebagai root. Kalau databasenya di tempat lain, pakai --database, atau set SKIFITY_DATABASE_PATH."
+      },
+      "admin_no_such_user": {
+        "title": "Tidak ada akun dengan alamat itu",
+        "cause": "Tidak ada yang memakai {{0}} di panel ini.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Jalankan `{{0}} admin list-users` untuk melihat akun yang ada."
+      },
+      "app_crash_loop": {
+        "title": "Aplikasi ini terus mengulang start",
+        "cause": "{{0}} sudah restart {{1}} kali berturut-turut. Kubernetes memberi jeda makin lama di antara restart.",
+        "impact": "Aplikasi tidak melayani trafik dengan andal.",
+        "fix": "Baca baris log terakhir di bawah: penyebabnya hampir selalu ada di situ. Tiga yang paling sering: variabel lingkungan yang kurang, database yang tidak terjangkau, dan port yang sebenarnya tidak didengarkan aplikasi."
+      },
+      "auth_csrf": {
+        "title": "Permintaan ini diblokir demi keamanan",
+        "cause": "Permintaan tidak membawa token CSRF yang cocok.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Muat ulang halaman lalu coba lagi. Kalau kamu memanggil API langsung, pakai token API lewat header Authorization, bukan cookie."
+      },
+      "auth_forbidden": {
+        "title": "Kamu tidak punya izin untuk ini",
+        "cause": "Peranmu di tim ini tidak mengizinkan {{0}}.",
+        "impact": "Tindakan tidak dijalankan.",
+        "fix": "Minta pemilik atau admin tim untuk melakukannya, atau menaikkan peranmu."
+      },
+      "auth_invalid_credentials": {
+        "title": "Email atau kata sandi tidak cocok",
+        "cause": "Alamat email dan kata sandi tidak cocok dengan akun mana pun di panel ini.",
+        "impact": "Kamu belum masuk.",
+        "fix": "Periksa salah ketik lalu coba lagi. Setelah beberapa kali gagal, proses masuk dijeda sebentar."
+      },
+      "auth_invalid_totp": {
+        "title": "Kode itu tidak cocok",
+        "cause": "Kode enam digitnya tidak sesuai dengan yang diharapkan panel ini.",
+        "impact": "Autentikasi dua langkah tidak dinyalakan.",
+        "fix": "Pastikan jam di ponselmu benar, lalu ketik kode yang sedang berlaku dari aplikasi autentikatormu."
+      },
+      "auth_rate_limited": {
+        "title": "Terlalu banyak percobaan",
+        "cause": "Sudah terlalu banyak percobaan masuk yang gagal untuk akun ini atau dari alamat ini.",
+        "impact": "Proses masuk dijeda supaya kata sandi tidak bisa ditebak.",
+        "fix": "Tunggu {{0}} lalu coba lagi. Kalau itu bukan kamu, ganti kata sandimu begitu bisa masuk."
+      },
+      "auth_required": {
+        "title": "Kamu perlu masuk dulu",
+        "cause": "Permintaan ini tidak membawa sesi atau token API yang sah.",
+        "impact": "Tindakan tidak dijalankan.",
+        "fix": "Masuk lagi. Kalau memakai CLI, jalankan `skifity login`."
+      },
+      "auth_token_scope": {
+        "title": "Token ini tidak boleh membuat permintaan itu",
+        "cause": "Token {{0}} dibatasi pada {{1}}.",
+        "impact": "Permintaan ditolak. Tidak ada yang diubah.",
+        "fix": "Pakai token tanpa batasan, atau buat token yang bisa menulis, di halaman Akun."
+      },
+      "backup_bad_schedule": {
+        "title": "Skifity tidak mengerti jadwal itu",
+        "cause": "{{0}}",
+        "impact": "Jadwal tidak diubah.",
+        "fix": "Pakai lima kolom cron, misalnya \"0 3 * * *\" untuk setiap hari pukul 03:00 UTC."
+      },
+      "backup_bucket_missing": {
+        "title": "Bucket itu tidak ada",
+        "cause": "Bucket {{0}} tidak ditemukan di {{1}}.",
+        "impact": "Backup tidak bisa jalan.",
+        "fix": "Buat bucketnya di penyedia penyimpananmu, lalu coba lagi. Skifity tidak membuat bucket: itu butuh izin yang jauh lebih luas daripada sekadar menulis backup."
+      },
+      "backup_database_not_running": {
+        "title": "Database ini tidak sedang berjalan",
+        "cause": "{{0}} sedang {{1}}, jadi tidak ada yang bisa dicadangkan.",
+        "impact": "Tidak ada backup yang diambil.",
+        "fix": "Tunggu sampai databasenya berjalan, lalu coba lagi."
+      },
+      "backup_failed": {
+        "title": "Backup gagal",
+        "cause": "Mencadangkan {{0}} gagal: {{1}}",
+        "impact": "Tidak ada backup baru dari proses ini. Backup sebelumnya tidak tersentuh.",
+        "fix": "Periksa kredensial penyimpanan di Pengaturan, dan pastikan bucketnya ada serta bisa ditulis. Lalu jalankan backup lagi dari halaman database."
+      },
+      "backup_restore_refused": {
+        "title": "Pemulihan ini akan menimpa data yang sedang dipakai",
+        "cause": "{{0}} sedang dipakai dan pemulihan akan mengganti isinya sekarang.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Pulihkan ke database baru dulu, periksa hasilnya, lalu arahkan aplikasimu ke sana. Kalau memang mau menimpa, konfirmasikan secara eksplisit di dialog pemulihan."
+      },
+      "backup_storage_no_delete": {
+        "title": "Backup lama tidak bisa dihapus",
+        "cause": "Access key-nya bisa menulis ke {{0}} tapi tidak bisa menghapus dari sana.",
+        "impact": "Backup tetap jalan, tapi yang lama tidak akan pernah dibersihkan dan bucketnya akan terus membesar.",
+        "fix": "Beri access key itu izin menghapus objek, atau atur kebijakan retensi di penyedia penyimpananmu."
+      },
+      "backup_storage_not_configured": {
+        "title": "Belum ada penyimpanan backup",
+        "cause": "Tim ini belum menyiapkan penyimpanan yang kompatibel dengan S3.",
+        "impact": "Backup tidak bisa jalan, jadi tidak ada yang sedang diamankan.",
+        "fix": "Buka Pengaturan, lalu Penyimpanan, dan tambahkan bucket yang kompatibel dengan S3. Penyedia mana pun bisa: AWS S3, Backblaze B2, Cloudflare R2, Wasabi, atau server MinIO milikmu sendiri."
+      },
+      "backup_storage_read_only": {
+        "title": "Penyimpanan backup tidak bisa ditulis",
+        "cause": "Menulis objek uji ke {{0}} gagal: {{1}}",
+        "impact": "Backup akan gagal.",
+        "fix": "Beri access key itu izin menaruh objek di bucket ini."
+      },
+      "backup_storage_unreachable": {
+        "title": "Penyimpanan backup tidak bisa dihubungi",
+        "cause": "Koneksi ke {{0}} gagal: {{1}}",
+        "impact": "Backup tidak bisa jalan.",
+        "fix": "Periksa endpoint, access key, dan pastikan server ini bisa menjangkau layanan penyimpanannya."
+      },
+      "build_failed": {
+        "title": "Build gagal",
+        "cause": "Build {{0}} gagal di tahap {{1}}.",
+        "impact": "Versi baru tidak dideploy. Versi sebelumnya masih jalan dan masih melayani trafik.",
+        "fix": "Baca log build di bawah. Lalu perbaiki di repositorimu dan push lagi, atau tekan Coba lagi kalau menurutmu itu kegagalan sesaat."
+      },
+      "build_no_builder": {
+        "title": "Skifity tidak tahu cara mem-build repositori ini",
+        "cause": "Tidak ada Dockerfile di {{0}}, dan file yang ada tidak cocok dengan bahasa mana pun yang Skifity kenali.",
+        "impact": "Tidak ada build yang dimulai.",
+        "fix": "Tambahkan Dockerfile ke repositori, atau atur direktori akar kalau aplikasimu ada di subfolder sebuah monorepo, atau pilih image siap pakai saja."
+      },
+      "build_pod_not_started": {
+        "title": "Build tidak jadi dimulai",
+        "cause": "Tidak ada pod build yang siap dalam lima menit.",
+        "impact": "Tidak ada yang di-build atau dideploy.",
+        "fix": "Pastikan cluster masih punya CPU dan memori tersisa, dan komponen builder-nya berjalan."
+      },
+      "build_timeout": {
+        "title": "Build terlalu lama dan dihentikan",
+        "cause": "Build tidak selesai dalam 40 menit.",
+        "impact": "Tidak ada yang dideploy. Versi sebelumnya masih jalan.",
+        "fix": "Build selama ini biasanya berarti ada dependensi yang dikompilasi dari sumber. Tambahkan Dockerfile dengan layer dependensi yang di-cache, atau naikkan batas waktu build."
+      },
+      "cli_already_initialised": {
+        "title": "Direktori ini sudah punya aplikasi",
+        "cause": "{{0}} menunjuk ke aplikasi {{1}}.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Jalankan `{{0}} deploy` untuk mendeploy-nya, atau hapus {{1}} untuk memulai dari awal."
+      },
+      "cli_ambiguous_app": {
+        "title": "Aplikasi yang mana?",
+        "cause": "Direktori ini tidak punya {{0}}, dan environment-nya berisi beberapa aplikasi.",
+        "impact": "Perintah tidak dijalankan.",
+        "fix": "Tambahkan --app dengan salah satu dari: {{0}}"
+      },
+      "cli_export_path": {
+        "title": "Panel menyebut file di luar direktori ekspor",
+        "cause": "{{0}} tidak berada di dalam {{1}}.",
+        "impact": "Tidak ada yang ditulis untuk itu.",
+        "fix": "Ini panel mengembalikan nama yang seharusnya tidak. Laporkan, dan pastikan panelnya memang panel yang kamu kira."
+      },
+      "cli_export_write_failed": {
+        "title": "Ekspor tidak bisa ditulis",
+        "cause": "Menulis {{0}} gagal: {{1}}",
+        "impact": "Ekspornya tidak lengkap.",
+        "fix": "Pilih direktori yang bisa kamu tulisi dengan --out, dan pastikan disknya masih muat."
+      },
+      "cli_no_app": {
+        "title": "Belum ada aplikasi di sini",
+        "cause": "Direktori ini tidak punya {{0}}, dan environment-nya belum berisi aplikasi.",
+        "impact": "Perintah tidak dijalankan.",
+        "fix": "Jalankan `{{0}} init` untuk membuatnya."
+      },
+      "cli_no_project": {
+        "title": "Tim ini belum punya project",
+        "cause": "Tidak ada tempat untuk menaruh aplikasi.",
+        "impact": "Perintah tidak dijalankan.",
+        "fix": "Buat project di panel dulu."
+      },
+      "cli_no_team": {
+        "title": "Kamu belum tergabung di tim mana pun",
+        "cause": "Akun ini bukan anggota tim mana pun, jadi tidak ada yang bisa dikerjakan.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Minta seseorang di tim untuk menambahkanmu, atau buat tim di panel."
+      },
+      "cli_team_ambiguous": {
+        "title": "Kamu tergabung di lebih dari satu tim",
+        "cause": "Akun ini ada di {{0}} tim, jadi tidak jelas yang mana yang dimaksud.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Jalankan `{{0}} login` untuk memilih salah satu, atau set SKIFITY_TEAM ke id dari: {{1}}"
+      },
+      "cli_unavailable": {
+        "title": "Panel ini tidak bisa membagikan binernya sendiri",
+        "cause": "Executable yang sedang berjalan tidak bisa dibaca: {{0}}",
+        "impact": "Alat baris perintahnya tidak terunduh. Panelnya sendiri tidak terpengaruh.",
+        "fix": "Bangun dari repositori dengan `make build`, atau salin binernya dari mesin lain. Panel dan CLI adalah file yang sama."
+      },
+      "cli_unexpected_response": {
+        "title": "Panel menjawab dengan sesuatu yang tidak diduga",
+        "cause": "HTTP {{0}} dari {{1}}: {{2}}",
+        "impact": "Perintahnya tidak selesai.",
+        "fix": "Pastikan URL-nya menunjuk ke panel Skifity, bukan ke sesuatu yang lain."
+      },
+      "cluster_control_plane_unverifiable": {
+        "title": "Cluster tidak bisa ditanya berapa server yang menjalankannya",
+        "cause": "Menghapus server control plane hanya aman kalau panel bisa melihat berapa yang tersisa, dan Kubernetes API tidak menjawab.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Tunggu sampai cluster bisa dihubungi lalu coba lagi. Server worker tetap bisa dihapus kapan pun."
+      },
+      "cluster_drain_blocked": {
+        "title": "Sebuah aplikasi akan mati kalau server ini dihapus",
+        "cause": "{{0}} di {{1}} tidak bisa dipindahkan: {{2}}",
+        "impact": "Server tidak dihapus dan masih menjalankan aplikasimu.",
+        "fix": "Tambahkan server lain dulu, atau naikkan aplikasi yang menghalangi ini ke lebih dari satu instance supaya bisa dipindah."
+      },
+      "cluster_drain_timeout": {
+        "title": "Ada instance yang tidak mau pindah",
+        "cause": "{{0}} instance masih berjalan di {{1}} setelah lima menit.",
+        "impact": "Server tidak dihapus.",
+        "fix": "Aplikasi yang punya disk tidak bisa pindah ke server lain kecuali penyimpanan lintas-node dinyalakan. Hentikan aplikasi itu, atau nyalakan Longhorn di Pengaturan, lalu coba lagi."
+      },
+      "cluster_insufficient_capacity": {
+        "title": "Cluster sudah tidak muat",
+        "cause": "{{0}} tidak bisa dijadwalkan: {{1}}",
+        "impact": "Instance-nya menggantung dan tidak melayani trafik.",
+        "fix": "Tambahkan server di halaman Server, turunkan permintaan CPU atau memori aplikasi ini, atau kurangi jumlah instance-nya."
+      },
+      "cluster_last_control_plane": {
+        "title": "Ini satu-satunya server yang menjalankan cluster",
+        "cause": "Menghapusnya berarti menghapus node control plane terakhir. Kubernetes, semua aplikasi di atasnya, dan panel ini berjalan di sana.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Tambahkan server lain dan promosikan jadi control plane dulu. Kalau memang mau menurunkan seluruh cluster dengan sengaja, jalankan uninstaller di servernya langsung."
+      },
+      "cluster_node_not_ready": {
+        "title": "Server tidak berhasil bergabung ke cluster",
+        "cause": "Kubernetes sudah dipasang di {{0}}, tapi tidak ada node yang siap dalam lima menit.",
+        "impact": "Server terdaftar tapi belum menjalankan apa pun.",
+        "fix": "Pastikan server ini bisa menjangkau server pertama di port 6443, dan keduanya bisa saling menjangkau di UDP 51820. Firewall di panel penyedia biasanya yang jadi sebab."
+      },
+      "cluster_not_enough_servers": {
+        "title": "Ketersediaan tinggi butuh tiga server",
+        "cause": "Cluster ini punya {{0}} server. etcd bawaan butuh tiga anggota control plane supaya tetap hidup kalau satu tumbang.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Tambah server sampai minimal tiga, lalu promosikan tiga di antaranya."
+      },
+      "cluster_quorum_risk": {
+        "title": "Menghapus server ini akan merusak cluster",
+        "cause": "Ini server control plane, dan menghapusnya menyisakan {{0}}. etcd bawaan butuh jumlah ganjil minimal tiga supaya bisa bertahan saat ada yang tumbang.",
+        "impact": "Tidak ada yang diubah. Server masih jadi bagian cluster.",
+        "fix": "Promosikan server lain jadi control plane dulu, baru hapus yang ini. Kalau control plane-nya tinggal satu, satu-satunya cara menghapusnya adalah dengan menurunkan seluruh cluster."
+      },
+      "cluster_token_missing": {
+        "title": "Skifity tidak punya token gabung cluster ini",
+        "cause": "Panel berjalan di cluster Kubernetes yang bukan dia yang membuat, dan sebuah server hanya bisa bergabung ke cluster itu dengan token yang dipakai saat cluster dinyalakan.",
+        "impact": "Tidak ada server yang bisa ditambahkan. Tidak ada yang diubah di server yang sedang kamu tambahkan.",
+        "fix": "Di server tempat panel berjalan, salin tokennya ke tempatnya lalu mulai ulang panel:\n\n  sudo cp /var/lib/rancher/k3s/server/token {{0}}\n  sudo chmod 600 {{1}}"
+      },
+      "cluster_unreachable": {
+        "title": "Cluster tidak merespons",
+        "cause": "Kubernetes API tidak menjawab.",
+        "impact": "Aplikasimu tetap jalan, tapi Skifity tidak bisa mengubah apa pun atau membaca status terkini sekarang.",
+        "fix": "Biasanya pulih sendiri dalam semenit. Kalau tidak, pastikan server control plane menyala dan port 6443 bisa dijangkau antar server."
+      },
+      "component_external": {
+        "title": "{{0}} tidak dipasang oleh panel",
+        "cause": "Itu dipasang dengan Helm, karena isinya beberapa lusin objek dengan siklus rilisnya sendiri, dan panel akan jadi installer yang lebih buruk daripada yang ditulis pembuatnya.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Perintahnya ada di dokumentasi."
+      },
+      "component_install_failed": {
+        "title": "Berhenti-saat-tidak-dipakai tidak bisa dinyalakan",
+        "cause": "Pemasangan KEDA, yang menyediakan fitur berhenti saat tidak dipakai, gagal: {{0}}",
+        "impact": "Pengaturan penskalaan tidak diubah.",
+        "fix": "Pastikan cluster masih muat untuk satu komponen kecil lagi, lalu coba lagi."
+      },
+      "config_missing": {
+        "title": "{{0}} belum disiapkan",
+        "cause": "{{0}} butuh konfigurasi yang belum diisi.",
+        "impact": "Tindakan tidak dijalankan.",
+        "fix": "Buka {{0}} lalu isi. Tidak ada yang perlu diubah di kode atau di server."
+      },
+      "database_failed": {
+        "title": "Database tidak bisa dinyalakan",
+        "cause": "{{0}}",
+        "impact": "Belum ada yang memakainya, jadi tidak ada hal lain yang terpengaruh.",
+        "fix": "Pastikan cluster punya cukup memori dan disk untuknya, lalu hapus dan coba lagi."
+      },
+      "database_no_credentials": {
+        "title": "Database ini tidak punya kredensial tersimpan",
+        "cause": "Kredensialnya tidak ada di database panel.",
+        "impact": "Detail koneksinya tidak bisa ditampilkan.",
+        "fix": "Baca dari Secret Kubernetes {{0}}, atau buat ulang databasenya."
+      },
+      "database_still_linked": {
+        "title": "Database ini masih dipakai sebuah aplikasi",
+        "cause": "{{0}} aplikasi masih disuntik connection string dari database ini.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Lepaskan tautannya dari aplikasi-aplikasi itu dulu, atau konfirmasikan kalau kamu memang tetap mau menghapusnya."
+      },
+      "database_timeout": {
+        "title": "Database tidak siap tepat waktu",
+        "cause": "{{0}} tidak siap dalam lima belas menit.",
+        "impact": "Databasenya ada tapi belum bisa dipakai.",
+        "fix": "Buka daftar instance untuk melihat sebabnya. Yang biasa: tidak ada sisa disk untuk volumenya, dan tidak ada server yang memorinya cukup."
+      },
+      "deploy_cannot_rollback": {
+        "title": "Versi ini tidak bisa dijadikan tujuan rollback",
+        "cause": "Deployment #{{0}} tidak selesai dengan sukses, jadi tidak ada image untuk dikembalikan.",
+        "impact": "Tidak ada yang diubah. Versi yang sekarang masih jalan.",
+        "fix": "Pilih deployment yang bertanda berhasil dari riwayat."
+      },
+      "deploy_image_collected": {
+        "title": "Versi itu terlalu lama untuk dijadikan tujuan rollback",
+        "cause": "Hanya {{0}} versi terakhir sebuah aplikasi yang imagenya disimpan. Versi {{1}} lebih jauh dari itu, dan imagenya dihapus supaya disk tidak penuh.",
+        "impact": "Tidak ada yang diubah. Versi yang berjalan sekarang tetap berjalan.",
+        "fix": "Kembali ke salah satu dari {{0}} versi terakhir, atau deploy lagi commit yang kamu mau — itu akan membangunnya dari awal."
+      },
+      "deploy_image_pull_failed": {
+        "title": "Image tidak bisa ditarik",
+        "cause": "Menarik {{0}} gagal: {{1}}",
+        "impact": "Instance baru tidak bisa mulai. Versi sebelumnya masih jalan.",
+        "fix": "Kalau ini image privat, tambahkan kredensial registry di Pengaturan. Kalau ini hasil build internal, registry di dalam cluster mungkin tidak terjangkau dari node ini: pastikan node-nya sudah bergabung ke jaringan cluster."
+      },
+      "deploy_refused_by_plugin": {
+        "title": "Sebuah plugin menghentikan deployment ini",
+        "cause": "{{0}} menolaknya: {{1}}",
+        "impact": "Tidak ada yang diubah. Versi yang sedang melayani tetap melayani.",
+        "fix": "Penuhi apa pun yang dimintanya, atau matikan plugin itu di halaman Plugin."
+      },
+      "deploy_rollout_timeout": {
+        "title": "Versi baru tidak berhasil menyala",
+        "cause": "{{0}} dari {{1}} instance {{2}} siap sebelum batas waktu. {{3}}",
+        "impact": "Kubernetes mempertahankan versi sebelumnya, jadi aplikasimu tetap hidup. Versi barunya tidak jadi dirilis.",
+        "fix": "Periksa log aplikasi untuk crash saat mulai. Yang biasa: variabel lingkungan yang kurang, jalur health check yang belum ada, dan port aplikasi yang beda dengan port yang diatur."
+      },
+      "detect_unreadable": {
+        "title": "Repositori itu tidak bisa dibaca",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang dibuat. Kamu tetap bisa mengisi formulirnya sendiri.",
+        "fix": "Periksa alamat dan branch-nya. Repositori privat butuh akun Git yang terhubung dan punya akses ke sana, dipilih di bawah."
+      },
+      "domain_certificate_failed": {
+        "title": "Sertifikat HTTPS tidak bisa diterbitkan",
+        "cause": "Let's Encrypt menolak menerbitkan sertifikat untuk {{0}}: {{1}}",
+        "impact": "Domainnya jalan lewat HTTP tapi tidak lewat HTTPS.",
+        "fix": "Pastikan domainnya mengarah ke cluster ini dan port 80 bisa dijangkau dari internet — lewat situlah tantangannya diverifikasi. Kalau kamu kena batas laju, tunggu sejam sebelum mencoba lagi."
+      },
+      "domain_dns_mismatch": {
+        "title": "Domain ini belum mengarah ke sini",
+        "cause": "{{0}} saat ini mengarah ke {{1}}, padahal seharusnya ke {{2}}.",
+        "impact": "Sertifikatnya tidak bisa diterbitkan dan domainnya tidak akan melayani aplikasimu.",
+        "fix": "Buat record A untuk {{0}} yang mengarah ke {{1}}, lalu tunggu sampai menyebar. Skifity memeriksa lagi setiap menit."
+      },
+      "domain_is_the_panel": {
+        "title": "Itu alamat panel ini sendiri",
+        "cause": "{{0}} adalah tempat panel ini menjawab.",
+        "impact": "Tidak ada yang diubah. Mengarahkan aplikasi ke sana berarti menaruh dua hal di balik satu hostname, dan siapa yang menjawab akan diputuskan oleh ingress controller, bukan oleh siapa pun — termasuk untuk permintaan yang membawa cookie sesimu.",
+        "fix": "Beri aplikasinya hostname sendiri. Subdomain dari hostname panel pun tidak masalah."
+      },
+      "domain_no_free_address": {
+        "title": "Aplikasi ini tidak bisa diberi alamat",
+        "cause": "{{0}} dan {{1}} dua-duanya sudah dipakai aplikasi lain.",
+        "impact": "Aplikasinya terdeploy tapi tidak punya URL otomatis. Domain milikmu sendiri tetap bisa dipakai.",
+        "fix": "Ganti nama aplikasinya, atau tambahkan domainmu sendiri di tab Domain aplikasi itu."
+      },
+      "environment_level_not_applied": {
+        "title": "Levelnya tersimpan, tapi namespace-nya tidak berubah",
+        "cause": "{{0}}",
+        "impact": "Kubernetes masih menerapkan level yang lama, jadi sebuah deploy akan berperilaku seperti sebelumnya.",
+        "fix": "Perbaiki apa yang disebut di penyebabnya, lalu simpan levelnya lagi."
+      },
+      "firewall_failed": {
+        "title": "Firewall tidak bisa dikonfigurasi",
+        "cause": "Perintah firewall gagal di {{0}}: {{1}}",
+        "impact": "Servernya tidak jadi ditambahkan.",
+        "fix": "Pastikan akun yang dipakai Skifity untuk masuk bisa menjalankan ufw atau iptables. Perlu root, atau sudo tanpa kata sandi."
+      },
+      "firewall_no_geo_database": {
+        "title": "Panel ini tidak mencari tahu {{0}} pengunjung",
+        "cause": "Ada aturan yang menguji {{0}}, sementara pencarian negara dan jaringan pengunjung sedang dimatikan.",
+        "impact": "Tidak ada yang disimpan. Aturan yang tidak bisa dievaluasi akan dilewati di setiap permintaan, jadi dia akan tampak terpasang padahal tidak melindungi apa pun.",
+        "fix": "Nyalakan \"Cari tahu negara dan jaringan pengunjung\" di Pengaturan, lalu Domain dan HTTPS. Itu memakai basis data bulanan gratis dari DB-IP, yang tidak perlu akun."
+      },
+      "guard_no_panel_image": {
+        "title": "Firewall tidak bisa dipasang",
+        "cause": "Deployment milik panel sendiri tidak bisa dibaca, jadi tidak ada image untuk menjalankan penjaganya: {{0}}",
+        "impact": "Tidak ada yang diubah di cluster.",
+        "fix": "Ini bekerja kalau panelnya berjalan di dalam cluster yang dia kelola, dan begitulah cara installer menyiapkannya. Panel yang berjalan di luar cluster tidak bisa memasang komponen ini."
+      },
+      "guard_rules_too_large": {
+        "title": "Aturan firewall-nya terlalu banyak untuk diterapkan",
+        "cause": "Aturan untuk semua aplikasi yang dilindungi totalnya {{0}} KB, dan Kubernetes tidak mau menyimpan lebih dari {{1}} KB dalam satu objek.",
+        "impact": "Tidak ada yang diubah di cluster; aturan yang sudah ada tetap berlaku.",
+        "fix": "Pendekkan daftar yang paling panjang — biasanya daftar alamat yang membengkak — atau matikan firewall untuk aplikasi yang sudah tidak membutuhkannya."
+      },
+      "internal": {
+        "title": "Ada yang tidak beres",
+        "cause": "Panel mengalami error tak terduga saat mengerjakan server ini.",
+        "impact": "Operasinya berhenti di tempatnya. Servernya mungkin terkonfigurasi setengah jalan; langkah-langkah di atas menunjukkan sampai mana.",
+        "fix": "Jalankan lagi — setiap langkah aman diulang. Kalau gagal dengan cara yang sama, salin error ini dan buka issue: itu bug di Skifity."
+      },
+      "invite_account_exists": {
+        "title": "Alamat itu sudah punya akun",
+        "cause": "Ada yang mendaftar dengan {{0}} setelah undangan ini dikirim.",
+        "impact": "Tidak ada akun yang dibuat.",
+        "fix": "Masuk saja, lalu minta ditambahkan ke tim."
+      },
+      "invite_not_valid": {
+        "title": "Undangan ini tidak bisa dipakai",
+        "cause": "Tautannya sudah kedaluwarsa, sudah pernah dipakai, atau ditarik kembali.",
+        "impact": "Tidak ada akun yang dibuat.",
+        "fix": "Minta tautan baru ke orang yang mengundangmu."
+      },
+      "k3s_install_failed": {
+        "title": "Kubernetes tidak bisa dipasang di server ini",
+        "cause": "Installer k3s keluar dengan kode {{0}} di {{1}}.",
+        "impact": "Server terdaftar tapi bukan bagian dari cluster. Tidak ada beban kerja yang berjalan di sana.",
+        "fix": "Buka keluaran langkahnya di bawah. Yang paling sering: tidak ada akses internet keluar, kernel lama tanpa modul yang dibutuhkan, dan container runtime yang bentrok. Perbaiki sebabnya lalu tekan Coba lagi; langkah itu aman diulang."
+      },
+      "mcp_run_still_going": {
+        "title": "Perintahnya masih berjalan",
+        "cause": "Sudah berjalan selama {{0}}, dan itu batas waktu tunggunya.",
+        "impact": "Perintahnya tidak dihentikan. Dia masih berjalan di cluster, dan keluarannya disimpan bersama run-nya.",
+        "fix": "Tunggu, lalu baca kembali: run-nya {{0}} pada aplikasi {{1}}."
+      },
+      "network_port_blocked": {
+        "title": "Sebuah port cluster terblokir",
+        "cause": "Anggota cluster tidak bisa menjangkau {{0}} di {{1}}/{{2}}.",
+        "impact": "Node-nya tidak bisa bergabung ke cluster, atau pod di atasnya tidak bisa bicara dengan pod di tempat lain.",
+        "fix": "Buka {{0}}/{{1}} antar servermu. Skifity mengatur UFW dan iptables di servernya sendiri, tapi firewall di panel penyedia harus dibuka di sana. Periksa security group atau aturan firewall untuk mesin ini."
+      },
+      "notification_test_failed": {
+        "title": "Pesan uji tidak bisa dikirim",
+        "cause": "{{0}}",
+        "impact": "Kanal ini tidak akan mengirim notifikasi sampai bisa jalan.",
+        "fix": "Periksa URL webhook atau tokennya, dan pastikan server ini bisa menjangkau layanannya."
+      },
+      "operation_interrupted": {
+        "title": "Ini terputus saat panel dimulai ulang",
+        "cause": "Panel berhenti saat operasi ini sedang berjalan.",
+        "impact": "Servernya mungkin terkonfigurasi setengah jalan.",
+        "fix": "Tekan Coba lagi. Setiap langkah aman diulang, dan yang sudah selesai akan dilewati."
+      },
+      "operation_not_running": {
+        "title": "Operasi itu tidak sedang berjalan",
+        "cause": "Sudah selesai, atau panel dimulai ulang setelah operasi itu dimulai.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Muat ulang halaman untuk melihat keadaannya sekarang."
+      },
+      "operation_timeout": {
+        "title": "Ini terlalu lama dan dihentikan",
+        "cause": "Langkah {{0}} tidak selesai dalam {{1}}.",
+        "impact": "Servernya mungkin terkonfigurasi setengah jalan. Mencoba lagi aman: setiap langkah bisa diulang.",
+        "fix": "Tekan Coba lagi. Kalau habis waktu lagi, pastikan servernya punya akses internet keluar yang berfungsi."
+      },
+      "plugin_bad_manifest": {
+        "title": "Itu bukan manifest plugin",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang dipasang.",
+        "fix": "Cocokkan dengan standar plugin, yang didokumentasikan di /docs/plugins."
+      },
+      "plugin_did_not_start": {
+        "title": "Plugin-nya terpasang tapi tidak mau jalan",
+        "cause": "{{0}}",
+        "impact": "Kredensialnya ada dan kontainernya tidak berjalan, jadi dia tidak menerima apa pun.",
+        "fix": "Lihat log plugin itu sendiri. Image plugin harus berjalan sebagai pengguna non-root; image yang mulai sebagai root ditolak oleh namespace tempatnya berjalan, dan itu alasan paling umum sebuah plugin tidak mau jalan."
+      },
+      "plugin_permissions_changed": {
+        "title": "Plugin ini sekarang meminta hal yang berbeda",
+        "cause": "Yang kamu setujui dulu adalah {{0}}; manifest-nya sekarang meminta {{1}}.",
+        "impact": "Tidak ada yang dipasang.",
+        "fix": "Baca lagi apa yang dimintanya, dan pasang kalau itu masih bisa kamu terima."
+      },
+      "plugin_unreachable": {
+        "title": "Manifest itu tidak bisa diambil",
+        "cause": "Servernya menjawab {{0}}.",
+        "impact": "Tidak ada yang dipasang.",
+        "fix": "Periksa alamatnya."
+      },
+      "release_failed": {
+        "title": "Perintah rilis gagal",
+        "cause": "Perintahnya keluar dengan error sebelum versi barunya dirilis.",
+        "impact": "Deployment dihentikan. Versi yang berjalan sebelumnya masih berjalan, dan tidak ada trafik yang sampai ke versi baru.",
+        "fix": "Keluaran perintahnya ada di log build di atas. Perbaiki lalu deploy lagi; tidak ada yang berubah bagi penggunamu."
+      },
+      "release_timed_out": {
+        "title": "Perintah rilis tidak selesai",
+        "cause": "Masih berjalan setelah dua puluh menit.",
+        "impact": "Deployment dihentikan dan versi sebelumnya masih melayani.",
+        "fix": "Migrasi selama ini biasanya perlu dijalankan manual sekali saja, bukan di setiap deploy."
+      },
+      "request_invalid": {
+        "title": "Permintaan itu tidak sah",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Perbaiki kolom yang ditandai lalu coba lagi."
+      },
+      "resource_conflict": {
+        "title": "Nama itu sudah dipakai",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "{{0}}"
+      },
+      "resource_name_taken": {
+        "title": "Nama itu sudah dipakai di sini",
+        "cause": "{{0}} di environment ini sudah bernama {{1}}, dan sebuah aplikasi dan sebuah database dalam satu environment berbagi alamat.",
+        "impact": "Tidak ada yang dibuat.",
+        "fix": "Pilih nama lain. Environment lain tidak terpengaruh: nama yang sama di staging dan di production tidak masalah."
+      },
+      "resource_not_found": {
+        "title": "{{0}} itu tidak ada",
+        "cause": "Tidak ada {{0}} dengan id {{1}} yang terlihat olehmu.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Periksa id-nya, atau kembali ke daftarnya dan pilih lagi."
+      },
+      "run_never_deployed": {
+        "title": "Aplikasi ini belum pernah dideploy",
+        "cause": "Sebuah perintah berjalan di dalam image aplikasi itu sendiri, dan imagenya belum ada sampai aplikasinya dideploy sekali.",
+        "impact": "Tidak ada yang dijalankan.",
+        "fix": "Deploy aplikasinya dulu, baru jalankan perintahnya."
+      },
+      "scaling_risk": {
+        "title": "Aplikasi ini mungkin tidak bekerja benar dengan lebih dari satu instance",
+        "cause": "{{0}}",
+        "impact": "Dengan beberapa instance berjalan, sebagian permintaan akan berperilaku berbeda dari yang lain.",
+        "fix": "{{0}}"
+      },
+      "server_no_operation": {
+        "title": "Tidak ada yang bisa dicoba lagi",
+        "cause": "Tidak ada catatan percobaan sebelumnya untuk menambahkan server ini.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Hapus servernya lalu tambahkan lagi."
+      },
+      "server_not_in_cluster": {
+        "title": "Server ini belum ada di cluster",
+        "cause": "Tidak ada node Kubernetes yang cocok dengan {{0}}.",
+        "impact": "Tidak ada metrik langsung yang bisa ditampilkan.",
+        "fix": "Kalau servernya masih dalam proses ditambahkan, tunggu sampai selesai. Kalau gagal, buka servernya lalu tekan Coba lagi."
+      },
+      "server_not_ours": {
+        "title": "Server ini bukan Skifity yang menambahkan",
+        "cause": "{{0}} adalah node yang sudah ada di cluster ini sejak Skifity dipasang — biasanya mesin tempat panelnya sendiri berjalan. Tidak ada kunci ke sana dan tidak ada milik kami yang ditaruh di situ.",
+        "impact": "{{0}} tidak dilakukan.",
+        "fix": "Ubah mesin ini dari mesinnya sendiri. Untuk mengeluarkannya sepenuhnya dari cluster, jalankan uninstaller di situ: `sudo sh /usr/local/bin/skifity-uninstall`. Kalau yang kamu mau adalah kapasitas tambahan, tambahkan server kedua — yang itu memang Skifity pasang dan bisa dikelola."
+      },
+      "setup_already_done": {
+        "title": "Penyiapan sudah pernah diselesaikan",
+        "cause": "Panel ini sudah punya akun administrator.",
+        "impact": "Tidak ada akun yang dibuat.",
+        "fix": "Masuk dengan akun yang dibuat saat penyiapan. Kalau kata sandinya hilang, lihat panduan pemulihan akun."
+      },
+      "setup_bad_token": {
+        "title": "Token penyiapan itu tidak benar",
+        "cause": "Token yang kamu masukkan tidak cocok dengan yang dihasilkan panel ini.",
+        "impact": "Tidak ada akun yang dibuat.",
+        "fix": "Salin tokennya dari keluaran installer. Token itu juga ditulis ke berkas setup-token di direktori konfigurasi panel, di servernya."
+      },
+      "setup_no_token": {
+        "title": "Panel ini tidak punya token penyiapan",
+        "cause": "Panel dinyalakan tanpa token penyiapan sekali pakai, jadi penyiapan pertama tidak bisa diverifikasi.",
+        "impact": "Tidak ada akun yang dibuat.",
+        "fix": "Jalankan installer lagi, atau tulis sebuah token ke berkas token penyiapan lalu mulai ulang panelnya."
+      },
+      "setup_too_many_attempts": {
+        "title": "Terlalu banyak token penyiapan yang salah",
+        "cause": "Token penyiapan sudah terlalu sering ditebak.",
+        "impact": "Penyiapan dikunci sampai panelnya dimulai ulang.",
+        "fix": "Mulai ulang panelnya, lalu salin tokennya persis dari keluaran installer."
+      },
+      "ssh_auth_failed": {
+        "title": "Server menolak kredensial itu",
+        "cause": "Masuk sebagai {{0}} di {{1}} dengan {{2}} ditolak.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "{{0}}"
+      },
+      "ssh_host_key_changed": {
+        "title": "Identitas server ini berubah",
+        "cause": "{{0}} menunjukkan host key SSH yang berbeda dari yang dicatat saat dia ditambahkan.",
+        "impact": "Koneksinya ditolak. Skifity tidak akan menjalankan perintah di server yang tidak dia kenali.",
+        "fix": "Kalau kamu membangun ulang atau memasang ulang server ini, hapus dari Skifity lalu tambahkan lagi. Kalau tidak, berhenti dan selidiki: mungkin ada yang menyadap koneksinya."
+      },
+      "ssh_key_install_failed": {
+        "title": "Kunci panel tidak bisa dipasang",
+        "cause": "Menulis ke authorized_keys di {{0}} gagal: {{1}}",
+        "impact": "Server tidak jadi ditambahkan.",
+        "fix": "Pastikan {{0}} bisa menulis ke direktori home-nya sendiri dan disknya tidak penuh."
+      },
+      "ssh_key_verify_failed": {
+        "title": "Kunci panel terpasang tapi tidak berfungsi",
+        "cause": "Menyambung dengan kunci baru gagal: {{0}}",
+        "impact": "Server tidak jadi ditambahkan. Kata sandinya tidak dibuang.",
+        "fix": "Periksa pengaturan sshd di servernya: PubkeyAuthentication harus yes, dan direktori home tidak boleh bisa ditulisi oleh grup."
+      },
+      "ssh_no_credentials": {
+        "title": "Tidak ada kredensial untuk menyambung",
+        "cause": "Kata sandinya dipakai sekali saat percobaan pertama dan sengaja tidak disimpan.",
+        "impact": "Servernya tidak bisa dihubungi untuk melanjutkan.",
+        "fix": "Hapus server ini lalu tambahkan lagi dengan kata sandinya atau sebuah kunci privat."
+      },
+      "ssh_unreachable": {
+        "title": "Server tidak bisa dijangkau lewat SSH",
+        "cause": "Tidak ada yang menjawab di {{0}} port {{1}}.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pastikan alamat IP dan portnya benar, servernya menyala, dan firewall penyediamu mengizinkan TCP masuk di port {{0}}. Banyak penyedia memblokir semuanya secara default di panel mereka, dan SSH tidak bisa membukanya dari sini."
+      },
+      "sso_no_panel_url": {
+        "title": "Panel ini tidak tahu alamatnya sendiri",
+        "cause": "Single sign-on mengembalikan orang ke alamat yang tetap, dan pengaturan URL Panel masih kosong.",
+        "impact": "Proses masuknya tidak bisa dimulai.",
+        "fix": "Isi URL Panel di Pengaturan, lalu daftarkan alamat itu diikuti /api/auth/sso/callback ke penyedia identitasmu."
+      },
+      "sso_not_configured": {
+        "title": "Single sign-on belum disiapkan",
+        "cause": "Belum ada penyedia identitas yang dikonfigurasi di panel ini.",
+        "impact": "Masuklah dengan alamat email dan kata sandi saja.",
+        "fix": "Administrator bisa mengatur penyedianya di Pengaturan, lalu Masuk."
+      },
+      "sso_provider_unreachable": {
+        "title": "Penyedia identitasnya tidak bisa dihubungi",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang bisa masuk lewat single sign-on sampai ini diperbaiki.",
+        "fix": "Periksa URL issuer di Pengaturan, lalu Masuk, dan pastikan panel ini bisa menjangkaunya."
+      },
+      "store_bad_index": {
+        "title": "Indeks store plugin tidak bisa dibaca",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang dibaca dari sana.",
+        "fix": "Kalau ini store milikmu sendiri, pastikan indeksnya berformat yang panel ini baca. Sebuah plugin tetap bisa dipasang dari alamat manifest atau dengan menempelkan manifest-nya."
+      },
+      "store_bad_signature": {
+        "title": "Indeks store plugin tidak ditandatangani oleh kunci yang dipercaya panel ini",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang dibaca dari sana, dan tidak ada yang dipasang.",
+        "fix": "Periksa kunci penandatangannya di Pengaturan, lalu Plugin. Kalau kuncinya benar, berarti indeks di {{0}} bukan indeks yang ditandatangani kunci itu — dan itu layak ditelusuri sebelum memasang apa pun dari sana."
+      },
+      "store_unreachable": {
+        "title": "Store plugin tidak bisa dihubungi",
+        "cause": "{{0}}",
+        "impact": "Tidak ada yang dibaca dari sana.",
+        "fix": "Pastikan cluster ini bisa menjangkau {{0}}. Sebuah plugin tetap bisa dipasang dari alamat manifest atau dengan menempelkannya — itulah yang dipakai cluster yang tidak punya jalan keluar ke internet."
+      },
+      "team_account_exists": {
+        "title": "Mereka sudah punya akun di sini",
+        "cause": "{{0}} pernah masuk ke panel ini, jadi tidak ada yang perlu didaftarkan.",
+        "impact": "Tidak ada undangan yang dibuat.",
+        "fix": "Tambahkan mereka ke tim di halaman Anggota, dengan alamat yang sama."
+      },
+      "team_already_a_member": {
+        "title": "Mereka sudah ada di tim ini",
+        "cause": "{{0}} sudah jadi anggota.",
+        "impact": "Tidak ada undangan yang dibuat.",
+        "fix": "Ubah perannya di halaman Anggota saja."
+      },
+      "team_last_owner": {
+        "title": "Sebuah tim butuh setidaknya satu pemilik",
+        "cause": "Ini satu-satunya pemilik tim ini.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Jadikan orang lain pemilik dulu, baru hapus yang ini."
+      },
+      "team_no_such_user": {
+        "title": "Tidak ada akun dengan email itu",
+        "cause": "Tidak ada yang memakai alamat {{0}} di panel ini.",
+        "impact": "Tidak ada yang ditambahkan ke tim.",
+        "fix": "Minta mereka membuat akun dulu, baru tambahkan. Skifity tidak mengirim undangan ke alamat yang belum pernah masuk."
+      },
+      "tunnel_no_token": {
+        "title": "Belum ada token tunnel Cloudflare",
+        "cause": "Pengaturan belum berisi token tunnel, dan konektornya tidak bisa mengautentikasi tanpa itu.",
+        "impact": "Tunnel-nya tidak dipasang. Tidak ada yang diubah di cluster.",
+        "fix": "Buat tunnel di dasbor Cloudflare di Zero Trust, lalu Networks, lalu Tunnels. Pilih konektor Cloudflared, salin token yang ditampilkan, dan tempelkan ke Pengaturan, lalu Domain dan HTTPS, lalu Token tunnel Cloudflare. Di tunnel yang sama, tambahkan hostname publik — wildcard seperti *.apps.example.com mencakup semua aplikasi sekaligus — dengan service disetel ke HTTP dan alamat {{0}}."
+      },
+      "tunnel_not_applied": {
+        "title": "Tokennya tersimpan, tapi tunnel-nya tidak diperbarui",
+        "cause": "{{0}}",
+        "impact": "Konektornya masih berjalan dengan token yang lama, jadi trafik tetap mengalir sampai mereka dimulai ulang.",
+        "fix": "Perbaiki apa yang disebut penyebabnya lalu simpan tokennya lagi, atau pasang Cloudflare tunnel di halaman Komponen."
+      },
+      "upgrade_failed": {
+        "title": "Peningkatan tidak bisa dimulai",
+        "cause": "{{0}}",
+        "impact": "Panelnya masih menjalankan versi yang sekarang.",
+        "fix": "Pastikan versinya ada dan cluster bisa menarik imagenya."
+      },
+      "upgrade_unsupported": {
+        "title": "Panel ini tidak bisa meningkatkan dirinya sendiri",
+        "cause": "Panelnya tidak berjalan di dalam cluster yang bisa dia perbarui, dan itu wajar saat pengembangan.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Tingkatkan dengan menarik image baru lalu mulai ulang, atau jalankan lagi installer dengan versi yang kamu mau."
+      },
+      "webhook_unverified": {
+        "title": "Webhook ini tidak bisa diverifikasi",
+        "cause": "Tanda tangan pada permintaannya tidak cocok dengan rahasia webhook koneksi ini.",
+        "impact": "Tidak ada deploy yang dimulai.",
+        "fix": "Pastikan rahasia di pengaturan webhook di host Git-mu sama dengan yang ada di Skifity."
+      }
+    }
   },
   "time": {
     "seconds": "{{count}} dtk",

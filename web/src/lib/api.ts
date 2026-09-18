@@ -14,6 +14,11 @@ export type Problem = {
   cause?: string
   impact?: string
   fix?: string
+  /**
+   * The values the server interpolated into the three sentences above, in
+   * order, so a translated sentence can carry the same ones.
+   */
+  args?: { cause?: string[]; impact?: string[]; fix?: string[] }
   docs_path?: string
   severity: "error" | "warning" | "info"
   retryable: boolean

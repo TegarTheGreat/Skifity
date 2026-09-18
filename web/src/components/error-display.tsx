@@ -40,6 +40,22 @@ export function ErrorDisplay({
   const problem = toProblem(error)
   if (!problem) return null
 
+  // The server writes its errors once, in English: it has one language, and the
+  // API, the CLI and an assistant all read those strings. The panel has five and
+  // looks them up by the error's own code, falling back to what the server sent.
+  // Same mechanism as the settings page, which was English in every language
+  // until Phase 55 for exactly this reason.
+  const say = (field: "title" | "cause" | "impact" | "fix") => {
+    const english = problem[field]
+    if (!english) return ""
+    return t(`errors.catalogue.${problem.code.replaceAll(".", "_")}.${field}`, {
+      defaultValue: english,
+      // Positional, matching the order the Go format string used: the locale
+      // writes {{0}} where the English writes %s.
+      ...Object.fromEntries((problem.args?.[field as "cause"] ?? []).map((v, i) => [i, v])),
+    })
+  }
+
   const copyForAI = async () => {
     const markdown = error instanceof ApiError ? error.toMarkdown() : problemToMarkdown(problem)
     try {
@@ -64,15 +80,15 @@ export function ErrorDisplay({
   return (
     <Alert className={cn(tone, className)} data-slot="error-display">
       <AlertTriangleIcon className="size-4" />
-      <AlertTitle className="text-base">{problem.title}</AlertTitle>
+      <AlertTitle className="text-base">{say("title")}</AlertTitle>
       <AlertDescription className="space-y-3">
         {!compact && problem.cause && (
-          <Field label={t("errors.whatHappened")} value={problem.cause} />
+          <Field label={t("errors.whatHappened")} value={say("cause")} />
         )}
         {!compact && problem.impact && (
-          <Field label={t("errors.whatItMeans")} value={problem.impact} />
+          <Field label={t("errors.whatItMeans")} value={say("impact")} />
         )}
-        {problem.fix && <Field label={t("errors.howToFix")} value={problem.fix} />}
+        {problem.fix && <Field label={t("errors.howToFix")} value={say("fix")} />}
 
         {!compact && problem.context && Object.keys(problem.context).length > 0 && (
           <Collapsible className="text-xs">

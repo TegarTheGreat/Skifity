@@ -145,6 +145,38 @@ test("every language is complete on the pages a new user sees", async ({ page })
   ).toBeVisible()
 })
 
+test("an error speaks the language the panel is set to", async ({ page }) => {
+  await signIn(page)
+
+  // The completeness check proves the catalogue has every error in every
+  // language. What it cannot prove is that a real failure, coming off the wire
+  // as English from a Go file, is looked up by its code and comes out in the
+  // reader's language with the server's own values still in it. Until Phase 59
+  // it did not: ninety-odd errors were English on every page in every language.
+  const russian = LANGUAGES.find((language) => language.code === "ru")!
+  await page.locator('[data-slot="language-switcher"]').click()
+  await page.getByRole("menuitem", { name: russian.name }).click()
+
+  // An id that cannot exist. The API answers resource.not_found, which carries
+  // the kind — "app" — as a value rather than inside the sentence.
+  await page.goto("/apps/app_does_not_exist")
+
+  const catalogue = localeStrings("ru").errors as { catalogue: Record<string, Record<string, string>> }
+  const entry = catalogue.catalogue["resource_not_found"]
+  const title = entry.title.replace("{{0}}", "app")
+  const impact = entry.impact
+
+  await expect(page.getByText(title), "the error title in Russian").toBeVisible()
+  await expect(page.getByText(impact), "what it means, in Russian").toBeVisible()
+
+  // And the English it replaced is nowhere on the page.
+  const english = localeStrings("en").errors as { catalogue: Record<string, Record<string, string>> }
+  await expect(
+    page.getByText(english.catalogue["resource_not_found"].impact),
+    "the English the server sent is still showing",
+  ).toHaveCount(0)
+})
+
 // Every error the panel can show links into this, and an operator whose panel
 // is broken may have no other browser and no way out to the internet.
 // The catalogue is the first page anybody browses, and it was three hundred

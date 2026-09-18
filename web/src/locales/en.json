@@ -960,7 +960,705 @@
     "reload": "Reload",
     "offline": "The panel is not reachable",
     "offlineHelp": "Your apps keep running. This page will reconnect on its own.",
-    "reconnecting": "Reconnecting..."
+    "reconnecting": "Reconnecting...",
+    "catalogue": {
+      "admin_backup_failed": {
+        "title": "The database could not be copied",
+        "cause": "{{0}}",
+        "impact": "No copy was written.",
+        "fix": "Check that the directory exists, that the file does not, and that there is room on the disk."
+      },
+      "admin_no_database": {
+        "title": "The panel's database is not here",
+        "cause": "There is no file at {{0}}.",
+        "impact": "Nothing was changed.",
+        "fix": "Run this on the server the panel is installed on, as root. If the database is somewhere else, pass --database, or set SKIFITY_DATABASE_PATH."
+      },
+      "admin_no_such_user": {
+        "title": "No account with that address",
+        "cause": "Nobody on this panel uses {{0}}.",
+        "impact": "Nothing was changed.",
+        "fix": "Run `{{0}} admin list-users` to see the accounts that do exist."
+      },
+      "app_crash_loop": {
+        "title": "This app keeps restarting",
+        "cause": "{{0}} has restarted {{1}} times in a row. Kubernetes is backing off between restarts.",
+        "impact": "The app is not serving traffic reliably.",
+        "fix": "Read the last log lines below: the cause is almost always in them. Missing environment variables, a database that is not reachable, and a port the app does not actually listen on are the usual three."
+      },
+      "auth_csrf": {
+        "title": "This request was blocked for safety",
+        "cause": "The request did not carry a matching CSRF token.",
+        "impact": "Nothing was changed.",
+        "fix": "Reload the page and try again. If you are calling the API directly, use an API token with an Authorization header instead of a cookie."
+      },
+      "auth_forbidden": {
+        "title": "You do not have permission for this",
+        "cause": "Your role in this team does not allow {{0}}.",
+        "impact": "The action was not performed.",
+        "fix": "Ask a team owner or admin to do this, or to raise your role."
+      },
+      "auth_invalid_credentials": {
+        "title": "Email or password is not correct",
+        "cause": "The email address and password do not match an account on this panel.",
+        "impact": "You are not signed in.",
+        "fix": "Check for typos and try again. After several failed attempts sign-in pauses for a while."
+      },
+      "auth_invalid_totp": {
+        "title": "That code is not correct",
+        "cause": "The six-digit code did not match the one this panel expects.",
+        "impact": "Two-factor authentication was not turned on.",
+        "fix": "Check that your phone's clock is correct, then type the current code from your authenticator app."
+      },
+      "auth_rate_limited": {
+        "title": "Too many attempts",
+        "cause": "There have been too many failed sign-in attempts for this account or from this address.",
+        "impact": "Sign-in is paused so that passwords cannot be guessed.",
+        "fix": "Wait {{0}} and try again. If this was not you, change your password once you can sign in."
+      },
+      "auth_required": {
+        "title": "You need to sign in",
+        "cause": "This request had no valid session or API token.",
+        "impact": "The action was not performed.",
+        "fix": "Sign in again. If you are using the CLI, run `skifity login`."
+      },
+      "auth_token_scope": {
+        "title": "This token cannot make that request",
+        "cause": "The token {{0}} is limited to {{1}}.",
+        "impact": "The request was refused. Nothing was changed.",
+        "fix": "Use a token without a scope, or create one that can write, under Account."
+      },
+      "backup_bad_schedule": {
+        "title": "That is not a schedule Skifity understands",
+        "cause": "{{0}}",
+        "impact": "The schedule was not changed.",
+        "fix": "Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC."
+      },
+      "backup_bucket_missing": {
+        "title": "That bucket does not exist",
+        "cause": "The bucket {{0}} was not found at {{1}}.",
+        "impact": "Backups cannot run.",
+        "fix": "Create the bucket in your storage provider, then try again. Skifity does not create buckets: doing so would need broader permissions than writing backups."
+      },
+      "backup_database_not_running": {
+        "title": "This database is not running",
+        "cause": "{{0}} is {{1}}, so there is nothing to back up.",
+        "impact": "No backup was taken.",
+        "fix": "Wait for the database to be running, then try again."
+      },
+      "backup_failed": {
+        "title": "The backup failed",
+        "cause": "Backing up {{0}} failed: {{1}}",
+        "impact": "There is no new backup from this run. Earlier backups are untouched.",
+        "fix": "Check the storage credentials in Settings and that the bucket exists and is writable. Then run the backup again from the database page."
+      },
+      "backup_restore_refused": {
+        "title": "This restore would overwrite live data",
+        "cause": "{{0}} is in use and the restore would replace its current contents.",
+        "impact": "Nothing was changed.",
+        "fix": "Restore into a new database instead, check it, then point your app at it. If you really do mean to overwrite, confirm it explicitly on the restore dialog."
+      },
+      "backup_storage_no_delete": {
+        "title": "Old backups cannot be removed",
+        "cause": "The access key can write to {{0}} but cannot delete from it.",
+        "impact": "Backups will work, but old ones will never be cleaned up and the bucket will grow forever.",
+        "fix": "Give the access key permission to delete objects, or set the retention policy in your storage provider instead."
+      },
+      "backup_storage_not_configured": {
+        "title": "No backup storage is configured",
+        "cause": "This team has no S3-compatible storage set up yet.",
+        "impact": "Backups cannot run, so nothing is being kept safe.",
+        "fix": "Open Settings, then Storage, and add an S3-compatible bucket. Any provider works: AWS S3, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself."
+      },
+      "backup_storage_read_only": {
+        "title": "The backup storage cannot be written to",
+        "cause": "Writing a test object to {{0}} failed: {{1}}",
+        "impact": "Backups would fail.",
+        "fix": "Give the access key permission to put objects in this bucket."
+      },
+      "backup_storage_unreachable": {
+        "title": "The backup storage could not be reached",
+        "cause": "Connecting to {{0}} failed: {{1}}",
+        "impact": "Backups cannot run.",
+        "fix": "Check the endpoint, the access key and that this server can reach the storage service."
+      },
+      "build_failed": {
+        "title": "The build failed",
+        "cause": "Building {{0}} failed during the {{1}} stage.",
+        "impact": "The new version was not deployed. The previous version is still running and still serving traffic.",
+        "fix": "Read the build log below. Then fix it in your repository and push again, or press Retry if you believe it was a transient failure."
+      },
+      "build_no_builder": {
+        "title": "Skifity could not work out how to build this repository",
+        "cause": "No Dockerfile was found in {{0}}, and the files present do not match any language Skifity recognises.",
+        "impact": "No build was started.",
+        "fix": "Add a Dockerfile to the repository, or set the root directory if your app lives in a subfolder of a monorepo, or choose a prebuilt image instead."
+      },
+      "build_pod_not_started": {
+        "title": "The build did not start",
+        "cause": "No build pod became ready within five minutes.",
+        "impact": "Nothing was built or deployed.",
+        "fix": "Check that the cluster has free CPU and memory, and that the builder component is running."
+      },
+      "build_timeout": {
+        "title": "The build took too long and was stopped",
+        "cause": "The build did not finish within 40 minutes.",
+        "impact": "Nothing was deployed. The previous version is still running.",
+        "fix": "Builds this long usually mean a dependency is being compiled from source. Add a Dockerfile with a cached dependency layer, or raise the build timeout."
+      },
+      "cli_already_initialised": {
+        "title": "This directory already has an app",
+        "cause": "{{0}} points at the app {{1}}.",
+        "impact": "Nothing was changed.",
+        "fix": "Run `{{0}} deploy` to deploy it, or delete {{1}} to start again."
+      },
+      "cli_ambiguous_app": {
+        "title": "Which app did you mean?",
+        "cause": "This directory has no {{0}}, and the environment has several apps.",
+        "impact": "The command did not run.",
+        "fix": "Pass --app with one of: {{0}}"
+      },
+      "cli_export_path": {
+        "title": "The panel named a file outside the export directory",
+        "cause": "{{0}} is not inside {{1}}.",
+        "impact": "Nothing was written for it.",
+        "fix": "This is the panel returning a name it should not. Report it, and check the panel is the one you think it is."
+      },
+      "cli_export_write_failed": {
+        "title": "The export could not be written",
+        "cause": "Writing {{0}} failed: {{1}}",
+        "impact": "The export is incomplete.",
+        "fix": "Choose a directory you can write to with --out, and check there is room on the disk."
+      },
+      "cli_no_app": {
+        "title": "There is no app here yet",
+        "cause": "This directory has no {{0}}, and the environment has no apps.",
+        "impact": "The command did not run.",
+        "fix": "Run `{{0}} init` to create one."
+      },
+      "cli_no_project": {
+        "title": "This team has no projects",
+        "cause": "There is nowhere to put an app.",
+        "impact": "The command did not run.",
+        "fix": "Create a project in the panel first."
+      },
+      "cli_no_team": {
+        "title": "You are not in any team",
+        "cause": "This account belongs to no team, so there is nothing to act on.",
+        "impact": "Nothing was changed.",
+        "fix": "Ask someone in the team to add you, or create a team in the panel."
+      },
+      "cli_team_ambiguous": {
+        "title": "You are in more than one team",
+        "cause": "This account is in {{0}} teams, so the one to use is not obvious.",
+        "impact": "Nothing was changed.",
+        "fix": "Run `{{0}} login` to choose one, or set SKIFITY_TEAM to the id of: {{1}}"
+      },
+      "cli_unavailable": {
+        "title": "This panel cannot hand out its own binary",
+        "cause": "The running executable could not be read: {{0}}",
+        "impact": "The command line tool was not downloaded. The panel itself is unaffected.",
+        "fix": "Build it from the repository with `make build`, or copy the binary from another machine. The panel and the CLI are the same file."
+      },
+      "cli_unexpected_response": {
+        "title": "The panel answered with something unexpected",
+        "cause": "HTTP {{0}} from {{1}}: {{2}}",
+        "impact": "The command did not complete.",
+        "fix": "Check that the URL points at a Skifity panel and not at something else."
+      },
+      "cluster_control_plane_unverifiable": {
+        "title": "The cluster cannot be asked how many servers run it",
+        "cause": "Removing a control plane server is only safe when the panel can see how many are left, and the Kubernetes API did not answer.",
+        "impact": "Nothing was changed.",
+        "fix": "Wait for the cluster to be reachable and try again. A worker server can be removed either way."
+      },
+      "cluster_drain_blocked": {
+        "title": "An app would go down if this server is removed",
+        "cause": "{{0}} in {{1}} could not be moved: {{2}}",
+        "impact": "The server was not removed and is still running your apps.",
+        "fix": "Add another server first, or scale the app that is blocking this to more than one instance so it can move."
+      },
+      "cluster_drain_timeout": {
+        "title": "Some instances would not move",
+        "cause": "{{0}} instance(s) were still running on {{1}} after five minutes.",
+        "impact": "The server was not removed.",
+        "fix": "An app with a volume cannot move to another server unless cross-node storage is enabled. Stop that app, or enable Longhorn under Settings, then try again."
+      },
+      "cluster_insufficient_capacity": {
+        "title": "There is not enough room in the cluster",
+        "cause": "{{0}} could not be scheduled: {{1}}",
+        "impact": "The instances are pending and not serving traffic.",
+        "fix": "Add another server in Servers, lower this app's CPU or memory request, or reduce the number of instances."
+      },
+      "cluster_last_control_plane": {
+        "title": "This is the only server running the cluster",
+        "cause": "Removing it would delete the last control plane node. Kubernetes, every app on it, and this panel run there.",
+        "impact": "Nothing was changed.",
+        "fix": "Add another server and promote it to control plane first. To take the whole cluster down deliberately, run the uninstaller on the server itself."
+      },
+      "cluster_node_not_ready": {
+        "title": "The server did not join the cluster",
+        "cause": "Kubernetes was installed on {{0}}, but no node became ready within five minutes.",
+        "impact": "The server is registered but is not running anything yet.",
+        "fix": "Check that this server can reach the first server on port 6443, and that the two can reach each other on UDP 51820. A firewall in your provider's control panel is the usual cause."
+      },
+      "cluster_not_enough_servers": {
+        "title": "High availability needs three servers",
+        "cause": "This cluster has {{0}} servers. Embedded etcd needs three control plane members to survive one of them failing.",
+        "impact": "Nothing was changed.",
+        "fix": "Add servers until you have at least three, then promote three of them."
+      },
+      "cluster_quorum_risk": {
+        "title": "Removing this server would break the cluster",
+        "cause": "This is a control plane server, and removing it would leave {{0}} of them. Embedded etcd needs an odd number of at least three to survive a failure.",
+        "impact": "Nothing was changed. The server is still part of the cluster.",
+        "fix": "Promote another server to control plane first, then remove this one. With one control plane server you can remove it only by removing the whole cluster."
+      },
+      "cluster_token_missing": {
+        "title": "Skifity does not have this cluster's join token",
+        "cause": "The panel is running in a Kubernetes cluster it did not create, and a server can only join that cluster with the token it was started with.",
+        "impact": "No server can be added. Nothing was changed on the server you were adding.",
+        "fix": "On the server the panel runs on, copy the token into place and restart the panel:\n\n  sudo cp /var/lib/rancher/k3s/server/token {{0}}\n  sudo chmod 600 {{1}}"
+      },
+      "cluster_unreachable": {
+        "title": "The cluster is not responding",
+        "cause": "The Kubernetes API did not answer.",
+        "impact": "Your apps keep running, but Skifity cannot make changes or read live status right now.",
+        "fix": "This usually clears up on its own within a minute. If it does not, check that the control plane server is up and that port 6443 is reachable between your servers."
+      },
+      "component_external": {
+        "title": "{{0}} is not installed by the panel",
+        "cause": "It is installed with Helm, because it is several dozen objects with their own release cadence and the panel would be a worse installer than the one its authors wrote.",
+        "impact": "Nothing was changed.",
+        "fix": "The documentation has the command."
+      },
+      "component_install_failed": {
+        "title": "Scale to zero could not be enabled",
+        "cause": "Installing KEDA, which provides scale to zero, failed: {{0}}",
+        "impact": "The scaling settings were not changed.",
+        "fix": "Check that the cluster has room for another small component and try again."
+      },
+      "config_missing": {
+        "title": "{{0}} is not set up yet",
+        "cause": "{{0}} needs configuration that has not been provided.",
+        "impact": "The action was not performed.",
+        "fix": "Open {{0}} and fill it in. Nothing needs to be changed in code or on the server."
+      },
+      "database_failed": {
+        "title": "The database could not start",
+        "cause": "{{0}}",
+        "impact": "Nothing is using it yet, so nothing else is affected.",
+        "fix": "Check that the cluster has enough free memory and disk for it, then delete it and try again."
+      },
+      "database_no_credentials": {
+        "title": "This database has no stored credentials",
+        "cause": "Its credentials are missing from the panel's database.",
+        "impact": "The connection details cannot be shown.",
+        "fix": "Read them from the Kubernetes Secret {{0}}, or recreate the database."
+      },
+      "database_still_linked": {
+        "title": "This database is still used by an app",
+        "cause": "{{0}} app(s) have a connection string from this database injected.",
+        "impact": "Nothing was changed.",
+        "fix": "Unlink the apps first, or confirm that you want to delete it anyway."
+      },
+      "database_timeout": {
+        "title": "The database did not start in time",
+        "cause": "{{0}} did not become ready within fifteen minutes.",
+        "impact": "The database exists but is not usable.",
+        "fix": "Open the instance list to see why. The usual causes are no free disk for the volume, and not enough memory on any server."
+      },
+      "deploy_cannot_rollback": {
+        "title": "This version cannot be rolled back to",
+        "cause": "Deployment #{{0}} did not finish successfully, so there is no image to go back to.",
+        "impact": "Nothing was changed. The current version is still running.",
+        "fix": "Pick a deployment marked as succeeded from the history."
+      },
+      "deploy_image_collected": {
+        "title": "That version is too old to roll back to",
+        "cause": "Only the last {{0}} versions of an app keep their image. Version {{1}} is further back than that, and its image was removed to keep the disk free.",
+        "impact": "Nothing was changed. The version that is running now is still running.",
+        "fix": "Roll back to one of the last {{0}} versions, or deploy the commit you want again, which builds it fresh."
+      },
+      "deploy_image_pull_failed": {
+        "title": "The image could not be pulled",
+        "cause": "Pulling {{0}} failed: {{1}}",
+        "impact": "The new instances cannot start. The previous version is still running.",
+        "fix": "If this is a private image, add the registry credentials in Settings. If it is an internal build, the in-cluster registry may not be reachable from this node: check that the node joined the cluster network."
+      },
+      "deploy_refused_by_plugin": {
+        "title": "A plugin stopped this deployment",
+        "cause": "{{0}} refused it: {{1}}",
+        "impact": "Nothing was changed. The version that was serving is still serving.",
+        "fix": "Take up whatever it is asking for, or switch that plugin off under Plugins."
+      },
+      "deploy_rollout_timeout": {
+        "title": "The new version did not start",
+        "cause": "{{0}} of {{1}} instances of {{2}} became ready before the timeout. {{3}}",
+        "impact": "Kubernetes kept the previous version running, so your app is still up. The new version was not rolled out.",
+        "fix": "Check the app logs for a crash on startup. The usual causes are a missing environment variable, a health check path that does not exist yet, and a port mismatch between the app and the configured port."
+      },
+      "detect_unreadable": {
+        "title": "That repository could not be read",
+        "cause": "{{0}}",
+        "impact": "Nothing was created. You can still fill the form in yourself.",
+        "fix": "Check the address and the branch. A private repository needs a connected Git account with access to it, chosen below."
+      },
+      "domain_certificate_failed": {
+        "title": "The HTTPS certificate could not be issued",
+        "cause": "Let's Encrypt refused to issue a certificate for {{0}}: {{1}}",
+        "impact": "The domain works over HTTP but not HTTPS.",
+        "fix": "Check that the domain resolves to this cluster and that port 80 is reachable from the internet, which is how the challenge is verified. If you have hit a rate limit, wait an hour before retrying."
+      },
+      "domain_dns_mismatch": {
+        "title": "This domain does not point here yet",
+        "cause": "{{0}} currently resolves to {{1}}, but it needs to resolve to {{2}}.",
+        "impact": "The certificate cannot be issued and the domain will not serve your app.",
+        "fix": "Create an A record for {{0}} pointing to {{1}}, then wait for it to propagate. Skifity checks again every minute."
+      },
+      "domain_is_the_panel": {
+        "title": "That is this panel's own address",
+        "cause": "{{0}} is where this panel answers.",
+        "impact": "Nothing was changed. Routing an app there would put two things behind one hostname, and which of them answered would be decided by the ingress controller rather than by anybody — including for the requests carrying your sign-in cookie.",
+        "fix": "Give the app a hostname of its own. A subdomain of the panel's is fine."
+      },
+      "domain_no_free_address": {
+        "title": "This app could not be given an address",
+        "cause": "Both {{0}} and {{1}} are already used by other apps.",
+        "impact": "The app is deployed and has no automatic URL. A domain of your own still works.",
+        "fix": "Rename the app, or add a domain of your own under the app's Domains tab."
+      },
+      "environment_level_not_applied": {
+        "title": "The level was saved, but the namespace was not changed",
+        "cause": "{{0}}",
+        "impact": "Kubernetes is still enforcing the previous level, so a deploy will behave as it did before.",
+        "fix": "Fix what the cause says and save the level again."
+      },
+      "firewall_failed": {
+        "title": "The firewall could not be configured",
+        "cause": "The firewall commands failed on {{0}}: {{1}}",
+        "impact": "The server was not added.",
+        "fix": "Check that the account Skifity connects with can run ufw or iptables. Root, or sudo without a password, is needed."
+      },
+      "firewall_no_geo_database": {
+        "title": "This panel does not look up a visitor's {{0}}",
+        "cause": "A rule tests {{0}}, and looking up a visitor's country and network is switched off.",
+        "impact": "Nothing was saved. A rule that cannot be evaluated is skipped on every request, so it would have looked configured and protected nothing.",
+        "fix": "Turn on \"Look up a visitor's country and network\" under Settings, then Domains and HTTPS. It uses DB-IP's free monthly databases, which need no account."
+      },
+      "guard_no_panel_image": {
+        "title": "The firewall could not be installed",
+        "cause": "The panel's own Deployment could not be read, so there is no image to run the guard from: {{0}}",
+        "impact": "Nothing was changed in the cluster.",
+        "fix": "This works when the panel is running inside the cluster it manages, which is how the installer sets it up. A panel running outside the cluster cannot install this component."
+      },
+      "guard_rules_too_large": {
+        "title": "There are too many firewall rules to apply",
+        "cause": "The rules for every protected app together come to {{0}} KB, and Kubernetes will not store more than {{1}} KB in one object.",
+        "impact": "Nothing was changed in the cluster; the rules already there are still in force.",
+        "fix": "Shorten the longest lists — a list of addresses is usually what grows — or turn the firewall off for an app that no longer needs it."
+      },
+      "internal": {
+        "title": "Something went wrong",
+        "cause": "The panel hit an unexpected error while working on this server.",
+        "impact": "The operation stopped where it was. The server may be half-configured; the steps above show how far it got.",
+        "fix": "Run it again — every step is safe to repeat. If it fails the same way, copy this error and open an issue: it is a bug in Skifity."
+      },
+      "invite_account_exists": {
+        "title": "That address already has an account",
+        "cause": "Somebody signed up with {{0}} since this invitation was sent.",
+        "impact": "No account was created.",
+        "fix": "Sign in instead, and ask to be added to the team."
+      },
+      "invite_not_valid": {
+        "title": "This invitation cannot be used",
+        "cause": "The link has expired, has been used already, or was withdrawn.",
+        "impact": "No account was created.",
+        "fix": "Ask whoever invited you for a new link."
+      },
+      "k3s_install_failed": {
+        "title": "Kubernetes could not be installed on this server",
+        "cause": "The k3s installer exited with code {{0}} on {{1}}.",
+        "impact": "The server is registered but is not part of the cluster. No workloads are running on it.",
+        "fix": "Open the step output below. The most common causes are no outbound internet access, an old kernel without the required modules, and a conflicting container runtime. Fix the cause and press Retry; the step is safe to run again."
+      },
+      "mcp_run_still_going": {
+        "title": "The command is still running",
+        "cause": "It has been going for {{0}}, which is as long as this waits.",
+        "impact": "The command was not stopped. It is still running in the cluster, and its output is kept with the run.",
+        "fix": "Wait, then read it back: the run is {{0}} on app {{1}}."
+      },
+      "network_port_blocked": {
+        "title": "A cluster port is blocked",
+        "cause": "Cluster members could not reach {{0}} on {{1}}/{{2}}.",
+        "impact": "The node cannot join the cluster, or pods on it cannot talk to pods elsewhere.",
+        "fix": "Open {{0}}/{{1}} between your servers. Skifity configures UFW and iptables on the server itself, but a firewall in your provider's control panel has to be opened there. Check the security group or firewall rules for this machine."
+      },
+      "notification_test_failed": {
+        "title": "The test message could not be sent",
+        "cause": "{{0}}",
+        "impact": "This channel will not deliver notifications until it works.",
+        "fix": "Check the webhook URL or token, and that this server can reach the service."
+      },
+      "operation_interrupted": {
+        "title": "This was interrupted when the panel restarted",
+        "cause": "The panel stopped while this operation was running.",
+        "impact": "The server may be half configured.",
+        "fix": "Press Retry. Every step is safe to run again, and the ones that already finished are skipped."
+      },
+      "operation_not_running": {
+        "title": "That operation is not running",
+        "cause": "It has already finished, or the panel restarted since it started.",
+        "impact": "Nothing was changed.",
+        "fix": "Reload the page to see its current state."
+      },
+      "operation_timeout": {
+        "title": "This took too long and was stopped",
+        "cause": "The step {{0}} did not finish within {{1}}.",
+        "impact": "The server may be half configured. Retrying is safe: every step can be run again.",
+        "fix": "Press Retry. If it times out again, check that the server has working outbound internet access."
+      },
+      "plugin_bad_manifest": {
+        "title": "That is not a plugin manifest",
+        "cause": "{{0}}",
+        "impact": "Nothing was installed.",
+        "fix": "Check it against the plugin standard, which is documented at /docs/plugins."
+      },
+      "plugin_did_not_start": {
+        "title": "The plugin was installed and did not start",
+        "cause": "{{0}}",
+        "impact": "Its credentials exist and its container is not running, so it receives nothing.",
+        "fix": "Look at the plugin's own logs. A plugin image has to run as a non-root user; an image that starts as root is refused by the namespace it runs in, and that is the most common reason a plugin will not start."
+      },
+      "plugin_permissions_changed": {
+        "title": "This plugin is asking for something else now",
+        "cause": "What you agreed to was {{0}}; the manifest now asks for {{1}}.",
+        "impact": "Nothing was installed.",
+        "fix": "Read what it is asking for again, and install it if that is still acceptable."
+      },
+      "plugin_unreachable": {
+        "title": "That manifest could not be fetched",
+        "cause": "The server answered {{0}}.",
+        "impact": "Nothing was installed.",
+        "fix": "Check the address."
+      },
+      "release_failed": {
+        "title": "The release command failed",
+        "cause": "The command exited with an error before the new version was rolled out.",
+        "impact": "The deployment was stopped. The version that was running before is still running, and no traffic reached the new one.",
+        "fix": "The command's output is in the build log above. Fix it and deploy again; nothing was changed for your users."
+      },
+      "release_timed_out": {
+        "title": "The release command did not finish",
+        "cause": "It was still running after twenty minutes.",
+        "impact": "The deployment was stopped and the previous version is still serving.",
+        "fix": "A migration that takes this long usually needs to be run by hand, once, rather than on every deploy."
+      },
+      "request_invalid": {
+        "title": "That request was not valid",
+        "cause": "{{0}}",
+        "impact": "Nothing was changed.",
+        "fix": "Correct the highlighted field and try again."
+      },
+      "resource_conflict": {
+        "title": "That name is already taken",
+        "cause": "{{0}}",
+        "impact": "Nothing was changed.",
+        "fix": "{{0}}"
+      },
+      "resource_name_taken": {
+        "title": "That name is already used here",
+        "cause": "{{0}} in this environment is already called {{1}}, and an app and a database in one environment share an address.",
+        "impact": "Nothing was created.",
+        "fix": "Pick a different name. Other environments are unaffected: the same name in staging and in production is fine."
+      },
+      "resource_not_found": {
+        "title": "That {{0}} does not exist",
+        "cause": "No {{0}} with the id {{1}} is visible to you.",
+        "impact": "Nothing was changed.",
+        "fix": "Check the id, or go back to the list and pick it again."
+      },
+      "run_never_deployed": {
+        "title": "This app has not been deployed yet",
+        "cause": "A command runs in the app's own image, and there is no image until the app has been deployed once.",
+        "impact": "Nothing was run.",
+        "fix": "Deploy the app, then run the command."
+      },
+      "scaling_risk": {
+        "title": "This app may not work correctly with more than one instance",
+        "cause": "{{0}}",
+        "impact": "With several instances running, some requests will behave differently from others.",
+        "fix": "{{0}}"
+      },
+      "server_no_operation": {
+        "title": "There is nothing to retry",
+        "cause": "No previous attempt to add this server was recorded.",
+        "impact": "Nothing was changed.",
+        "fix": "Remove the server and add it again."
+      },
+      "server_not_in_cluster": {
+        "title": "This server is not in the cluster yet",
+        "cause": "No Kubernetes node matches {{0}}.",
+        "impact": "There are no live metrics to show.",
+        "fix": "If the server is still being added, wait for it to finish. If it failed, open it and press Retry."
+      },
+      "server_not_ours": {
+        "title": "Skifity did not add this server",
+        "cause": "{{0}} is a node this cluster already had when Skifity was installed — usually the machine the panel itself runs on. There is no key to it and nothing of ours was put on it.",
+        "impact": "{{0}} was not done.",
+        "fix": "Change this machine from the machine itself. To take it out of the cluster entirely, run the uninstaller on it: `sudo sh /usr/local/bin/skifity-uninstall`. To add capacity instead, add a second server, which Skifity does install and can manage."
+      },
+      "setup_already_done": {
+        "title": "Setup has already been completed",
+        "cause": "This panel already has an administrator account.",
+        "impact": "No account was created.",
+        "fix": "Sign in with the account that was created during setup. If you have lost the password, see the account recovery guide."
+      },
+      "setup_bad_token": {
+        "title": "That setup token is not correct",
+        "cause": "The token you entered does not match the one this panel generated.",
+        "impact": "No account was created.",
+        "fix": "<computed>"
+      },
+      "setup_no_token": {
+        "title": "This panel has no setup token",
+        "cause": "The panel started without a one-time setup token, so first-run setup cannot be verified.",
+        "impact": "No account was created.",
+        "fix": "Run the installer again, or write a token to the setup token file and restart the panel."
+      },
+      "setup_too_many_attempts": {
+        "title": "Too many incorrect setup tokens",
+        "cause": "The setup token has been guessed at too many times.",
+        "impact": "Setup is locked until the panel is restarted.",
+        "fix": "Restart the panel, then copy the token from the installer output exactly."
+      },
+      "ssh_auth_failed": {
+        "title": "The server refused those credentials",
+        "cause": "Signing in as {{0}} on {{1}} with a {{2}} was rejected.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "{{0}}"
+      },
+      "ssh_host_key_changed": {
+        "title": "This server's identity has changed",
+        "cause": "{{0}} presented a different SSH host key than the one recorded when it was added.",
+        "impact": "The connection was refused. Skifity will not run commands on a server it cannot recognise.",
+        "fix": "If you rebuilt or reinstalled this server, remove it from Skifity and add it again. If you did not, stop and investigate: something may be intercepting the connection."
+      },
+      "ssh_key_install_failed": {
+        "title": "The panel's key could not be installed",
+        "cause": "Writing to authorized_keys on {{0}} failed: {{1}}",
+        "impact": "The server was not added.",
+        "fix": "Check that {{0}} can write to its own home directory and that the disk is not full."
+      },
+      "ssh_key_verify_failed": {
+        "title": "The panel's key was installed but does not work",
+        "cause": "Connecting with the new key failed: {{0}}",
+        "impact": "The server was not added. The password was not discarded.",
+        "fix": "Check the server's sshd settings: PubkeyAuthentication must be yes, and the home directory must not be group-writable."
+      },
+      "ssh_no_credentials": {
+        "title": "There are no credentials to connect with",
+        "cause": "The password was used once during the first attempt and deliberately not stored.",
+        "impact": "The server cannot be reached to continue.",
+        "fix": "Remove this server and add it again with its password or a private key."
+      },
+      "ssh_unreachable": {
+        "title": "Could not reach the server over SSH",
+        "cause": "Nothing answered on {{0}} port {{1}}.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Check that the IP address and port are right, that the server is running, and that your provider's firewall allows inbound TCP on port {{0}}. Many providers block everything by default in their control panel, which SSH cannot open from here."
+      },
+      "sso_no_panel_url": {
+        "title": "This panel does not know its own address",
+        "cause": "Single sign-on sends people back to a fixed address, and the Panel URL setting is empty.",
+        "impact": "Sign-on cannot start.",
+        "fix": "Set the Panel URL under Settings, then register that address followed by /api/auth/sso/callback with your provider."
+      },
+      "sso_not_configured": {
+        "title": "Single sign-on is not set up",
+        "cause": "No identity provider is configured on this panel.",
+        "impact": "Sign in with an email address and password instead.",
+        "fix": "An administrator can configure a provider under Settings, Sign-in."
+      },
+      "sso_provider_unreachable": {
+        "title": "The identity provider could not be reached",
+        "cause": "{{0}}",
+        "impact": "Nobody can sign in with single sign-on until this is fixed.",
+        "fix": "Check the issuer URL under Settings, Sign-in, and that this panel can reach it."
+      },
+      "store_bad_index": {
+        "title": "The plugin store's index could not be read",
+        "cause": "{{0}}",
+        "impact": "Nothing was read from it.",
+        "fix": "If this is a store of your own, check that the index is the format this panel reads. A plugin can still be installed from a manifest address or by pasting one."
+      },
+      "store_bad_signature": {
+        "title": "The plugin store's index is not signed by the key this panel trusts",
+        "cause": "{{0}}",
+        "impact": "Nothing was read from it, and nothing was installed.",
+        "fix": "Check the signing key under Settings, then Plugins. If it is right, the index at {{0}} is not the one that key signs, and that is worth finding out about before installing anything from it."
+      },
+      "store_unreachable": {
+        "title": "The plugin store could not be reached",
+        "cause": "{{0}}",
+        "impact": "Nothing was read from it.",
+        "fix": "Check that this cluster can reach {{0}}. A plugin can still be installed from a manifest address or by pasting one, which is what a cluster with no way out to the internet uses."
+      },
+      "team_account_exists": {
+        "title": "They already have an account here",
+        "cause": "{{0}} has signed in to this panel before, so there is nothing to sign up for.",
+        "impact": "No invitation was created.",
+        "fix": "Add them to the team under Members, by the same address."
+      },
+      "team_already_a_member": {
+        "title": "They are already in this team",
+        "cause": "{{0}} is already a member.",
+        "impact": "No invitation was created.",
+        "fix": "Change their role under Members instead."
+      },
+      "team_last_owner": {
+        "title": "A team needs at least one owner",
+        "cause": "This is the only owner of the team.",
+        "impact": "Nothing was changed.",
+        "fix": "Make someone else an owner first, then remove this one."
+      },
+      "team_no_such_user": {
+        "title": "No account with that email",
+        "cause": "Nobody on this panel uses the address {{0}}.",
+        "impact": "Nobody was added to the team.",
+        "fix": "Ask them to create an account first, then add them. Skifity does not send invitations to addresses that have never signed in."
+      },
+      "tunnel_no_token": {
+        "title": "There is no Cloudflare tunnel token",
+        "cause": "Settings has no tunnel token, and the connector cannot authenticate without one.",
+        "impact": "The tunnel was not installed. Nothing was changed in the cluster.",
+        "fix": "Create a tunnel in the Cloudflare dashboard under Zero Trust, then Networks, then Tunnels. Choose the Cloudflared connector, copy the token it shows, and paste it into Settings, then Domains and HTTPS, then Cloudflare tunnel token. On the same tunnel, add a public hostname — a wildcard such as *.apps.example.com covers every app at once — with the service set to HTTP and the address {{0}}."
+      },
+      "tunnel_not_applied": {
+        "title": "The token was saved, but the tunnel was not updated",
+        "cause": "{{0}}",
+        "impact": "The connectors are still running on the previous token, so traffic keeps flowing until they are restarted.",
+        "fix": "Fix what the cause says and save the token again, or install Cloudflare tunnel under Components."
+      },
+      "upgrade_failed": {
+        "title": "The upgrade could not be started",
+        "cause": "{{0}}",
+        "impact": "The panel is still running the current version.",
+        "fix": "Check that the version exists and that the cluster can pull its image."
+      },
+      "upgrade_unsupported": {
+        "title": "This panel cannot upgrade itself",
+        "cause": "The panel is not running inside a cluster it can update, which is normal in development.",
+        "impact": "Nothing was changed.",
+        "fix": "Upgrade by pulling the new image and restarting, or re-run the installer with the version you want."
+      },
+      "webhook_unverified": {
+        "title": "This webhook could not be verified",
+        "cause": "The signature on the request does not match this connection's webhook secret.",
+        "impact": "No deploy was started.",
+        "fix": "Check that the secret in your Git host's webhook settings matches the one in Skifity."
+      }
+    }
   },
   "time": {
     "seconds": "{{count}}s",

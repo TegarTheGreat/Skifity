@@ -83,6 +83,9 @@ export type Server = {
 
 export type StepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped"
 
+/** One extra line under a step: the English, its key, and its values. */
+export type StepDetail = { text: string; key?: string; args?: string[] }
+
 export type OperationStep = {
   id: string
   seq: number
@@ -94,6 +97,9 @@ export type OperationStep = {
    *  before either existed. */
   message_key?: string
   message_args?: string[]
+  /** Extra lines the panel wrote itself, each translatable. */
+  notes?: StepDetail[]
+  /** The one line that is not: a failed step's rendered problem. */
   detail?: string
   started_at?: string
   finished_at?: string

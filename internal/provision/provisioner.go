@@ -247,8 +247,8 @@ func (p *Provisioner) runAddServer(ctx context.Context, op store.Operation, serv
 			p.failStep(ctx, op, serverID, step.key, err)
 			return
 		}
-		p.setStep(ctx, op, step.key, store.StepSucceeded, state.lastNote, state.lastDetail)
-		state.lastNote, state.lastDetail = store.StepNote{}, ""
+		p.setStep(ctx, op, step.key, store.StepSucceeded, state.lastNote, "")
+		state.lastNote = store.StepNote{}
 	}
 
 	if state.client != nil {
@@ -283,11 +283,11 @@ type addState struct {
 	// joinToken and serverURL come from the existing cluster.
 	joinToken string
 	serverURL string
-	// lastNote and lastDetail are shown against the step that just finished.
-	// The note carries the English, the key the panel translates it by, and the
-	// values that went into the sentence.
-	lastNote   store.StepNote
-	lastDetail string
+	// lastNote is shown against the step that just finished: the English, the
+	// key the panel translates it by, the values in the sentence, and any extra
+	// lines underneath. The free-text detail beside it is now only set by a
+	// failure, which is the one thing here that is not the panel's own words.
+	lastNote store.StepNote
 }
 
 func (p *Provisioner) stepConnect(ctx context.Context, state *addState) error {
@@ -341,8 +341,16 @@ func (p *Provisioner) stepConnect(ctx context.Context, state *addState) error {
 			return err
 		}
 	}
-	state.lastNote = store.StepNote{Message: "Connected to " + server.Host, Key: "connected", Args: []string{server.Host}}
-	state.lastDetail = "Host key " + client.HostKey
+	state.lastNote = store.StepNote{
+		Message: "Connected to " + server.Host,
+		Key:     "connected",
+		Args:    []string{server.Host},
+		Details: []store.StepDetail{{
+			Text: "Host key " + client.HostKey,
+			Key:  "hostKey",
+			Args: []string{client.HostKey},
+		}},
+	}
 	return nil
 }
 
@@ -391,12 +399,19 @@ func (p *Provisioner) stepPreflight(ctx context.Context, state *addState) error 
 	message, args := errdoc.Sprintf("%s, %d cores, %d MB memory, %d GB free",
 		server.OSInfo, report.CPUCores, report.MemoryMB, report.DiskGB)
 	state.lastNote = store.StepNote{Message: message, Key: "preflightOk", Args: args}
-	if len(problems) > 0 {
-		var notes []string
-		for _, problem := range problems {
-			notes = append(notes, problem.Detail+" "+problem.Fix)
-		}
-		state.lastDetail = strings.Join(notes, "\n")
+	// The warnings, in the reader's language. They used to be joined into one
+	// English string in a column the interface only read for a failed step, so
+	// every non-fatal preflight finding was collected and shown to nobody.
+	for _, problem := range problems {
+		state.lastNote.Details = append(state.lastNote.Details,
+			store.StepDetail{
+				Text: problem.Detail, Key: "preflight." + problem.Code + ".detail",
+				Args: problem.Args.Detail,
+			},
+			store.StepDetail{
+				Text: problem.Fix, Key: "preflight." + problem.Code + ".fix",
+				Args: problem.Args.Fix,
+			})
 	}
 	return nil
 }
@@ -460,8 +475,15 @@ func (p *Provisioner) stepInstallKey(ctx context.Context, state *addState) error
 
 	// The password is now out of scope and was never written anywhere.
 	state.request.Password = ""
-	state.lastNote = store.StepNote{Message: "Installed a key just for this server; the password was not stored", Key: "keyInstalled"}
-	state.lastDetail = pair.Fingerprint
+	state.lastNote = store.StepNote{
+		Message: "Installed a key just for this server; the password was not stored",
+		Key:     "keyInstalled",
+		Details: []store.StepDetail{{
+			Text: "Fingerprint " + pair.Fingerprint,
+			Key:  "fingerprint",
+			Args: []string{pair.Fingerprint},
+		}},
+	}
 	return nil
 }
 

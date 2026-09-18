@@ -692,6 +692,10 @@
       "uninstallFailed": "Kubernetes tidak bisa dihapus dari mesinnya",
       "uninstallSkipped": "Kubernetes dibiarkan tetap terpasang di mesinnya",
       "uninstalled": "Kubernetes dihapus dari mesinnya"
+    },
+    "stepNote": {
+      "fingerprint": "Sidik jari {{0}}",
+      "hostKey": "Host key {{0}}"
     }
   },
   "databases": {

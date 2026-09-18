@@ -254,7 +254,7 @@ func (db *DB) LatestOperation(ctx context.Context, targetType, targetID string) 
 // ListOperationSteps returns an operation's steps in sequence order.
 func (db *DB) ListOperationSteps(ctx context.Context, opID string) ([]OperationStep, error) {
 	rows, err := db.QueryContext(ctx, `SELECT id, operation_id, seq, key, status, message, message_key,
-		message_args, detail, started_at, finished_at
+		message_args, notes, detail, started_at, finished_at
 		FROM operation_steps WHERE operation_id = ? ORDER BY seq`, opID)
 	if err != nil {
 		return nil, fmt.Errorf("list operation steps: %w", err)
@@ -264,10 +264,13 @@ func (db *DB) ListOperationSteps(ctx context.Context, opID string) ([]OperationS
 	for rows.Next() {
 		var s OperationStep
 		var started, finished sql.NullString
-		var args string
+		var args, notes string
 		if err := rows.Scan(&s.ID, &s.OperationID, &s.Seq, &s.Key, &s.Status, &s.Message,
-			&s.MessageKey, &args, &s.Detail, &started, &finished); err != nil {
+			&s.MessageKey, &args, &notes, &s.Detail, &started, &finished); err != nil {
 			return nil, fmt.Errorf("scan operation step: %w", err)
+		}
+		if notes != "" {
+			_ = json.Unmarshal([]byte(notes), &s.Notes)
 		}
 		if args != "" {
 			// A row written before this column existed, or one whose values
@@ -307,17 +310,22 @@ func (db *DB) SetStepStatus(ctx context.Context, opID, key string, status StepSt
 	case StepSucceeded, StepFailed, StepSkipped:
 		finished = Now()
 	}
-	encoded := ""
+	encoded, encodedNotes := "", ""
 	if len(note.Args) > 0 {
 		if blob, err := json.Marshal(note.Args); err == nil {
 			encoded = string(blob)
 		}
 	}
+	if len(note.Details) > 0 {
+		if blob, err := json.Marshal(note.Details); err == nil {
+			encodedNotes = string(blob)
+		}
+	}
 	_, err := db.Exec(ctx, `UPDATE operation_steps SET status = ?, message = ?, message_key = ?,
-		message_args = ?, detail = ?,
+		message_args = ?, notes = ?, detail = ?,
 		started_at = COALESCE(?, started_at), finished_at = COALESCE(?, finished_at)
 		WHERE operation_id = ? AND key = ?`,
-		status, note.Message, note.Key, encoded, detail, started, finished, opID, key)
+		status, note.Message, note.Key, encoded, encodedNotes, detail, started, finished, opID, key)
 	if err != nil {
 		return fmt.Errorf("set step status: %w", err)
 	}
@@ -332,7 +340,7 @@ func (db *DB) SetStepStatus(ctx context.Context, opID, key string, status StepSt
 // is what "Retry" does.
 func (db *DB) ResetStepsFrom(ctx context.Context, opID, key string) error {
 	_, err := db.Exec(ctx, `UPDATE operation_steps SET status = 'pending', message = '',
-		message_key = '', message_args = '', detail = '',
+		message_key = '', message_args = '', notes = '', detail = '',
 		started_at = NULL, finished_at = NULL
 		WHERE operation_id = ? AND seq >= (SELECT seq FROM operation_steps WHERE operation_id = ? AND key = ?)`,
 		opID, opID, key)

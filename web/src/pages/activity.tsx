@@ -33,7 +33,13 @@ export function ActivityPage() {
 
   useEvents(
     team ? [`team:${team.id}`] : [],
+    // Every audited action publishes "audit", and this page is the audit
+    // timeline — and it was listening to operations and deployments instead,
+    // as a proxy. Creating a project, renaming an app, issuing a token: all
+    // audited, none of them an operation or a deployment, none of them
+    // appearing here until the page was reloaded.
     {
+      audit: () => void queryClient.invalidateQueries({ queryKey: ["audit", team?.id] }),
       operation: () => void queryClient.invalidateQueries({ queryKey: ["audit", team?.id] }),
       deployment: () => void queryClient.invalidateQueries({ queryKey: ["audit", team?.id] }),
     },

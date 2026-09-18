@@ -1,10 +1,22 @@
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { CheckIcon, CircleIcon, Loader2Icon, MinusIcon, XIcon } from "lucide-react"
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  CircleIcon,
+  Loader2Icon,
+  MinusIcon,
+  XIcon,
+} from "lucide-react"
 import { cn } from "cn"
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { translated } from "@/lib/say"
-import type { Operation, OperationStep } from "@/lib/types"
+import type { Operation, OperationStep, StepDetail } from "@/lib/types"
 
 /**
  * Shows a long-running operation step by step.
@@ -59,10 +71,35 @@ export function OperationProgress({
                   {sayStep(t, step)}
                 </p>
               )}
-              {step.status === "failed" && step.detail && (
-                <pre className="log-output mt-2 max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
-                  {step.detail}
-                </pre>
+              {/* Shown whatever the step's state.
+                  This used to read `step.status === "failed" && step.detail`,
+                  so three things the panel writes against steps that *succeed*
+                  — the preflight warnings, the server's host key, the
+                  fingerprint of the key that was installed — were collected,
+                  stored, and displayed to nobody. A failure opens on its own,
+                  because that is what somebody is looking at; anything else
+                  waits behind a line they can click. */}
+              {(step.notes?.length || step.detail) && (
+                <Collapsible defaultOpen={step.status === "failed"} className="mt-1.5">
+                  <CollapsibleTrigger className="group/detail flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                    <ChevronRightIcon className="size-3 transition-transform group-data-[state=open]/detail:rotate-90" />
+                    {t("errors.details")}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    {step.notes && step.notes.length > 0 && (
+                      <ul className="mt-1.5 space-y-1 rounded-md bg-muted/60 p-2.5 text-xs">
+                        {step.notes.map((note, index) => (
+                          <li key={index}>{sayNote(t, note)}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {step.detail && (
+                      <pre className="log-output mt-1.5 max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
+                        {step.detail}
+                      </pre>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               )}
               {step.status === "running" && logs && logs.length > 0 && (
                 <pre className="log-output mt-2 max-h-48 overflow-auto rounded-md bg-muted p-2.5 text-xs">
@@ -94,6 +131,21 @@ function sayStep(t: TFunction, step: OperationStep): string {
     return translated(t, `errors.catalogue.${code}.title`, step.message, step.message_args)
   }
   return translated(t, `servers.stepMessage.${key}`, step.message, step.message_args)
+}
+
+/**
+ * One extra line under a step, in the reader's language.
+ *
+ * A preflight warning's key is the same one its fatal twin uses in the error
+ * catalogue, so the sentence is written once and read from both places.
+ */
+function sayNote(t: TFunction, note: StepDetail): string {
+  if (!note.key) return note.text
+  if (note.key.startsWith("preflight.")) {
+    const [, code, field] = note.key.split(".")
+    return translated(t, `errors.catalogue.preflight_${code}.${field === "detail" ? "cause" : "fix"}`, note.text, note.args)
+  }
+  return translated(t, `servers.stepNote.${note.key}`, note.text, note.args)
 }
 
 function StepIcon({ status }: { status: OperationStep["status"] }) {

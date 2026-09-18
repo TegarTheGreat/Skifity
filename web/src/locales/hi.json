@@ -703,6 +703,10 @@
       "uninstallFailed": "मशीन से Kubernetes हटाया नहीं जा सका",
       "uninstallSkipped": "Kubernetes मशीन पर इंस्टॉल ही छोड़ दिया गया",
       "uninstalled": "मशीन से Kubernetes हटा दिया गया"
+    },
+    "stepNote": {
+      "fingerprint": "फ़िंगरप्रिंट {{0}}",
+      "hostKey": "होस्ट की {{0}}"
     }
   },
   "databases": {

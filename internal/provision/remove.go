@@ -304,7 +304,7 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		return
 	}
 	check.client.Close()
-	p.setStep(ctx, op, StepPreflight, store.StepSucceeded, check.lastNote, check.lastDetail)
+	p.setStep(ctx, op, StepPreflight, store.StepSucceeded, check.lastNote, "")
 
 	p.setStep(ctx, op, "drain", store.StepRunning, store.StepNote{}, "")
 	if err := p.cordon(ctx, server, true); err != nil {

@@ -1065,6 +1065,10 @@ func TestAStepRemembersHowToSayItselfAgain(t *testing.T) {
 		Message: "Ubuntu 24.04, 4 cores, 8192 MB memory, 40 GB free",
 		Key:     "preflightOk",
 		Args:    []string{"Ubuntu 24.04", "4", "8192", "40"},
+		Details: []StepDetail{
+			{Text: "Docker is already running on this server.", Key: "preflight.conflict_docker.detail"},
+			{Text: "Host key ssh-ed25519 AAAA", Key: "hostKey", Args: []string{"ssh-ed25519 AAAA"}},
+		},
 	}
 	if err := db.SetStepStatus(ctx, op.ID, "preflight", StepSucceeded, note, ""); err != nil {
 		t.Fatalf("SetStepStatus: %v", err)
@@ -1095,6 +1099,18 @@ func TestAStepRemembersHowToSayItselfAgain(t *testing.T) {
 		}
 	}
 
+	// The extra lines come back too. They used to be one joined English string
+	// in a column the interface only read for a failed step, so everything
+	// written against a step that succeeded was stored and shown to nobody.
+	if len(got.Notes) != len(note.Details) {
+		t.Fatalf("the notes came back as %+v, want %+v", got.Notes, note.Details)
+	}
+	for i := range note.Details {
+		if got.Notes[i].Key != note.Details[i].Key || got.Notes[i].Text != note.Details[i].Text {
+			t.Errorf("note %d came back as %+v, want %+v", i, got.Notes[i], note.Details[i])
+		}
+	}
+
 	// Retry clears the sentence, so a step that ran again does not show what it
 	// said the time before.
 	if err := db.ResetStepsFrom(ctx, op.ID, "preflight"); err != nil {
@@ -1102,8 +1118,8 @@ func TestAStepRemembersHowToSayItselfAgain(t *testing.T) {
 	}
 	steps, _ = db.ListOperationSteps(ctx, op.ID)
 	for _, step := range steps {
-		if step.Key == "preflight" && (step.MessageKey != "" || len(step.MessageArgs) != 0) {
-			t.Errorf("a reset step still says %q %q", step.MessageKey, step.MessageArgs)
+		if step.Key == "preflight" && (step.MessageKey != "" || len(step.MessageArgs) != 0 || len(step.Notes) != 0) {
+			t.Errorf("a reset step still says %q %q %+v", step.MessageKey, step.MessageArgs, step.Notes)
 		}
 	}
 }

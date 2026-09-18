@@ -29,8 +29,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useEvents } from "@/hooks/use-events"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
+import { queryClient } from "@/lib/query"
 import { formatRelative } from "@/lib/format"
 import type { Database, Environment, Project } from "@/lib/types"
 
@@ -52,6 +54,18 @@ export function DatabasesPage() {
     queryFn: () => api.get<List<Project>>(`/api/teams/${team!.id}/projects`),
     enabled: Boolean(team),
   })
+
+  // This page had neither a subscription nor a poll, and a database takes
+  // minutes to come up: it was created, the list said "creating", and it went
+  // on saying that until somebody reloaded. The server has been publishing
+  // "database" the whole time.
+  useEvents(
+    team ? [`team:${team.id}`] : [],
+    {
+      database: () => void queryClient.invalidateQueries({ queryKey: ["databases"] }),
+    },
+    Boolean(team),
+  )
 
   const projectItems = useMemo(() => projects.data?.items ?? [], [projects.data])
 

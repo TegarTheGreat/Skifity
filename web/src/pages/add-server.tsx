@@ -303,8 +303,10 @@ function ProvisioningView({
   useEvents(
     [`operation:${operationId}`],
     {
+      // "operation" carries the whole operation, steps included, so every
+      // change to a step arrives on it. There was a "step" handler here too,
+      // listening for an event nothing has ever published.
       operation: () => void operation.refetch(),
-      step: () => void operation.refetch(),
       failed: () => void operation.refetch(),
       log: (data) => {
         const line = (data as { line?: string }).line

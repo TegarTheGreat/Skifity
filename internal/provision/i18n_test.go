@@ -28,6 +28,7 @@ import (
 func TestEveryPreflightProblemAndStepMessageHasItsWords(t *testing.T) {
 	preflight := codesIn(t, "preflight.go", "Code", "code")
 	steps := stepMessageKeys(t)
+	notes := stepDetailKeys(t)
 
 	if len(preflight) < 15 {
 		t.Fatalf("only found %d preflight codes, so this test has stopped reading the source", len(preflight))
@@ -52,6 +53,7 @@ func TestEveryPreflightProblemAndStepMessageHasItsWords(t *testing.T) {
 			} `json:"errors"`
 			Servers struct {
 				StepMessage map[string]string `json:"stepMessage"`
+				StepNote    map[string]string `json:"stepNote"`
 			} `json:"servers"`
 		}
 		if err := json.Unmarshal(body, &locale); err != nil {
@@ -86,6 +88,21 @@ func TestEveryPreflightProblemAndStepMessageHasItsWords(t *testing.T) {
 		for key := range locale.Servers.StepMessage {
 			if !slices.Contains(steps, key) {
 				t.Errorf("%s: servers.stepMessage.%s is not a sentence any step says", language, key)
+			}
+		}
+
+		// The extra lines under a step. A preflight warning's key points back
+		// into the error catalogue, which the loop above already covers; these
+		// are the ones the panel writes on its own.
+		for _, key := range notes {
+			if strings.TrimSpace(locale.Servers.StepNote[key]) == "" {
+				t.Errorf("%s: the step note %q has no words: add servers.stepNote.%s",
+					language, key, key)
+			}
+		}
+		for key := range locale.Servers.StepNote {
+			if !slices.Contains(notes, key) {
+				t.Errorf("%s: servers.stepNote.%s is not a line any step writes", language, key)
 			}
 		}
 	}
@@ -173,13 +190,72 @@ func stepMessageKeys(t *testing.T) []string {
 	return sorted(seen)
 }
 
-func isStepNote(expr ast.Expr) bool {
+// stepDetailKeys reads every store.StepDetail's Key in this package, leaving
+// out the ones that point into the error catalogue.
+func stepDetailKeys(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("list the package: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
+		if err != nil {
+			continue
+		}
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			composite, ok := node.(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			// Written as []store.StepDetail{{...}, {...}}, so the element type
+			// is on the slice and the elements themselves carry none.
+			elements := composite.Elts
+			if array, ok := composite.Type.(*ast.ArrayType); ok && isNamed(array.Elt, "StepDetail") {
+				elements = nil
+				for _, item := range composite.Elts {
+					if inner, ok := item.(*ast.CompositeLit); ok {
+						elements = append(elements, inner.Elts...)
+					}
+				}
+			} else if !isNamed(composite.Type, "StepDetail") {
+				return true
+			}
+			for _, element := range elements {
+				pair, ok := element.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				key, ok := pair.Key.(*ast.Ident)
+				if !ok || key.Name != "Key" {
+					continue
+				}
+				// A preflight warning reuses its fatal twin's catalogue entry,
+				// so the sentence is written once and read from both places.
+				if value, ok := literal(pair.Value); ok && value != "" &&
+					!strings.HasPrefix(value, "preflight.") {
+					seen[value] = true
+				}
+			}
+			return true
+		})
+	}
+	return sorted(seen)
+}
+
+func isStepNote(expr ast.Expr) bool { return isNamed(expr, "StepNote") }
+
+func isNamed(expr ast.Expr, name string) bool {
 	sel, ok := expr.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	return ok && pkg.Name == "store" && sel.Sel.Name == "StepNote"
+	return ok && pkg.Name == "store" && sel.Sel.Name == name
 }
 
 func literal(e ast.Expr) (string, bool) {

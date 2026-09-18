@@ -185,11 +185,23 @@ type OperationStep struct {
 	// reader's language, and MessageArgs carries the values that went into it.
 	// Both are empty on a step recorded before either existed, and on one whose
 	// sentence the panel never wrote itself.
-	MessageKey  string    `json:"message_key,omitempty"`
-	MessageArgs []string  `json:"message_args,omitempty"`
-	Detail      string    `json:"detail,omitempty"`
-	StartedAt   time.Time `json:"started_at,omitzero"`
-	FinishedAt  time.Time `json:"finished_at,omitzero"`
+	MessageKey  string   `json:"message_key,omitempty"`
+	MessageArgs []string `json:"message_args,omitempty"`
+	// Notes are the extra lines the panel wrote itself, each translatable.
+	// Detail is the one thing that is not: the rendered text of the problem a
+	// failed step hit.
+	Notes      []StepDetail `json:"notes,omitempty"`
+	Detail     string       `json:"detail,omitempty"`
+	StartedAt  time.Time    `json:"started_at,omitzero"`
+	FinishedAt time.Time    `json:"finished_at,omitzero"`
+}
+
+// StepDetail is one extra line under a step, translated the same way as its
+// message: Text is the English, Key names it in the locale, Args fills it.
+type StepDetail struct {
+	Text string   `json:"text"`
+	Key  string   `json:"key,omitempty"`
+	Args []string `json:"args,omitempty"`
 }
 
 // StepNote is what a step says when it finishes.
@@ -202,6 +214,10 @@ type StepNote struct {
 	Message string
 	Key     string
 	Args    []string
+	// Details are the extra lines shown under the step — the preflight
+	// warnings, the host key, the fingerprint. They used to be one joined
+	// English string in a column the interface only read for failures.
+	Details []StepDetail
 }
 
 // App is what a user deploys. It becomes a Deployment, Service and Ingress.

@@ -725,6 +725,10 @@
       "uninstallFailed": "Kubernetes не удалось удалить с машины",
       "uninstallSkipped": "Kubernetes оставлен установленным на машине",
       "uninstalled": "Kubernetes удалён с машины"
+    },
+    "stepNote": {
+      "fingerprint": "Отпечаток {{0}}",
+      "hostKey": "Ключ хоста {{0}}"
     }
   },
   "databases": {

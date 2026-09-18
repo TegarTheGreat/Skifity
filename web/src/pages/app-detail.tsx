@@ -82,6 +82,12 @@ export function AppDetailPage() {
         void queryClient.invalidateQueries({ queryKey: ["app-status", appId] })
         void queryClient.invalidateQueries({ queryKey: ["deployments", appId] })
       },
+      // The watcher publishes these two and nothing listened: an app that fell
+      // over between deployments, and a certificate that went active or failed.
+      // The status poll caught the first within ten seconds; the second was not
+      // caught at all, on the tab where somebody sits and waits for it.
+      app: () => void queryClient.invalidateQueries({ queryKey: ["app-status", appId] }),
+      domain: () => void queryClient.invalidateQueries({ queryKey: ["domains", appId] }),
     },
     Boolean(team),
   )

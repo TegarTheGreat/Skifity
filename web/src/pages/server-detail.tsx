@@ -57,7 +57,12 @@ export function ServerDetailPage() {
 
   useEvents(
     team ? [`team:${team.id}`] : [],
-    { operation: () => void queryClient.invalidateQueries({ queryKey: ["server", serverId] }) },
+    {
+      operation: () => void queryClient.invalidateQueries({ queryKey: ["server", serverId] }),
+      // The watcher noticing this server stop answering, which is exactly what
+      // somebody on this page is watching for.
+      server: () => void queryClient.invalidateQueries({ queryKey: ["server", serverId] }),
+    },
     Boolean(team),
   )
 

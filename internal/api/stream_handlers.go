@@ -57,7 +57,27 @@ func (s *Server) handleEventStream(w http.ResponseWriter, r *http.Request) {
 	heartbeat := time.NewTicker(sseHeartbeat)
 	defer heartbeat.Stop()
 
+	// What the subscriber had already missed when this loop started.
+	//
+	// The hub never blocks a publisher: a client that cannot keep up loses
+	// events and the hub counts them. Nothing ever read that count, so a
+	// browser that was asleep with a build log open came back to a page that
+	// had quietly stopped being true and said nothing about it. Now it is told,
+	// and refetches instead of trusting what it has.
+	missed := sub.Dropped()
+
 	for {
+		// Checked on every turn of the loop rather than only on a heartbeat: a
+		// client that is behind is behind now, and the next thing it renders
+		// should already know.
+		if dropped := sub.Dropped(); dropped > missed {
+			missed = dropped
+			if _, err := fmt.Fprintf(w, "event: desync\ndata: {\"missed\":%d}\n\n", dropped); err != nil {
+				return
+			}
+			_ = rc.Flush()
+		}
+
 		select {
 		case <-r.Context().Done():
 			return

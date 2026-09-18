@@ -701,6 +701,10 @@
       "uninstallFailed": "Kubernetes could not be removed from the machine",
       "uninstallSkipped": "Kubernetes was left installed on the machine",
       "uninstalled": "Kubernetes was removed from the machine"
+    },
+    "stepNote": {
+      "fingerprint": "Fingerprint {{0}}",
+      "hostKey": "Host key {{0}}"
     }
   },
   "databases": {

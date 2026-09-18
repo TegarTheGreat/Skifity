@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 
 import { subscribe } from "@/lib/api"
+import { queryClient } from "@/lib/query"
 
 /**
  * Subscribes to the panel's event stream for as long as a component is mounted.
@@ -32,6 +33,14 @@ export function useEvents(
     for (const name of Object.keys(handlersRef.current)) {
       wrapped[name] = (data) => handlersRef.current[name]?.(data)
     }
+
+    // The hub never blocks a publisher: a client that cannot keep up loses
+    // events and is told so. A page that missed one cannot know what it missed,
+    // so the only honest answer is to throw away what it has and ask again.
+    wrapped.desync = () => {
+      void queryClient.invalidateQueries()
+    }
+
     return subscribe(key.split(","), wrapped)
   }, [key, enabled])
 }

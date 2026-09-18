@@ -1649,6 +1649,84 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 61 — the detail nobody saw, and seven events nobody heard
+
+The bug Phase 60 recorded rather than fixed, and what an audit of the realtime
+path found around it.
+
+### The step detail
+
+`{step.status === "failed" && step.detail && ...}`. Three things are written
+against steps that *succeed* — the preflight warnings, the server's SSH host
+key, the fingerprint of the key the panel installed — and all three were
+collected, stored, and rendered to nobody.
+
+Showing them was four lines. Showing them *without putting English back on the
+screen* was the rest: the sentences were a single joined blob in a free-text
+column, so they are structured now, the way everything else was in Phase 60.
+Migration 0013 adds `notes`, a JSON array of `{text, key, args}`; `detail` stays
+for the one thing that genuinely is not structured, the rendered problem of a
+failed step. A preflight warning reuses the catalogue entry its fatal twin
+already has, so the sentence is written once and read from both places.
+
+A failure opens on its own, because that is what somebody is looking at.
+Anything else waits behind a line they can click.
+
+### Seven events published, nobody listening
+
+The hub is good: it never blocks a publisher, keeps per-topic history with a TTL
+and LRU eviction, replays under the same lock that registers a subscriber, and
+the stream handler authorizes topics once, resumes from `Last-Event-ID`, sets
+`retry: 3000`, heartbeats every 25 seconds and clears the write deadline. None
+of that was the problem.
+
+The problem was the wiring at the other end. The server publishes fourteen kinds
+of event; the interface handled seven of them.
+
+| Published | Who should have cared |
+|---|---|
+| `audit` | **Activity** — the audit timeline, listening to operations and deployments as a proxy |
+| `server` | Servers list, server detail — the watcher noticing a server stop answering |
+| `app` | App detail — an app that fell over between deployments |
+| `domain` | The Domains tab, which is exactly where somebody sits waiting for a certificate |
+| `database`, `backups` | The databases list, which had **neither a subscription nor a poll** |
+| `project.created`, `project.deleted`, `app.created`, `app.deleted` | The projects list and the project page |
+
+And one in the other direction: the add-server page handled `step`, which
+nothing has ever published. The steps arrive on `operation`, which carries the
+whole operation.
+
+### The desync signal that was computed and never sent
+
+`Subscription.Dropped()` counts what a slow client missed, and its own doc
+comment says "The UI uses it to decide it must reload rather than trust its
+state." Nothing called it. A browser asleep with a build log open came back to a
+page that had quietly stopped being true.
+
+The stream handler now checks it on every turn of the loop and emits
+`event: desync`; `useEvents` adds that handler to every subscriber and
+invalidates everything, because a page that missed an event cannot know what it
+missed.
+
+### The typecheck that checked nothing
+
+`npx tsc --noEmit` in `web/` passes on any input: `tsconfig.json` has
+`"files": []` and only project references, so plain `tsc` compiles an empty
+program. The real check is `tsc -b`, which is what `npm run typecheck` and
+`make check` have always run — so CI was never fooled, only the hand-run
+command was. It caught four genuine errors in this phase's own work the moment
+it was used properly.
+
+### The gate
+
+`internal/events` reads every `hub.Publish` call's event name out of the server
+and every handler key out of every `useEvents` block in the interface, and
+requires the two sets to match — in both directions. Proven by renaming one
+handler, which failed it twice: once for the event nobody listens to, once for
+the handler nothing publishes.
+
+1549 keys, five languages. `make check` green, 15 interface tests pass.
+
 ## Phase 60 — the scaling findings, the preflight report, and the line under every step
 
 The two pieces named at the end of Phase 59, and a third that turned up while
@@ -2925,15 +3003,6 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
-* **A step's detail is never shown unless the step failed.** The operation
-  progress list renders `detail` only for a failed step, and three things are
-  written against steps that succeed: the preflight warnings — the non-fatal
-  ones, which is most of them — the server's SSH host key, and the fingerprint
-  of the key the panel installed. All three are collected, stored in
-  `operation_steps.detail`, and displayed to nobody. Found while translating the
-  step messages in Phase 60. The fix is a collapsible on a succeeded step, and
-  the preflight warnings would then want structuring the way the fatal ones now
-  are.
 * **No plugin has ever actually run.** The manifest standard, the permission
   model, the rendered Kubernetes objects, the event delivery and the blocking
   verdicts are unit-tested. Whether a real plugin image starts in the namespace

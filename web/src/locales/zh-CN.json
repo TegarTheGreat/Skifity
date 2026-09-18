@@ -692,6 +692,10 @@
       "uninstallFailed": "没能从这台机器上卸载 Kubernetes",
       "uninstallSkipped": "Kubernetes 被保留在这台机器上",
       "uninstalled": "已从这台机器上卸载 Kubernetes"
+    },
+    "stepNote": {
+      "fingerprint": "指纹 {{0}}",
+      "hostKey": "主机密钥 {{0}}"
     }
   },
   "databases": {

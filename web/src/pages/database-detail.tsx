@@ -48,6 +48,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEvents } from "@/hooks/use-events"
+import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatBytes, formatDateTime, formatRelative } from "@/lib/format"
 import { queryClient } from "@/lib/query"
@@ -65,6 +67,20 @@ export function DatabaseDetailPage() {
   const { databaseId = "" } = useParams()
   const navigate = useNavigate()
   const confirmDelete = useDeleteConfirm()
+  const { team } = useSession()
+
+  // The poll below stops once the database is running, which is right; these
+  // are what make the page move before that, and what catches a backup
+  // finishing without waiting for the next tick.
+  useEvents(
+    team ? [`team:${team.id}`] : [],
+    {
+      database: () => void queryClient.invalidateQueries({ queryKey: ["database", databaseId] }),
+      backups: () => void queryClient.invalidateQueries({ queryKey: ["backups", databaseId] }),
+      operation: () => void queryClient.invalidateQueries({ queryKey: ["database", databaseId] }),
+    },
+    Boolean(team),
+  )
 
   const database = useQuery({
     queryKey: ["database", databaseId],

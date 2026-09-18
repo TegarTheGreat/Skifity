@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
+import { useEvents } from "@/hooks/use-events"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatRelative } from "@/lib/format"
@@ -32,6 +33,19 @@ export function ProjectsPage() {
   const { t } = useTranslation()
   const { team } = useSession()
   const [creating, setCreating] = useState(false)
+
+  // Both are published and neither was listened for, so a project created in
+  // another tab — or by the CLI, or by an assistant over MCP — did not appear.
+  useEvents(
+    team ? [`team:${team.id}`] : [],
+    {
+      "project.created": () =>
+        void queryClient.invalidateQueries({ queryKey: ["projects", team?.id] }),
+      "project.deleted": () =>
+        void queryClient.invalidateQueries({ queryKey: ["projects", team?.id] }),
+    },
+    Boolean(team),
+  )
 
   const projects = useQuery({
     queryKey: ["projects", team?.id],

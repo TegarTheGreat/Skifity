@@ -45,7 +45,13 @@ export function ServersPage() {
 
   useEvents(
     team ? [`team:${team.id}`] : [],
-    { operation: () => void queryClient.invalidateQueries({ queryKey: ["servers", team?.id] }) },
+    // "operation" covers a server being added or removed. "server" is the
+    // watcher noticing one stop answering, which is the whole reason the
+    // watcher exists and never reached this list.
+    {
+      operation: () => void queryClient.invalidateQueries({ queryKey: ["servers", team?.id] }),
+      server: () => void queryClient.invalidateQueries({ queryKey: ["servers", team?.id] }),
+    },
     Boolean(team),
   )
 

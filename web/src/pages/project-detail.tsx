@@ -61,6 +61,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEvents } from "@/hooks/use-events"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { repoName } from "@/lib/format"
@@ -88,6 +89,21 @@ export function ProjectDetailPage() {
     queryKey: ["project", projectId],
     queryFn: () => api.get<Project>(`/api/projects/${projectId}`),
   })
+
+  // The page lists apps and databases, and both change underneath it: a deploy
+  // finishing, an app created from the CLI, a database coming up. It had one
+  // 30-second status poll per app row and nothing else.
+  useEvents(
+    team ? [`team:${team.id}`] : [],
+    {
+      deployment: () => void queryClient.invalidateQueries({ queryKey: ["app-status"] }),
+      app: () => void queryClient.invalidateQueries({ queryKey: ["app-status"] }),
+      "app.created": () => void queryClient.invalidateQueries({ queryKey: ["apps"] }),
+      "app.deleted": () => void queryClient.invalidateQueries({ queryKey: ["apps"] }),
+      database: () => void queryClient.invalidateQueries({ queryKey: ["databases"] }),
+    },
+    Boolean(team),
+  )
 
   const environments = useQuery({
     queryKey: ["environments", projectId],

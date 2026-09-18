@@ -110,7 +110,11 @@ e2e: backend ## Run the Playwright user interface test against the real binary
 	npm --prefix web run test:e2e
 
 screenshots: backend ## Recapture the screenshots in the README
-	SKIFITY_SCREENSHOTS=1 npm --prefix web exec -- playwright test screenshots
+	# `run`, not `exec`: an npm script runs with the package directory as its
+	# working directory and `npm exec` does not, so this used to start Playwright
+	# in the repository root, where there is no config — no browser path, no
+	# panel started, and a failure that blames the browser.
+	SKIFITY_SCREENSHOTS=1 npm --prefix web run test:e2e -- screenshots
 
 # PLATFORM builds for a machine that is not this one, which is the usual case
 # for an arm64 VPS built from an amd64 laptop, or the other way round. Without

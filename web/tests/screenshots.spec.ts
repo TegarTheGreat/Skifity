@@ -92,7 +92,10 @@ test("capture", async ({ page, request }) => {
   }
   const post = async (path: string, body: unknown) => {
     const response = await request.post(path, { headers, data: body })
-    expect(response.ok(), `POST ${path}: ${response.status()} ${await response.text()}`).toBeTruthy()
+    expect(
+      response.ok(),
+      `POST ${path}: ${response.status()} ${await response.text()}`,
+    ).toBeTruthy()
     return response.json()
   }
   const get = async (path: string) => (await request.get(path, { headers })).json()
@@ -225,6 +228,15 @@ test("capture", async ({ page, request }) => {
   await go("/templates", /templates/i)
   await shoot(page, "templates")
 
+  await go("/plugins", /plugins/i)
+  await shoot(page, "plugins")
+
+  // The store, which on a panel that cannot reach one says so. That is the
+  // honest picture until something is published at plugins.skifity.com, and a
+  // screenshot of it is better than none.
+  await page.getByRole("tab", { name: /store/i }).click()
+  await shoot(page, "plugins-store")
+
   await go("/activity", /activity/i)
   await shoot(page, "activity")
 
@@ -245,6 +257,7 @@ test("capture", async ({ page, request }) => {
     "domains",
     "scaling",
     "storage",
+    "firewall",
     "settings",
     "advanced",
   ]) {
@@ -260,6 +273,7 @@ test("capture", async ({ page, request }) => {
     ["git", /^git$/i],
     ["notifications", /notifications/i],
     ["components", /components/i],
+    ["plugins", /plugins/i],
     ["members", /members/i],
     ["security", /security/i],
     ["audit", /audit/i],

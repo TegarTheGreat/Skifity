@@ -1649,6 +1649,39 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 49 — the settings nobody could open, and a domain nobody owned
+
+Two settings and a rename.
+
+**The plugin settings had nowhere to be set.** The panel defined them, the
+documentation told people to open Settings, then Plugins — and the frontend's
+group list did not carry `plugins`, so the group rendered as nothing at all. A
+setting that exists on the server and not on the page is a setting that only
+looks configurable.
+
+They have a tab now, with a button that reads the catalogue and says which of
+the three answers came back: signed by the key set here, readable and vouched
+for by nobody, or a failure that names itself. An address and a key are a pair
+you otherwise discover is wrong on the day you wanted a plugin. It reads on
+request rather than on mount, because an address somebody is halfway through
+typing should not be fetched and a store that is down should not make the
+settings page look broken.
+
+**`skifity.io` was never ours.** `skifity.com` is. It was the vendor domain on
+every Kubernetes label and annotation the panel writes — `skifity.io/app-id`,
+`skifity.io/managed` — the plugin standard's `apiVersion`, and the install
+command in the README, the installer, the release notes and every page of the
+documentation. Using a domain somebody else may register is the one thing the
+Kubernetes convention for those keys exists to prevent, and doing it before
+anything is published costs nothing where doing it after costs everybody a
+migration.
+
+The rename found a latent bug. `internal/provision/scripts.go` wrote
+`--node-label=skifity.io/managed=true` by hand while everything else went
+through `version.LabelKey`, so changing the domain in the one file that is
+documented as the place to change it would have left every node carrying a key
+nothing else looked for. It goes through the same function now.
+
 ## Phase 48 — the store, and the page that admits what it cannot reach
 
 The runtime could install a plugin. Nothing could find one.
@@ -2008,7 +2041,7 @@ all ten pages the panel serves rather than eight.
   largest single gap in this repository, it is a consequence of ADR-0010, and
   writing scripts that could not be run here would have widened it rather than
   closed it.
-* **None of the published install path exists.** `get.skifity.io` does not
+* **None of the published install path exists.** `get.skifity.com` does not
   resolve. There is no `skifity/skifity` repository on GitHub — this one is
   `TegarTheGreat/Skifity` — so the installer's manifest fetch
   (`raw.githubusercontent.com/skifity/skifity/main/deploy`) and its CLI download

@@ -29,7 +29,7 @@ Server (first node):
     --write-kubeconfig-mode=0600         # 0644 would make it world-readable on the node
     --tls-san=<public ip>
     --node-external-ip=<public ip>       # required when nodes are on different providers
-    --node-label=skifity.io/managed=true
+    --node-label=skifity.com/managed=true
 
 A control plane node joining an existing cluster gets the same flags with `--server
 <url>` in place of `--cluster-init`. The backend has to match, which is why it is
@@ -39,9 +39,9 @@ Agent:
 
     K3S_URL=https://<server ip>:6443 K3S_TOKEN=<token>
     --node-external-ip=<public ip>
-    --node-label=skifity.io/managed=true
-    --node-label=skifity.io/location=<location>   # when one was given
-    --node-label=skifity.io/size=<size>           # when one was given
+    --node-label=skifity.com/managed=true
+    --node-label=skifity.com/location=<location>   # when one was given
+    --node-label=skifity.com/size=<size>           # when one was given
 
 The node role is not a label Skifity sets: Kubernetes already marks a control plane
 node, and a second name for the same thing is a second thing to keep true.

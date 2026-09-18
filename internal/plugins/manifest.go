@@ -48,7 +48,7 @@ import (
 )
 
 // APIVersion is the plugin contract this build speaks.
-const APIVersion = "plugin.skifity.io/v1"
+const APIVersion = "plugin.skifity.com/v1"
 
 // Manifest is a plugin, as its author publishes it.
 type Manifest struct {

@@ -17,7 +17,7 @@ const (
 	// Binary is the name of the executable and of the CLI the docs refer to.
 	Binary = "skifity"
 	// Domain is the vendor domain used for Kubernetes label and annotation keys.
-	Domain = "skifity.io"
+	Domain = "skifity.com"
 	// Tagline is shown on the login screen and in `skifity --help`.
 	Tagline = "Self-hosted apps, powered by Kubernetes."
 	// ConfigDir is where the installer keeps configuration on a host.
@@ -34,7 +34,7 @@ var (
 )
 
 // LabelKey returns a Kubernetes label or annotation key in the product's namespace,
-// for example "skifity.io/app-id".
+// for example "skifity.com/app-id".
 func LabelKey(suffix string) string {
 	return Domain + "/" + suffix
 }

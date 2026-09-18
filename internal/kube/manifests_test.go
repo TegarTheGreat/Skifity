@@ -152,7 +152,7 @@ func TestDeploymentSelectorIsStableAcrossDeploys(t *testing.T) {
 	// The pod template annotations must differ, or the rollout is a no-op.
 	pa := BuildDeployment(first).Spec.Template.Annotations
 	pb := BuildDeployment(second).Spec.Template.Annotations
-	if pa["skifity.io/revision"] == pb["skifity.io/revision"] {
+	if pa["skifity.com/revision"] == pb["skifity.com/revision"] {
 		t.Fatal("the pod template did not change between deploys, so no rollout would happen")
 	}
 }
@@ -572,7 +572,7 @@ func TestLabelsCarryOwnership(t *testing.T) {
 	labels := baseSpec().Labels()
 	for _, key := range []string{
 		"app.kubernetes.io/name", "app.kubernetes.io/managed-by",
-		"skifity.io/app-id", "skifity.io/project-id", "skifity.io/team-id",
+		"skifity.com/app-id", "skifity.com/project-id", "skifity.com/team-id",
 	} {
 		if labels[key] == "" {
 			t.Errorf("label %q is missing, so the object cannot be traced back to its owner", key)

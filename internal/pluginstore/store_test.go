@@ -166,7 +166,7 @@ func TestWithNoKeyTheCatalogueIsMarkedUnsigned(t *testing.T) {
 // A signed list of addresses would still let whoever serves those addresses put
 // anything behind them. The hash is what closes that.
 func TestAManifestMustHashToWhatTheIndexListed(t *testing.T) {
-	manifest := []byte("apiVersion: plugin.skifity.io/v1\n")
+	manifest := []byte("apiVersion: plugin.skifity.com/v1\n")
 	server := newStore(t, Index{Version: IndexVersion}, nil)
 	server.manifests["/m.yaml"] = manifest
 
@@ -182,7 +182,7 @@ func TestAManifestMustHashToWhatTheIndexListed(t *testing.T) {
 	}
 
 	// Now the address serves something else.
-	server.manifests["/m.yaml"] = []byte("apiVersion: plugin.skifity.io/v1 # and something extra\n")
+	server.manifests["/m.yaml"] = []byte("apiVersion: plugin.skifity.com/v1 # and something extra\n")
 	if _, err := client.FetchManifest(context.Background(), entry); !errors.Is(err, ErrManifestDigest) {
 		t.Fatalf("err = %v, want a digest failure", err)
 	}

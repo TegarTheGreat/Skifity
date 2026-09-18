@@ -24,7 +24,7 @@ what you may do is a list an administrator read before saying yes.
 ## The manifest
 
 ```yaml
-apiVersion: plugin.skifity.io/v1
+apiVersion: plugin.skifity.com/v1
 id: com.example.backup-to-b2
 name: Backup to Backblaze B2
 description: Copies every database backup to a Backblaze bucket as it is taken.

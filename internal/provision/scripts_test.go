@@ -55,7 +55,7 @@ func TestGeneratedScriptsAreValidShell(t *testing.T) {
 		JoinServerScript("", "a-token", "https://203.0.113.10:6443", "203.0.113.11", ""))
 	checkShellSyntax(t, "JoinAgentScript",
 		JoinAgentScript("", "a-token", "https://203.0.113.10:6443", "203.0.113.12",
-			map[string]string{"skifity.io/location": "frankfurt", "skifity.io/size": "small"}))
+			map[string]string{"skifity.com/location": "frankfurt", "skifity.com/size": "small"}))
 	checkShellSyntax(t, "ConnectivityScript", ConnectivityScript("203.0.113.10", 6443))
 }
 
@@ -394,7 +394,7 @@ func TestTheResearchPageSaysWhatTheCodeDoes(t *testing.T) {
 
 	server := InstallServerScript("", "tok", "203.0.113.10", settings.FlannelWireGuard, nil)
 	agent := JoinAgentScript("", "tok", "https://203.0.113.10:6443", "203.0.113.12",
-		map[string]string{"skifity.io/location": "fra"})
+		map[string]string{"skifity.com/location": "fra"})
 
 	var flags []string
 	for _, line := range strings.Split(string(page), "\n") {

@@ -254,7 +254,7 @@ func TestRestartAppPatchesPodTemplate(t *testing.T) {
 	}
 	// The annotation on the pod template is what makes Kubernetes roll the
 	// pods; an annotation on the Deployment itself would do nothing.
-	if updated.Spec.Template.Annotations["skifity.io/restarted-at"] == "" {
+	if updated.Spec.Template.Annotations["skifity.com/restarted-at"] == "" {
 		t.Fatal("no restart annotation was set on the pod template")
 	}
 }

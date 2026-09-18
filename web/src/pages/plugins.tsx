@@ -406,7 +406,7 @@ function ManualTab({
           rows={10}
           value={manifest}
           className="font-mono text-xs"
-          placeholder={"apiVersion: plugin.skifity.io/v1\nid: com.example.my-plugin"}
+          placeholder={"apiVersion: plugin.skifity.com/v1\nid: com.example.my-plugin"}
           onChange={(e) => setManifest(e.target.value)}
         />
       </div>

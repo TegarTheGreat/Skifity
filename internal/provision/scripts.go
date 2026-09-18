@@ -7,7 +7,17 @@ import (
 	"skifity/internal/kube"
 	"skifity/internal/settings"
 	"skifity/internal/shellsafe"
+	"skifity/internal/version"
 )
+
+// managedNodeLabel marks a node this panel installed.
+//
+// Built from version.LabelKey rather than written out, because the label was
+// spelled here by hand and everywhere else through that function: renaming the
+// vendor domain in one file would have left the nodes carrying a key nothing
+// else looked for. It is a package-level value because the functions below take
+// a parameter called version, which shadows the package inside them.
+var managedNodeLabel = "--node-label=" + version.LabelKey("managed") + "=true"
 
 // The shell that runs on the servers being added.
 //
@@ -338,7 +348,7 @@ func serverArgs(publicIP, backend string) []string {
 		"--write-kubeconfig-mode=0600",
 		fmt.Sprintf("--tls-san=%s", publicIP),
 		fmt.Sprintf("--node-external-ip=%s", publicIP),
-		"--node-label=skifity.io/managed=true",
+		managedNodeLabel,
 	}
 }
 
@@ -364,7 +374,7 @@ func JoinServerScript(version, token, serverURL, publicIP, backend string) strin
 func JoinAgentScript(version, token, serverURL, publicIP string, labels map[string]string) string {
 	args := []string{
 		fmt.Sprintf("--node-external-ip=%s", publicIP),
-		"--node-label=skifity.io/managed=true",
+		managedNodeLabel,
 	}
 	for _, pair := range sortedPairs(labels) {
 		args = append(args, fmt.Sprintf("--node-label=%s=%s", pair[0], pair[1]))

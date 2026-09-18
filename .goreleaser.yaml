@@ -102,7 +102,7 @@ release:
     ## Installing
 
     ```sh
-    curl -fsSL https://get.skifity.io | sudo sh
+    curl -fsSL https://get.skifity.com | sudo sh
     ```
 
     Already running Skifity? Upgrade from Settings, or:

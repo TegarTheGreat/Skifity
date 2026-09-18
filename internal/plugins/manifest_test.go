@@ -8,7 +8,7 @@ import (
 // A plugin somebody would actually publish, written as an author would write
 // it. If this stops parsing, the standard changed.
 const example = `
-apiVersion: plugin.skifity.io/v1
+apiVersion: plugin.skifity.com/v1
 id: com.example.backup-to-b2
 name: Backup to Backblaze B2
 description: Copies every database backup to a Backblaze bucket as it is taken.
@@ -164,7 +164,7 @@ func TestAFieldThisBuildDoesNotKnowIsRefused(t *testing.T) {
 // And a plugin written for another contract version does not run here.
 func TestAnotherApiVersionIsRefused(t *testing.T) {
 	manifest := mustExample(t)
-	manifest.APIVersion = "plugin.skifity.io/v2"
+	manifest.APIVersion = "plugin.skifity.com/v2"
 	err := manifest.Validate()
 	if err == nil {
 		t.Fatal("a plugin for another contract version was accepted")

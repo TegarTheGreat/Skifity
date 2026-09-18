@@ -54,7 +54,7 @@ Linux.
 
 ## 1. Install
 
-> **Not published yet.** `get.skifity.io` does not resolve, there is no
+> **Not published yet.** `get.skifity.com` does not resolve, there is no
 > `skifity/skifity` repository on GitHub, and no image has been pushed to
 > `ghcr.io/skifity/skifity`. The command below is what the install *will* be. To
 > try it today, clone the repository and run the installer from inside it, which
@@ -76,14 +76,14 @@ Linux.
 SSH into the server and run:
 
 ```sh
-curl -fsSL https://get.skifity.io | sudo sh
+curl -fsSL https://get.skifity.com | sudo sh
 ```
 
 If you already have a domain pointed at the server, tell the installer and it
 sets up HTTPS at the same time:
 
 ```sh
-curl -fsSL https://get.skifity.io | sudo SKIFITY_DOMAIN=panel.example.com sh
+curl -fsSL https://get.skifity.com | sudo SKIFITY_DOMAIN=panel.example.com sh
 ```
 
 It checks the server first, installs Kubernetes, starts the panel, and finishes

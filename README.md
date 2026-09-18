@@ -13,7 +13,7 @@ You give it a server. It gives you URLs.
 ---
 
 ```sh
-curl -fsSL https://get.skifity.io | sudo sh
+curl -fsSL https://get.skifity.com | sudo sh
 ```
 
 That is the whole installation. It checks the server, installs Kubernetes,
@@ -21,7 +21,7 @@ starts the panel, and prints a URL and a one-time token. Open the URL, create
 your account, paste a Git repository, and you have an app on the internet with
 HTTPS.
 
-**That command does not work yet.** `get.skifity.io` does not resolve and
+**That command does not work yet.** `get.skifity.com` does not resolve and
 nothing has been released, so there is no one-line install to run — see
 [Status](#status) for what does work today and what it is waiting on.
 
@@ -199,7 +199,7 @@ and runs on anything.
 
 Honest version, two parts.
 
-**Nothing is published.** `get.skifity.io` does not resolve. There is no
+**Nothing is published.** `get.skifity.com` does not resolve. There is no
 `skifity/skifity` repository on GitHub — this one lives at
 `TegarTheGreat/Skifity`. No image has been pushed to `ghcr.io/skifity/skifity`,
 and no release has been tagged, so the CLI download in the installer has nothing

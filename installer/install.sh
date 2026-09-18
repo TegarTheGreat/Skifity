@@ -1,7 +1,7 @@
 #!/bin/sh
 # Skifity installer.
 #
-#   curl -fsSL https://get.skifity.io | sh
+#   curl -fsSL https://get.skifity.com | sh
 #
 # Turns a fresh Ubuntu or Debian server into a Skifity control plane: k3s, the
 # panel, and a URL to open. It is safe to run again: every step checks what is
@@ -111,7 +111,7 @@ preflight() {
 		"This installer has to run as root: it installs k3s and writes to /etc." \
 		"Run it again with sudo:
 
-  curl -fsSL https://get.skifity.io | sudo sh"
+  curl -fsSL https://get.skifity.com | sudo sh"
 
 	mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 	: >>"$LOG_FILE" 2>/dev/null || LOG_FILE=/dev/null

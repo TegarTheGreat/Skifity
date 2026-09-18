@@ -102,9 +102,9 @@ memory leak.
 **11. Safe sign-in and roles.** Argon2id passwords with a lockout, TOTP,
 recovery keys, and OpenID Connect with PKCE, a verified ID token, a per-sign-in
 nonce and a single-use state. Three roles, ordered. Authorization lives in one
-place and a test walks every route in the router: 113 of them must refuse an
-anonymous request, and 85 team-scoped ones must answer 404 for another team's
-id. An API token is bound to one team and its scopes are enforced.
+place and a test walks every route in the router: 126 of them must refuse an
+anonymous request (13 are open on purpose), and 91 team-scoped ones must answer
+404 for another team's id. An API token is bound to one team and its scopes are enforced.
 
 **12. Isolation between projects.** An environment is a namespace with a
 default-deny NetworkPolicy, a ResourceQuota, a LimitRange and the `restricted`
@@ -141,12 +141,47 @@ or lost, a backup failing, a certificate failing. Delivery has never been seen
 end to end, which is the only part that counts. Phase 5 stands up a listener and
 breaks a deployment on purpose.
 
-**18. Documentation.** Ten pages, served from inside the binary so they work on
+**18. Documentation.** Thirteen pages, served from inside the binary so they work on
 a machine with no other browser and no outbound network — which is exactly when
 they are needed. Every `WithDocs` link in the error catalogue must resolve to a
 page the panel serves, at an anchor that exists, and a test fails the build if
-one does not. Thirty-two screenshots, captured by a test against the real
+one does not. Thirty-eight screenshots, captured by a test against the real
 binary. The check that actually matters is Phase 6, and it needs a person.
+
+## Can somebody install this today?
+
+No, and that is the shortest true answer about MVP readiness.
+
+There is no published image. The release workflow now publishes to whatever
+repository it is cut from, so a tag would produce one — but no tag has been cut,
+and `installer/install.sh` cannot derive a name a stranger's `curl | sh` would
+reach. Until this session it carried a literal default of
+`ghcr.io/skifity/skifity`, a namespace nobody here owns: the install would run
+to the end — k3s installed, firewall changed, `/etc` written — and only then
+fail on the pull, or, the day somebody registered that name, quietly run a
+stranger's image as root. It now refuses in `preflight`, before the machine is
+touched, and names the two commands that build and pass a local image instead.
+`make smoke` checks that refusal fires, says what to do and is asked before k3s
+is installed.
+
+So the honest install story is: **clone, `make image`, and pass
+`SKIFITY_IMAGE`.** That is a developer's install, not a user's. Turning it into
+a user's install is one decision — where this project publishes — followed by
+one tag.
+
+That is the first of three things between here and an MVP anybody else can use:
+
+1. **Somewhere to publish, and a tag.** One decision, then the existing
+   workflow. Without it item 15 is a claim about a script nobody can run.
+2. **`test/cluster/verify.sh`, once, on a real server.** Thirteen of the
+   eighteen rows are Written outright and two more are half of one, which means
+   the code and its unit tests exist and no cluster has ever seen them. One run
+   moves most of them, or tells us which ones were wrong, and nothing else in
+   this repository is worth as much.
+3. **Phase 6, with a person who has not seen it.** The documentation is served
+   and its links resolve, which is not the same as it being followed.
+
+Everything else on the roadmap is smaller than any of these.
 
 ## The phases
 

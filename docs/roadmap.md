@@ -119,10 +119,16 @@ In the order it matters.
    The release now publishes to the repository it is cut from, derived from
    `GITHUB_REPOSITORY`, so it is right wherever that is.
 
-   What is still a decision rather than a fix: `installer/install.sh` has a
-   literal default of `ghcr.io/skifity/skifity`, and a shell script downloaded
-   by a stranger cannot derive it. That line has to name wherever the project
-   actually publishes, and choosing that is choosing the project's public home.
+   The installer is no longer part of that hole. A shell script downloaded by
+   a stranger cannot derive where it was cut from, so `install.sh` still has a
+   literal default — but it now refuses that default in `preflight`, before k3s
+   is installed or anything on the machine changes, and says how to build an
+   image and pass it instead. `make smoke` checks the refusal fires and is
+   asked first.
+
+   What is still a decision rather than a fix: where this project publishes.
+   That line has to name a real home before anybody can install with one
+   command, and choosing it is choosing the project's public home.
 3. **Measure k3s's own footprint.** The panel's is measured, in
    `docs/performance.md`. The cluster's is not, and "runs on a 2 GB VPS" is a
    claim about the pair.

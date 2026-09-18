@@ -1649,6 +1649,58 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 63 — the default that would have installed a stranger's image
+
+### What the readiness check found
+
+The rubric is `docs/checklist.md`: eighteen things a self-hosted platform is
+judged on. Re-measured against the code rather than against the last time
+somebody wrote a number down, four of its numbers had drifted — 126 routes
+refuse an anonymous request rather than 113, 91 team-scoped routes refuse
+another team rather than 85, thirteen pages are served rather than ten,
+thirty-eight screenshots rather than thirty-two. All four were understatements,
+which is the harmless direction and still wrong.
+
+The blocker was in the installer. `IMAGE` defaulted to
+`ghcr.io/skifity/skifity:latest` — a namespace this project does not own and has
+never pushed to — and nothing checked it. A run with no `SKIFITY_IMAGE` would
+install k3s, change the firewall and write to `/etc`, and only then fail pulling
+an image that does not exist, leaving a half-built cluster on somebody's server.
+The worse half is the day somebody registers that name: the install would
+succeed, as root, with an image nobody here published.
+
+### The refusal
+
+`check_image` is its own function so it can be tested, and `preflight` calls it
+immediately after the log line and before anything on the machine changes. It
+names the image it will not use, gives the two commands that build a local one
+and pass it, and says the server has not been touched — which at that point is
+true.
+
+`test/smoke/installer.sh` asks for all four: that the default is refused, that
+the refusal names the image, that it says how to build one, and that an image
+the operator names is accepted. Two more check the ordering — `check_image` is
+called from inside `preflight`, and `preflight` runs before `install_k3s`.
+Proven by deleting the call: one check fails and the rest pass, which is the
+right shape.
+
+The installer's own header and its root-check message pointed at
+`curl -fsSL https://get.skifity.com | sudo sh`, a command that cannot work. The
+header now says so and gives the clone-and-build path; the root message names
+`sudo sh installer/install.sh`, which is the command somebody running it from a
+clone actually needs.
+
+### Where that leaves the MVP
+
+`docs/checklist.md` has the answer in a section of its own. Three things stand
+between here and something a stranger can use: somewhere to publish and a tag,
+one run of `test/cluster/verify.sh` on real hardware, and Phase 6 with a person
+who has not seen this before. Thirteen of the eighteen rows are Written, which
+means the code and its unit tests exist and no cluster has ever seen them.
+Nothing on the roadmap is larger than any of those three.
+
+`make check` exits 0, `make smoke` exits 0.
+
 ## Phase 62 — six bins that asked nothing, and two checks that checked nothing
 
 ### The inconsistency was the bug
@@ -3021,14 +3073,10 @@ all ten pages the panel serves rather than eight.
    points at.
 3. Deploy a real application from Git, end to end, on that server — the one
    flow that has never been exercised against a live cluster.
-4. Translate the error catalogue. Every `errdoc.Problem` — title, cause, impact
-   and fix — is English in all five languages. The settings page was the same
-   until Phase 55 and the mechanism it uses works here too: a key per error
-   code, with the server's English as the fallback.
-5. A schedule for a volume backup. The scheduler already runs a policy whose
+4. A schedule for a volume backup. The scheduler already runs a policy whose
    target is a volume; there is no route, no handler and no control, and
    `docs/backups.md` now says so rather than implying otherwise.
-6. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
+5. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
    signature, and the public key in the documentation. The panel reads one
    already; nothing is there to read.
 
@@ -3054,7 +3102,9 @@ all ten pages the panel serves rather than eight.
   the image. The working path is to clone the repository, `make image`, and run
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
-  start now say so where the one-line command is.
+  start now say so where the one-line command is. Since Phase 63 the installer
+  refuses the unpublished image in `preflight`, before k3s is installed, rather
+  than failing on the pull with a half-built cluster already on the machine.
 * **No plugin has ever actually run.** The manifest standard, the permission
   model, the rendered Kubernetes objects, the event delivery and the blocking
   verdicts are unit-tested. Whether a real plugin image starts in the namespace

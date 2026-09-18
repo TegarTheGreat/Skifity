@@ -433,6 +433,7 @@ function RecoveryCodes({ codes }: { codes: string[] }) {
 
 function SessionsCard() {
   const { t } = useTranslation()
+  const confirmRevoke = useConfirm()
 
   const sessions = useQuery({
     queryKey: ["sessions"],
@@ -492,7 +493,18 @@ function SessionsCard() {
                         size="icon"
                         aria-label={t("auth.revokeSession")}
                         disabled={revoke.isPending}
-                        onClick={() => revoke.mutate(session.id)}
+                        onClick={() =>
+                          void confirmRevoke({
+                            title: t("auth.revokeSession"),
+                            description: t("auth.revokeSessionConfirm", {
+                              device: session.user_agent || t("common.unknown"),
+                            }),
+                            confirmLabel: t("auth.revokeSession"),
+                            destructive: true,
+                          }).then((yes) => {
+                            if (yes) revoke.mutate(session.id)
+                          })
+                        }
                       >
                         <Trash2Icon className="size-4 text-muted-foreground" />
                       </Button>
@@ -510,6 +522,7 @@ function SessionsCard() {
 
 function TokensCard() {
   const { t } = useTranslation()
+  const confirmRevoke = useConfirm()
   // A token cannot grant more than the person creating it has, so it is scoped
   // to a team rather than to the account.
   const { team } = useSession()
@@ -587,7 +600,20 @@ function TokensCard() {
                       size="icon"
                       aria-label={t("auth.revokeToken")}
                       disabled={revoke.isPending}
-                      onClick={() => revoke.mutate(token.id)}
+                      // A token cannot be got back, and whatever was using it
+                      // stops working the moment this lands. The bin icon next
+                      // to it was the whole of the question.
+                      onClick={() =>
+                        void confirmRevoke({
+                          title: t("auth.revokeToken"),
+                          description: t("auth.revokeTokenConfirm", { name: token.name }),
+                          consequence: t("auth.revokeTokenConsequence"),
+                          confirmLabel: t("auth.revokeToken"),
+                          destructive: true,
+                        }).then((yes) => {
+                          if (yes) revoke.mutate(token.id)
+                        })
+                      }
                     >
                       <Trash2Icon className="size-4 text-muted-foreground" />
                     </Button>

@@ -579,6 +579,7 @@ function ComponentsPanel() {
 
 function MembersPanel() {
   const { t } = useTranslation()
+  const confirmMember = useConfirm()
   const { team } = useSession()
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<Role>("member")
@@ -664,7 +665,20 @@ function MembersPanel() {
                       size="icon"
                       aria-label={t("settings.removeMember")}
                       disabled={remove.isPending}
-                      onClick={() => remove.mutate(member.user.id)}
+                      // Taking somebody's access away, on one click of a bin
+                      // the same size as the one beside a variable.
+                      onClick={() =>
+                        void confirmMember({
+                          title: t("settings.removeMember"),
+                          description: t("settings.removeMemberConfirm", {
+                            name: member.user.name || member.user.email,
+                          }),
+                          confirmLabel: t("common.remove"),
+                          destructive: true,
+                        }).then((yes) => {
+                          if (yes) remove.mutate(member.user.id)
+                        })
+                      }
                     >
                       <Trash2Icon className="size-4 text-muted-foreground" />
                     </Button>
@@ -784,7 +798,18 @@ function MembersPanel() {
                         size="icon"
                         aria-label={t("settings.revokeInvitation")}
                         disabled={revoke.isPending}
-                        onClick={() => revoke.mutate(invitation.id)}
+                        onClick={() =>
+                          void confirmMember({
+                            title: t("settings.revokeInvitation"),
+                            description: t("settings.revokeInvitationConfirm", {
+                              email: invitation.email,
+                            }),
+                            confirmLabel: t("common.remove"),
+                            destructive: true,
+                          }).then((yes) => {
+                            if (yes) revoke.mutate(invitation.id)
+                          })
+                        }
                       >
                         <Trash2Icon className="size-4 text-muted-foreground" />
                       </Button>

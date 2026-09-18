@@ -68,7 +68,7 @@ test-go: ## Run the Go tests
 test-race: ## Run the Go tests with the race detector
 	go test -race ./...
 
-lint: lint-go lint-web i18n ## Run every linter
+lint: lint-go lint-web i18n destructive ## Run every linter
 
 lint-go: ## Vet the Go code, and run golangci-lint when it can read this module
 	go vet ./...
@@ -84,6 +84,9 @@ lint-web: ## Lint and type-check the frontend
 
 i18n: ## Fail if any translation is missing in any language
 	npm --prefix web run check:i18n
+
+destructive: ## Fail if anything destructive happens without asking first
+	npm --prefix web run check:destructive
 
 fmt: ## Format Go and frontend code
 	gofmt -w ./cmd ./internal

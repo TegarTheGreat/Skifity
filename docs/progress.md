@@ -1649,6 +1649,58 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 62 — six bins that asked nothing, and two checks that checked nothing
+
+### The inconsistency was the bug
+
+The panel asks before it deletes an app, a project, a database, a server, a
+disk, a domain and a variable. Six other things went straight from a bin icon —
+the same size, the same colour, in the same kind of table row:
+
+| | What it costs |
+|---|---|
+| Revoke an API token | Cannot be got back. Whatever used it — a script, a pipeline, an assistant — fails until it is given a new one |
+| Remove a team member | Their access to the team and everything in it |
+| Unlink a database from an app | The app loses the variable and cannot reach the database from its next deployment |
+| Delete a notification channel | The webhook address and token, typed in by hand |
+| Revoke a session | That device is signed out |
+| Cancel an invitation | The link already sent to somebody stops working |
+
+Somebody who has learned that this panel asks is exactly the person who clicks
+without reading. Each of them asks now, and says what it costs — the token one
+spells out the consequence, because that is the one that cannot be undone.
+
+The current session was already safe: its row has no bin at all, so signing
+yourself out by mis-click was never possible.
+
+### The gate
+
+`web/scripts/check-destructive.mjs` finds every mutation whose request is a
+`DELETE` and every place it is fired from, and fails unless something asked
+first. An exception has to be named in the script with a reason; there is one,
+and the reason is that it already asks through a dialog of its own. `make check`
+runs it. Proven by reverting one of the six.
+
+### Two checks that were not checking
+
+Both were mine, and both were found by using them properly rather than by
+reading them:
+
+* **`npx tsc --noEmit` in `web/` passes on any input.** `tsconfig.json` has
+  `"files": []` and only project references, so plain `tsc` compiles an empty
+  program. `tsc -b` is the real one, and is what `npm run typecheck` and
+  `make check` have always run. I had been using the hand-run form all session;
+  the first time I ran `tsc -b` it found four genuine errors in Phase 61's own
+  work.
+* **Grepping `make check`'s output hides failures.** A `nilerr` finding in
+  Phase 59's own test — `internal/errdoc/i18n_test.go` returning nil after a
+  parse error — sat there through several "green" runs because the filter I was
+  using to read the output did not match the line golangci-lint printed. The
+  answer is the exit code, not a grep. The finding is fixed and the intent is
+  now explicit: a file the walk cannot parse is deliberately skipped.
+
+1556 keys, five languages. `make check` exits 0, 15 interface tests pass.
+
 ## Phase 61 — the detail nobody saw, and seven events nobody heard
 
 The bug Phase 60 recorded rather than fixed, and what an audit of the realtime

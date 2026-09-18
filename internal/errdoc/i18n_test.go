@@ -139,9 +139,12 @@ func problemsInSource(t *testing.T) map[string]problemInSource {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return nil
+		// A file this cannot parse is not one of ours to fail on: the walk
+		// covers the whole repository, including generated and vendored trees.
+		// Skipping it is the point, so the error is dropped on purpose.
+		file, parseErr := parser.ParseFile(fset, path, nil, 0)
+		if parseErr != nil {
+			return nil //nolint:nilerr // skipping an unparsable file is deliberate
 		}
 		inPackage := strings.Contains(filepath.ToSlash(path), "internal/errdoc/")
 

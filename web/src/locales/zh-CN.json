@@ -153,7 +153,10 @@
       "expired": "此次登录用时过长。请重新开始。",
       "disabled": "该账户已在此面板上停用。"
     },
-    "teamNameExample": "示例公司"
+    "teamNameExample": "示例公司",
+    "revokeSessionConfirm": "{{device}} 会被登出，需要重新登录。",
+    "revokeTokenConfirm": "令牌 {{name}} 会立即失效。",
+    "revokeTokenConsequence": "令牌拿不回来。任何在用它的东西——脚本、部署流水线、助手——在换上新令牌之前都会一直失败。"
   },
   "dashboard": {
     "title": "总览",
@@ -752,7 +755,8 @@
     "backupStarted": "备份已开始，完成后会出现在列表中。",
     "host": "主机",
     "port": "端口",
-    "user": "用户"
+    "user": "用户",
+    "unlinkConfirm": "{{app}} 会失去 {{variable}} 变量，因此从下一次部署起就连不上这个数据库了。"
   },
   "templates": {
     "title": "模板",
@@ -1023,7 +1027,9 @@
         "label": "S3 私密密钥",
         "help": "加密存储，之后不再显示。"
       }
-    }
+    },
+    "removeMemberConfirm": "{{name}} 将失去对这个团队及其中一切的访问权限。",
+    "revokeInvitationConfirm": "发给 {{email}} 的链接会失效。"
   },
   "errors": {
     "whatHappened": "发生了什么",
@@ -1891,7 +1897,8 @@
       "server.lost": "服务器停止响应",
       "backup.failed": "备份失败",
       "certificate.failed": "证书签发失败"
-    }
+    },
+    "removeConfirm": "{{name}} 将不再收到通知，它的地址和令牌也会被清除。"
   },
   "invite": {
     "title": "加入 {{team}}",

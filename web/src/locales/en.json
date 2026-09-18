@@ -161,7 +161,10 @@
       "expired": "That sign-in took too long. Start again.",
       "disabled": "That account has been disabled on this panel."
     },
-    "teamNameExample": "Acme"
+    "teamNameExample": "Acme",
+    "revokeSessionConfirm": "{{device}} is signed out and has to sign in again.",
+    "revokeTokenConfirm": "The token {{name}} stops working immediately.",
+    "revokeTokenConsequence": "A token cannot be got back. Anything using it — a script, a deploy pipeline, an assistant — fails until it is given a new one."
   },
   "dashboard": {
     "title": "Overview",
@@ -761,7 +764,8 @@
     "backupStarted": "The backup has started. It will appear in the list when it finishes.",
     "host": "Host",
     "port": "Port",
-    "user": "User"
+    "user": "User",
+    "unlinkConfirm": "{{app}} loses the {{variable}} variable, so it cannot reach this database from its next deployment onwards."
   },
   "templates": {
     "title": "Templates",
@@ -1035,7 +1039,9 @@
         "label": "S3 secret key",
         "help": "Stored encrypted and never shown again."
       }
-    }
+    },
+    "removeMemberConfirm": "{{name}} loses access to this team and everything in it.",
+    "revokeInvitationConfirm": "The link sent to {{email}} stops working."
   },
   "errors": {
     "whatHappened": "What happened",
@@ -1903,7 +1909,8 @@
       "server.lost": "A server stopped responding",
       "backup.failed": "A backup failed",
       "certificate.failed": "A certificate could not be issued"
-    }
+    },
+    "removeConfirm": "{{name}} stops receiving notifications, and its address and token are forgotten."
   },
   "invite": {
     "title": "Join {{team}}",

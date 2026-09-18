@@ -5,6 +5,7 @@ import { BellIcon, PlusIcon, SendIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/empty-state"
+import { useConfirm } from "@/components/confirm-dialog"
 import { ErrorDisplay } from "@/components/error-display"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -59,6 +60,7 @@ type Kind = keyof typeof KINDS
 
 export function NotificationChannels() {
   const { t } = useTranslation()
+  const confirmRemove = useConfirm()
   const { team } = useSession()
   const [adding, setAdding] = useState(false)
 
@@ -138,7 +140,16 @@ export function NotificationChannels() {
                   size="icon"
                   aria-label={t("common.remove")}
                   disabled={remove.isPending}
-                  onClick={() => remove.mutate(channel.id)}
+                  onClick={() =>
+                    void confirmRemove({
+                      title: t("common.remove"),
+                      description: t("notifications.removeConfirm", { name: channel.name }),
+                      confirmLabel: t("common.remove"),
+                      destructive: true,
+                    }).then((yes) => {
+                      if (yes) remove.mutate(channel.id)
+                    })
+                  }
                 >
                   <Trash2Icon className="size-4 text-muted-foreground" />
                 </Button>

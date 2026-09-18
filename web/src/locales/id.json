@@ -153,7 +153,10 @@
       "expired": "Proses masuk itu terlalu lama. Mulai lagi.",
       "disabled": "Akun itu telah dinonaktifkan di panel ini."
     },
-    "teamNameExample": "Nusantara"
+    "teamNameExample": "Nusantara",
+    "revokeSessionConfirm": "{{device}} akan keluar dan harus masuk lagi.",
+    "revokeTokenConfirm": "Token {{name}} langsung berhenti berfungsi.",
+    "revokeTokenConsequence": "Token tidak bisa dikembalikan. Apa pun yang memakainya — skrip, pipeline deploy, asisten — akan gagal sampai diberi token baru."
   },
   "dashboard": {
     "title": "Ringkasan",
@@ -752,7 +755,8 @@
     "backupStarted": "Pencadangan dimulai. Akan muncul di daftar setelah selesai.",
     "host": "Host",
     "port": "Port",
-    "user": "Pengguna"
+    "user": "Pengguna",
+    "unlinkConfirm": "{{app}} kehilangan variabel {{variable}}, jadi mulai deployment berikutnya dia tidak bisa menjangkau database ini."
   },
   "templates": {
     "title": "Template",
@@ -1023,7 +1027,9 @@
         "label": "Secret key S3",
         "help": "Disimpan terenkripsi dan tidak pernah ditampilkan lagi."
       }
-    }
+    },
+    "removeMemberConfirm": "{{name}} kehilangan akses ke tim ini beserta seluruh isinya.",
+    "revokeInvitationConfirm": "Tautan yang dikirim ke {{email}} berhenti berfungsi."
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",
@@ -1891,7 +1897,8 @@
       "server.lost": "Server berhenti merespons",
       "backup.failed": "Pencadangan gagal",
       "certificate.failed": "Sertifikat gagal diterbitkan"
-    }
+    },
+    "removeConfirm": "{{name}} berhenti menerima notifikasi, dan alamat serta tokennya dilupakan."
   },
   "invite": {
     "title": "Gabung ke {{team}}",

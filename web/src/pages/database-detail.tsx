@@ -279,6 +279,7 @@ function CredentialRow({ label, value, secret }: { label: string; value: string;
 
 function LinkedApps({ database, links }: { database: Database; links: DatabaseLink[] }) {
   const { t } = useTranslation()
+  const confirmUnlink = useConfirm()
   const [appId, setAppId] = useState("")
   const [varName, setVarName] = useState("")
 
@@ -346,7 +347,21 @@ function LinkedApps({ database, links }: { database: Database; links: DatabaseLi
                         size="icon"
                         aria-label={t("databases.unlink")}
                         disabled={unlink.isPending}
-                        onClick={() => unlink.mutate(entry.app_id)}
+                        // The variable goes with it, so the app stops being
+                        // able to reach this database on its next deployment.
+                        onClick={() =>
+                          void confirmUnlink({
+                            title: t("databases.unlink"),
+                            description: t("databases.unlinkConfirm", {
+                              app: byId.get(entry.app_id)?.name ?? entry.app_id,
+                              variable: entry.var_name,
+                            }),
+                            confirmLabel: t("databases.unlink"),
+                            destructive: true,
+                          }).then((yes) => {
+                            if (yes) unlink.mutate(entry.app_id)
+                          })
+                        }
                       >
                         <UnlinkIcon className="size-4 text-muted-foreground" />
                       </Button>

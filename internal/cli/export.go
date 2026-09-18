@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"strings"
+
 	"skifity/internal/errdoc"
 	"skifity/internal/version"
 )
@@ -106,11 +108,23 @@ func cmdExport(ctx context.Context, args []string, out io.Writer) error {
 				if app.Manifests == "" {
 					continue
 				}
-				folder := filepath.Join(*dir, "manifests", env.Namespace)
+				// The namespace and the slug come from the panel, which means
+				// they are somebody else's strings: a panel that answered with
+				// a namespace of "../../.ssh" would have this write outside the
+				// directory the user named. It is the panel they signed in to,
+				// so this is unlikely — and the check is a line, while what it
+				// prevents is a file written over somewhere nobody looked.
+				folder, err := underneath(*dir, "manifests", env.Namespace)
+				if err != nil {
+					return err
+				}
 				if err := os.MkdirAll(folder, 0o700); err != nil {
 					return exportWriteFailed(folder, err)
 				}
-				path := filepath.Join(folder, app.Slug+".yaml")
+				path, err := underneath(folder, app.Slug+".yaml")
+				if err != nil {
+					return err
+				}
 				if err := os.WriteFile(path, []byte(app.Manifests), 0o600); err != nil {
 					return exportWriteFailed(path, err)
 				}
@@ -185,4 +199,21 @@ A managed database's data is not in here — it is in its backups. Take one from
 the database's Backups tab, or with the CLI, and restore it wherever you are
 going. The connection details for each database are in the JSON.
 `, team, version.Name, version.Binary, version.Name, version.Name)
+}
+
+// underneath joins path elements and refuses anything that climbs out.
+//
+// filepath.Join cleans as it goes, so "a/../../b" becomes a path beside the
+// directory rather than inside it, and the result looks perfectly ordinary.
+func underneath(base string, elements ...string) (string, error) {
+	joined := filepath.Join(append([]string{base}, elements...)...)
+	relative, err := filepath.Rel(base, joined)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errdoc.New("cli.export_path", "The panel named a file outside the export directory").
+			WithCause("%s is not inside %s.", joined, base).
+			WithImpact("Nothing was written for it.").
+			WithFix("This is the panel returning a name it should not. Report it, " +
+				"and check the panel is the one you think it is.")
+	}
+	return joined, nil
 }

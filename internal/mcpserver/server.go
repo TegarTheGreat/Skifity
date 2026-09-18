@@ -9,9 +9,11 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -29,9 +31,16 @@ type Server struct {
 
 	// The team is worked out on first use and kept, because every tool that
 	// does anything needs it and the answer does not change.
-	teamOnce sync.Once
-	team     string
-	teamErr  error
+	//
+	// A failure is not kept. This used to be a sync.Once, so a panel that was
+	// restarting when the assistant opened its editor answered the same error
+	// for the rest of the session: every tool, every time, until somebody
+	// worked out that the MCP server had to be restarted.
+	teamMu sync.Mutex
+	team   string
+
+	// tools is every tool name registered, for the check against llms.txt.
+	tools []string
 }
 
 // New builds an MCP server for a panel.
@@ -263,77 +272,98 @@ type readinessOutput struct {
 	Summary string `json:"summary"`
 }
 
+// maxRunWait bounds how long run_command waits for a command to finish.
+//
+// Ten minutes is a long migration and a short eternity for something waiting on
+// a tool call. Past it the command carries on in the cluster and the answer
+// says so.
+const maxRunWait = 10 * time.Minute
+
+// addTool registers a tool and remembers its name.
+//
+// The name matters beyond the protocol: llms.txt prints a table of these, that
+// page is what an assistant is pointed at, and a tool in the table that does
+// not exist reads as the product being broken rather than as a stale document.
+// TestEveryToolLlmsTxtPromisesExists compares the two, in both directions.
+func addTool[In, Out any](s *Server, t *mcp.Tool, h mcp.ToolHandlerFor[In, Out]) {
+	s.tools = append(s.tools, t.Name)
+	mcp.AddTool(s.mcp, t, h)
+}
+
+// ToolNames lists the tools this server offers, in the order they are added.
+func (s *Server) ToolNames() []string { return append([]string(nil), s.tools...) }
+
 // register wires up the tools.
 func (s *Server) register() {
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "list_projects",
 		Description: "List the projects in this team and the environments inside them. Use this to find an environment id before creating an app.",
 	}, s.listProjects)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "create_app",
 		Description: "Create an application from a git repository or a prebuilt image, and optionally deploy it. This is how a new app gets onto the cluster.",
 	}, s.createApp)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "list_apps",
 		Description: "List the applications in an environment, with their ids and current state. Call this first: every other tool takes an app id.",
 	}, s.listApps)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "get_app_status",
 		Description: "Describe an app's live state: whether it is running, how many instances are ready, and its URLs. Use this after a deploy to find out what happened.",
 	}, s.getAppStatus)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "deploy_app",
 		Description: "Start a deployment. This returns immediately; the build takes minutes. Poll get_app_status or call get_deployment_history to see the outcome.",
 	}, s.deployApp)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name: "run_command",
 		Description: "Run a one-off command in the app's own image, with the app's own environment variables. " +
 			"This is where a database migration runs, and where to look at data or run a management command. " +
-			"It waits for the command to finish and returns its output. " +
+			"It waits for the command to finish — up to ten minutes — and returns its output. " +
 			"For something that should run on every deployment, set the app's release command instead.",
 	}, s.runCommand)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "get_app_logs",
 		Description: "Read an app's recent log lines. This is where the cause of a crash or a failed start is. For an app that keeps restarting, pass previous=true: the container that printed the reason has already been replaced and the live log no longer has it.",
 	}, s.getAppLogs)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "list_variables",
 		Description: "List an app's environment variables. Values marked as secrets are not returned: they are write-only once set.",
 	}, s.listVariables)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "set_variable",
 		Description: "Set an environment variable. A runtime variable is rolled out without rebuilding; a build-time variable causes a rebuild on the next deploy.",
 	}, s.setVariable)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "scale_app",
 		Description: "Change how many instances an app runs, or turn on autoscaling. Returns any reason the app may not behave correctly with several instances.",
 	}, s.scaleApp)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "rollback_app",
 		Description: "Go back to a previous deployment. This restores the image and the settings that version ran with.",
 	}, s.rollbackApp)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "get_deployment_history",
 		Description: "List an app's recent deployments with their outcome, and the reason and suggested fix for any that failed.",
 	}, s.getHistory)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "get_cluster_status",
 		Description: "Describe the servers in the cluster: how many are ready, whether it survives losing one, and how much capacity is left.",
 	}, s.getCluster)
 
-	mcp.AddTool(s.mcp, &mcp.Tool{
+	addTool(s, &mcp.Tool{
 		Name:        "check_scaling_readiness",
 		Description: "Report what would break if this app ran more than one instance, such as local file storage or in-memory sessions, with a suggested fix for each.",
 	}, s.checkReadiness)
@@ -520,11 +550,29 @@ func (s *Server) runCommand(ctx context.Context, _ *mcp.CallToolRequest, in runC
 		return errorResult(err), runCommandOutput{}, nil
 	}
 
+	// follow=true, so this waits for the command rather than reporting whatever
+	// had been printed by the time the pod was seen running — which for a
+	// migration is usually nothing, and an assistant reading an empty output as
+	// a successful migration is the worst answer available.
+	//
+	// Capped, because the thing at the other end is an assistant waiting on a
+	// tool call. A command that outlives the cap keeps running in the cluster;
+	// what ends is the waiting.
+	ctx, cancel := context.WithTimeout(ctx, maxRunWait)
+	defer cancel()
+
 	var logs struct {
 		Lines []string `json:"lines"`
 	}
-	if err := s.client.Do(ctx, "GET",
-		"/api/apps/"+in.AppID+"/runs/"+started.Run+"/logs", nil, &logs); err != nil {
+	if err := s.client.DoLong(ctx, "GET",
+		"/api/apps/"+in.AppID+"/runs/"+started.Run+"/logs?follow=true", nil, &logs); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = errdoc.New("mcp.run_still_going", "The command is still running").
+				WithCause("It has been going for %s, which is as long as this waits.", maxRunWait).
+				WithImpact("The command was not stopped. It is still running in the cluster, "+
+					"and its output is kept with the run.").
+				WithFix("Wait, then read it back: the run is %s on app %s.", started.Run, in.AppID)
+		}
 		// The command was started; only reading its output failed.
 		return errorResult(err), runCommandOutput{Run: started.Run}, nil
 	}
@@ -753,10 +801,17 @@ func (s *Server) checkReadiness(ctx context.Context, _ *mcp.CallToolRequest, in 
 // without this every tool that needs a team answered "this token is not tied
 // to a team", which is every tool that does anything.
 func (s *Server) teamID(ctx context.Context) (string, error) {
-	s.teamOnce.Do(func() {
-		s.team, s.teamErr = cli.ResolveTeam(ctx, s.client, s.config)
-	})
-	return s.team, s.teamErr
+	s.teamMu.Lock()
+	defer s.teamMu.Unlock()
+	if s.team != "" {
+		return s.team, nil
+	}
+	team, err := cli.ResolveTeam(ctx, s.client, s.config)
+	if err != nil {
+		return "", err
+	}
+	s.team = team
+	return team, nil
 }
 
 func (s *Server) defaultEnvironment(ctx context.Context) (string, error) {

@@ -1025,15 +1025,23 @@ func cmdRun(ctx context.Context, args []string, out io.Writer) error {
 	if *asJSON {
 		return writeJSON(out, started)
 	}
-	fmt.Fprintf(out, "Running: %s\n\n", command)
+	fmt.Fprintf(out, "Running: %s\n", command)
+	fmt.Fprintf(out, "Waiting for it to finish. Ctrl-C stops the waiting, not the command.\n\n")
 
-	// The output comes back when the command is done. Following it live would
-	// need a second endpoint for something that usually takes seconds.
+	// follow=true, and it is what makes this command do what it says. Without
+	// it the panel returns whatever the container had printed by the time the
+	// pod was seen running, which for anything slower than a second or two is
+	// nothing at all: "Running: npm run migrate", a blank line, and an exit
+	// status of zero.
+	//
+	// DoLong because the wait is the migration's, not the network's. Ctrl-C
+	// still ends it; the command in the cluster carries on, and the output is
+	// there afterwards.
 	var logs struct {
 		Lines []string `json:"lines"`
 	}
-	if err := client.Do(ctx, "GET",
-		"/api/apps/"+app+"/runs/"+started.Run+"/logs", nil, &logs); err != nil {
+	if err := client.DoLong(ctx, "GET",
+		"/api/apps/"+app+"/runs/"+started.Run+"/logs?follow=true", nil, &logs); err != nil {
 		return err
 	}
 	for _, line := range logs.Lines {

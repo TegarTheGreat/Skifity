@@ -1649,6 +1649,76 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 52 — a command nobody waited for, an error cached forever, and a path the panel chose
+
+An audit of `internal/mcpserver`, `internal/cli` and `internal/templates`.
+
+### "It waits for the command to finish" — it did not
+
+`skifity run -- npm run migrate` starts a Job and then reads its log. The read
+did not pass `follow`, so the panel returned whatever the container had printed
+by the time the pod was first seen running — which, for anything slower than the
+two-second poll, is nothing. The CLI printed "Running: npm run migrate", a blank
+line, and exited zero. Both it and the MCP tool said otherwise: the tool's
+description reads "It waits for the command to finish and returns its output",
+and the CLI's own comment said "the output comes back when the command is done".
+
+An assistant reading an empty output as a successful migration is the worst
+answer available, so this is the one that mattered most.
+
+Both follow now. That needs a client without the ordinary one-minute deadline,
+so `DoLong` exists beside `Do`: the wait belongs to the migration, not to the
+network. The CLI has no cap and says that Ctrl-C stops the waiting rather than
+the command; the MCP tool caps at ten minutes, because what is on the other end
+is an assistant waiting on a tool call, and past the cap it says the command is
+still running and where its output will be.
+
+### An error that outlived its cause
+
+The MCP server resolved the team once, with a `sync.Once` — which caches the
+failure as happily as the success. An assistant that opened its editor while the
+panel was restarting got the same error from every tool for the rest of the
+session, and the only cure was restarting something nobody would think to
+restart. Only success is kept now.
+
+### The panel chose where the CLI wrote
+
+`skifity export` writes `manifests/<namespace>/<app>.yaml` under the directory
+the user named, and both the namespace and the slug come from the panel's own
+JSON. `filepath.Join` cleans as it goes, so a namespace of `../../.ssh` becomes
+a path beside the export rather than inside it, and the result looks perfectly
+ordinary. It is the panel the user signed in to, so this is unlikely — and the
+check is one line, while what it prevents is a file written over somewhere
+nobody looked. `underneath` refuses anything that climbs out, with a test for
+the cases that actually climb (one `..` is absorbed by the `manifests` element
+and lands back inside; two are not).
+
+### The tool table nobody checked
+
+`llms.txt` prints the MCP tools, and that page is what an assistant is pointed
+at. The API routes in the same document have been checked against the router
+since Phase 22; the tool table was checked against nothing. It is now, in both
+directions — a documented tool that does not exist, and an existing tool nobody
+documented, both fail. Adding a row for a tool that is not there fails with its
+name in the message.
+
+`ReadIcon` sliced a file name at its last dot without checking there was one, in
+the function whose comment says it checks the name anyway "because the one that
+is not checked is the one that changes later". Now it does.
+
+### What was checked and found sound
+
+The catalogue is the best-gated part of this codebase: thirteen tests, including
+that every image names a version rather than `latest`, that every database
+reaches the service it is for, that every list is an array in JSON rather than
+`null`, that every icon belongs to a template and can actually be served, and
+that what the README says ships is what ships. The CLI's config file is written
+0600 and a test reads the mode back; `SKIFITY_URL` and `SKIFITY_TOKEN` override
+it for a CI job or an assistant; every command takes `--json` and a test walks
+the package to prove it. The MCP tools go through the same API with the same
+scoped token as the CLI, so an assistant can do what the token's owner can do
+and nothing more.
+
 ## Phase 51 — the keyring under load, a code used twice, and the secrets rotation stepped over
 
 An audit of `internal/api`, `internal/auth`, `internal/store` and

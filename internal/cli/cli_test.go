@@ -301,3 +301,39 @@ func TestEveryCommandTakesJSON(t *testing.T) {
 		t.Fatalf("only %d commands were found; this test is not reading the package", checked)
 	}
 }
+
+// The namespace and the slug in an export come from the panel. A panel that
+// answered with a namespace that climbs out of the directory would have the
+// CLI write a file wherever it liked, as whoever ran the export.
+func TestAnExportNeverWritesOutsideTheDirectoryItWasGiven(t *testing.T) {
+	base := t.TempDir()
+
+	// One ".." is absorbed by the "manifests" element and lands back inside, so
+	// these are the ones that actually climb out.
+	for _, escape := range []string{
+		"../../elsewhere",
+		"../../../etc/cron.d",
+		"a/../../../elsewhere",
+	} {
+		if path, err := underneath(base, "manifests", escape); err == nil {
+			t.Errorf("underneath(%q) allowed %s, which is outside %s", escape, path, base)
+		}
+	}
+	// And the same check with no element in front of it, because the file name
+	// goes through it too.
+	if path, err := underneath(base, "../escaped.yaml"); err == nil {
+		t.Errorf("underneath allowed %s, which is outside %s", path, base)
+	}
+
+	// An absolute name is not an escape: Join puts it under the base, which is
+	// a strange file name and not a file anywhere else.
+	for _, name := range []string{"acme-production", "/etc"} {
+		path, err := underneath(base, "manifests", name)
+		if err != nil {
+			t.Fatalf("underneath(%q) was refused: %v", name, err)
+		}
+		if !strings.HasPrefix(path, base) {
+			t.Fatalf("%s is not inside %s", path, base)
+		}
+	}
+}

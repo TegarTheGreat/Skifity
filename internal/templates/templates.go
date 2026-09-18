@@ -137,8 +137,14 @@ func ReadIcon(id string) (data []byte, contentType string, ok bool) {
 	if !found || template.Icon == "" {
 		return nil, "", false
 	}
-	extension := template.Icon[strings.LastIndex(template.Icon, "."):]
-	contentType, known := IconContentTypes[extension]
+	dot := strings.LastIndex(template.Icon, ".")
+	if dot < 0 {
+		// Unreachable while the name comes from iconFor, which builds it from
+		// a known extension — and a slice on -1 is a panic in the one function
+		// that is documented as checking anyway.
+		return nil, "", false
+	}
+	contentType, known := IconContentTypes[template.Icon[dot:]]
 	if !known {
 		return nil, "", false
 	}

@@ -167,6 +167,18 @@ func (c *Client) Do(ctx context.Context, method, path string, body, out any) err
 	return nil
 }
 
+// DoLong is Do for a request whose length is the work's rather than the
+// network's.
+//
+// The ordinary client gives up after a minute, which is right for a request
+// that asks the panel a question and wrong for one that waits for a migration
+// to finish. The context is still the deadline — Ctrl-C ends it, and a caller
+// that wants a cap sets one.
+func (c *Client) DoLong(ctx context.Context, method, path string, body, out any) error {
+	long := &Client{baseURL: c.baseURL, token: c.token, http: &http.Client{Timeout: 0}}
+	return long.Do(ctx, method, path, body, out)
+}
+
 // Stream opens a server-sent event stream and calls onEvent for each message.
 func (c *Client) Stream(ctx context.Context, path string, onEvent func(event, data string) bool) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)

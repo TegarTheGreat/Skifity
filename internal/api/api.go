@@ -289,6 +289,7 @@ func (s *Server) routes() chi.Router {
 			// Plugins are owner-only: a plugin receives a token and runs a
 			// container somebody else wrote.
 			authed.Get("/plugins", s.handleListPlugins)
+			authed.Get("/plugins/store", s.handleStoreCatalogue)
 			authed.Post("/plugins/inspect", s.handleInspectPlugin)
 			authed.Post("/plugins", s.handleInstallPlugin)
 			authed.Patch("/plugins/{pluginID}", s.handleUpdatePlugin)

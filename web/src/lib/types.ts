@@ -526,3 +526,73 @@ export type ComposeService = {
   /** Compose features with no equivalent here, named rather than dropped. */
   unsupported?: string[]
 }
+
+/** A plugin's manifest, mirroring internal/plugins. */
+export type PluginManifest = {
+  apiVersion: string
+  id: string
+  name: string
+  description: string
+  version: string
+  homepage?: string
+  license: string
+  author: { name: string; url?: string; email?: string }
+  image: string
+  permissions?: string[]
+  events?: { event: string; blocking?: boolean; timeoutSeconds?: number }[]
+  settings?: {
+    key: string
+    label: string
+    help?: string
+    kind?: string
+    options?: string[]
+    secret?: boolean
+    required?: boolean
+  }[]
+  runtime?: { port?: number; health?: string; memoryMB?: number }
+}
+
+export type InstalledPlugin = {
+  id: string
+  version: string
+  source_url?: string
+  status: "installing" | "running" | "failed" | "disabled"
+  status_detail?: string
+  enabled: boolean
+  installed_at: string
+  decoded: PluginManifest
+  settings: { key: string; value?: string; configured: boolean; secret: boolean }[]
+}
+
+/** What installing a manifest would mean, before anything is installed. */
+export type PluginInspection = {
+  manifest: PluginManifest
+  permissions: string[]
+  blocks_deploys: boolean
+  already_installed?: string
+}
+
+export type StoreEntry = {
+  id: string
+  name: string
+  description: string
+  version: string
+  license: string
+  author: string
+  homepage?: string
+  category?: string
+  manifest_url: string
+  manifest_sha256: string
+  paid?: boolean
+  purchase_url?: string
+}
+
+export type StoreCatalogue = {
+  index: { version: number; generated_at?: string; plugins: StoreEntry[] }
+  /** True when a key is configured and the index's signature checked out. */
+  verified: boolean
+  /** True when no key is configured at all, which is not the same thing. */
+  unsigned: boolean
+  url: string
+  installed: Record<string, string>
+}

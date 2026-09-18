@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"skifity/internal/pluginstore"
 )
 
 // Definition describes one setting.
@@ -110,6 +112,7 @@ const (
 	GroupRegistry      = "registry"
 	GroupCluster       = "cluster"
 	GroupSignIn        = "signin"
+	GroupPlugins       = "plugins"
 )
 
 // Keys used elsewhere in the panel. Referring to a constant rather than a string
@@ -128,6 +131,8 @@ const (
 	KeyGeoCountryURL         = "domains.geo_country_url"
 	KeyGeoASNURL             = "domains.geo_asn_url"
 	KeyGeoEnabled            = "domains.geo_enabled"
+	KeyPluginStoreURL        = "plugins.store_url"
+	KeyPluginStoreKey        = "plugins.store_public_key"
 	KeyS3Endpoint            = "storage.s3_endpoint"
 	KeyS3Region              = "storage.s3_region"
 	KeyS3Bucket              = "storage.s3_bucket"
@@ -326,6 +331,24 @@ var Definitions = []Definition{
 		Help:        "The same, for the network a visitor's address belongs to, which is what an AS number rule tests.",
 		Placeholder: "https://example.com/GeoLite2-ASN.mmdb",
 		Validate:    validateGeoURL,
+	},
+	{
+		Key: KeyPluginStoreURL, Label: "Plugin store", Group: GroupPlugins,
+		Help: "Where the panel looks for plugins. Leave empty for the Skifity store. " +
+			"Point it at your own index to run a store of your own, or clear the public key below to browse " +
+			"one that is not signed — a plugin can always be installed from a manifest address or by pasting one, " +
+			"which is what a cluster with no way out to the internet uses.",
+		Placeholder: "https://plugins.skifity.com/index.json",
+		Kind:        KindURL,
+		Validate:    validateURL,
+	},
+	{
+		Key: KeyPluginStoreKey, Label: "Plugin store signing key", Group: GroupPlugins,
+		Help: "The store's Ed25519 public key, base64. With one set, an index that is not signed by it is refused. " +
+			"With none, the catalogue is still readable and every entry is shown as vouched for by nobody. " +
+			"Generate a pair with: skifity admin plugin-key",
+		Placeholder: "kMvJ...",
+		Validate:    validatePluginStoreKey,
 	},
 	// A GitHub App needs five more settings than these, and had them: an App
 	// ID, a slug, a client id, a client secret and a private key. Nothing ever
@@ -570,6 +593,22 @@ func validateGeoURL(value string) error {
 	}
 	if !strings.HasSuffix(value, ".mmdb") && !strings.HasSuffix(value, ".mmdb.gz") {
 		return errors.New("that is not a database file; it should end in .mmdb or .mmdb.gz")
+	}
+	return nil
+}
+
+// validatePluginStoreKey refuses a key that could never verify anything.
+//
+// The alternative is finding out at the moment somebody opens the store, which
+// is both the wrong place and the wrong time: the message there would be "the
+// index is not signed by the key this panel trusts", which reads as an attack
+// rather than as a typo.
+func validatePluginStoreKey(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	if _, err := pluginstore.ParsePublicKey(value); err != nil {
+		return err
 	}
 	return nil
 }

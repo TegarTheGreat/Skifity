@@ -212,17 +212,94 @@ anything, read the state back through the API. That is what your token is for.
 ## Publishing
 
 Publish the manifest anywhere it can be fetched over HTTPS. An operator installs
-it by URL, or finds it in the Skifity store.
+it by URL, or finds it in a store.
 
 An operator who does not want a store at all can point the panel at their own
-index, or install from a manifest file on disk. That path is not an afterthought:
-a cluster with no way out to the internet has to be able to run plugins too.
+index, or paste a manifest. That path is not an afterthought: a cluster with no
+way out to the internet has to be able to run plugins too.
+
+### Running a store
+
+A store is two static files at one address. Nothing else — no database, no API,
+no account system.
+
+`index.json` lists what is available:
+
+```json
+{
+  "version": 1,
+  "generated_at": "2026-09-18T09:00:00Z",
+  "plugins": [
+    {
+      "id": "acme-deploy-guard",
+      "name": "Deploy Guard",
+      "description": "Stops a deploy during a change freeze.",
+      "version": "1.2.0",
+      "license": "commercial",
+      "author": "Acme",
+      "homepage": "https://acme.example/deploy-guard",
+      "category": "policy",
+      "manifest_url": "https://acme.example/deploy-guard/plugin.json",
+      "manifest_sha256": "3b1f…",
+      "paid": true,
+      "purchase_url": "https://acme.example/deploy-guard/buy"
+    }
+  ]
+}
+```
+
+An entry is a summary and not a manifest. What a plugin may do stays in its
+manifest, which the panel fetches and shows before anything is installed — an
+index that carried permissions would be a second place for them to be written
+and a second place for them to disagree.
+
+`index.json.sig` is a detached Ed25519 signature over the index's exact bytes:
+
+```
+skifity admin plugin-key
+skifity admin plugin-sign <private key> index.json > index.json.sig
+```
+
+`plugin-key` prints a pair and writes neither: the private key is yours to put
+somewhere you already trust, and a command that saved it for you would be a
+command that left a signing key in `/root`. The public key goes into Settings,
+then Plugins, on every panel that should trust the store.
+
+The signature covers the file's exact bytes. Reformatting the JSON after signing
+invalidates it, which is the point.
+
+### What the signature means, and what it does not
+
+The store operator vouches for the list; each entry's `manifest_sha256` pins the
+manifest, so a manifest cannot be swapped after the list was signed. That needs
+no key registry — a publisher does not need a key of their own, because the
+store is what vouches for them. It is the same shape as an apt release file.
+
+It is **not** proof a plugin is safe. It says this entry is the one the store
+published. What a plugin may do is its permission list, which an administrator
+reads before installing, and that is the part that actually protects anybody.
+
+A panel with no public key configured still reads an index, and the page says
+plainly that nobody vouched for it. Refusing outright would mean a store is
+unusable until somebody pastes a key; accepting quietly would make the signature
+decoration.
+
+### Pointing a panel somewhere else
+
+Settings, then Plugins, has two values: the index address and the public key.
+The default address is the Skifity store. An internal index on a machine only
+your network can reach works exactly the same way, and so does an index with no
+signature at all — the panel just says so.
 
 > **Never run against a real cluster.** The manifest standard, the permission
-> model, the rendered Kubernetes objects, the event delivery and the blocking
-> verdicts are all unit-tested. Whether a real plugin image starts in the
-> namespace this renders, and whether an event reaches it over a real cluster
-> network, has not been tried — the same gap as everything else in ADR-0010.
+> model, the rendered Kubernetes objects, the event delivery, the blocking
+> verdicts, and the store's signature and hash checks are all unit-tested.
+> Whether a real plugin image starts in the namespace this renders, and whether
+> an event reaches it over a real cluster network, has not been tried — the same
+> gap as everything else in ADR-0010.
 >
-> There is also no store yet: a plugin is installed by pasting a manifest or
-> giving its address. See the Status section of the README.
+> **There is no store at `plugins.skifity.com` yet.** The panel can read one,
+> verify one and install from one; nothing is published at that address. Until
+> something is, a plugin is installed by pasting a manifest or giving its
+> address, and the Store tab will say it could not reach anything. See the
+> Status section of the README.

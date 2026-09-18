@@ -89,7 +89,8 @@
     "themeDark": "Dark",
     "themeSystem": "Match system",
     "language": "Language",
-    "documentation": "Documentation"
+    "documentation": "Documentation",
+    "plugins": "Plugins"
   },
   "auth": {
     "signIn": "Sign in",
@@ -608,7 +609,8 @@
     "export": "Take your data with you",
     "exportHelp": "Everything this team has — projects, apps, domains, databases, variables and schedules — as one JSON file, with each app's Kubernetes objects beside it.",
     "exportSecrets": "The value of anything marked secret is not included. Those values are already in your own cluster, as ordinary Kubernetes Secrets you have access to.",
-    "exportDownload": "Download the JSON"
+    "exportDownload": "Download the JSON",
+    "plugins": "Plugins"
   },
   "errors": {
     "whatHappened": "What happened",
@@ -756,6 +758,65 @@
       "http.method": "POST",
       "http.user_agent": "badbot",
       "http.header": "a value"
+    }
+  },
+  "plugins": {
+    "title": "Plugins",
+    "subtitle": "Features other people wrote, running beside the panel in a container of their own.",
+    "installed": "Installed",
+    "store": "Store",
+    "fromAddress": "From an address",
+    "empty": "No plugins yet",
+    "emptyHelp": "Browse the store, or install one from an address or a manifest you paste.",
+    "install": "Install",
+    "review": "See what it can do",
+    "enabled": "Plugin is on",
+    "installedWhen": "installed {{when}}",
+    "notRunning": "This plugin is not running",
+    "removeTitle": "Remove {{name}}?",
+    "removeConfirm": "Its container, its settings and its access token all go. Anything it wrote elsewhere stays where it is.",
+    "secretStored": "Stored. Enter a new value to replace it.",
+    "storeVerified": "Signed by the key this panel trusts · {{url}}",
+    "storeUnsigned": "Nobody has vouched for this catalogue",
+    "storeUnsignedHelp": "No signing key is set, so the panel cannot tell whether this list is the one the store published. Set one under Settings, then Plugins. Either way, what a plugin may do is shown before you install it.",
+    "storeEmpty": "The store has nothing in it",
+    "storeEmptyHelp": "The catalogue was read and lists no plugins.",
+    "paid": "Paid",
+    "buy": "Buy",
+    "alreadyInstalled": "Installed",
+    "upgradeAvailable": "Version {{version}} available",
+    "fromAddressHelp": "A plugin can always be installed without a store — from the address of its manifest, or by pasting the manifest itself. This is the path a cluster with no way out to the internet uses, and the one a plugin author uses to try their own.",
+    "manifestAddress": "The manifest's address",
+    "orPaste": "Or paste the manifest",
+    "willBeAbleTo": "This plugin will be able to:",
+    "noPermissions": "It is not asking for access to anything.",
+    "blocksDeploys": "This plugin can stop a deployment",
+    "blocksDeploysHelp": "It asked to be consulted before every deploy and may refuse one. A plugin that is down does not block anything, and you can switch it off at any time.",
+    "confinementNote": "It runs in a namespace of its own and can reach the panel, DNS and the internet — not your apps, not your databases, and not the server it runs on.",
+    "digestNote": "Pinned by digest, so the image cannot be changed under you after you have agreed to it.",
+    "status": {
+      "installing": "Starting",
+      "running": "Running",
+      "failed": "Failed",
+      "disabled": "Off"
+    },
+    "permission": {
+      "read": "read",
+      "write": "read and change"
+    },
+    "resource": {
+      "apps": "your apps",
+      "deployments": "your deployments",
+      "databases": "your databases",
+      "backups": "your backups",
+      "projects": "your projects",
+      "servers": "your servers",
+      "templates": "the app catalogue",
+      "operations": "long-running operations",
+      "events": "the event stream",
+      "teams": "your teams",
+      "settings": "the panel's settings",
+      "account": "your account"
     }
   }
 }

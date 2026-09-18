@@ -30,6 +30,9 @@ const SettingsPage = lazy(() =>
 const TemplatesPage = lazy(() =>
   import("@/pages/templates").then((module) => ({ default: module.TemplatesPage })),
 )
+const PluginsPage = lazy(() =>
+  import("@/pages/plugins").then((module) => ({ default: module.PluginsPage })),
+)
 
 /**
  * The panel's routes.
@@ -89,6 +92,14 @@ export function App() {
             element={
               <Suspense fallback={<Skeleton className="h-64" />}>
                 <TemplatesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="plugins"
+            element={
+              <Suspense fallback={<Skeleton className="h-64" />}>
+                <PluginsPage />
               </Suspense>
             }
           />

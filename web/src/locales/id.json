@@ -82,7 +82,8 @@
     "themeDark": "Gelap",
     "themeSystem": "Ikuti sistem",
     "language": "Bahasa",
-    "documentation": "Dokumentasi"
+    "documentation": "Dokumentasi",
+    "plugins": "Plugin"
   },
   "auth": {
     "signIn": "Masuk",
@@ -597,7 +598,8 @@
     "export": "Bawa data Anda",
     "exportHelp": "Semua milik tim ini — proyek, aplikasi, domain, basis data, variabel dan jadwal — dalam satu berkas JSON, lengkap dengan objek Kubernetes setiap aplikasi.",
     "exportSecrets": "Nilai dari apa pun yang ditandai rahasia tidak disertakan. Nilai itu sudah ada di cluster Anda sendiri, sebagai Secret Kubernetes biasa yang bisa Anda akses.",
-    "exportDownload": "Unduh JSON"
+    "exportDownload": "Unduh JSON",
+    "plugins": "Plugin"
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",
@@ -745,6 +747,65 @@
       "http.method": "POST",
       "http.user_agent": "badbot",
       "http.header": "sebuah nilai"
+    }
+  },
+  "plugins": {
+    "title": "Plugin",
+    "subtitle": "Fitur buatan orang lain, berjalan di samping panel dalam containernya sendiri.",
+    "installed": "Terpasang",
+    "store": "Store",
+    "fromAddress": "Dari alamat",
+    "empty": "Belum ada plugin",
+    "emptyHelp": "Telusuri store, atau pasang dari alamat atau manifes yang Anda tempel.",
+    "install": "Pasang",
+    "review": "Lihat apa yang bisa dilakukannya",
+    "enabled": "Plugin menyala",
+    "installedWhen": "dipasang {{when}}",
+    "notRunning": "Plugin ini tidak berjalan",
+    "removeTitle": "Copot {{name}}?",
+    "removeConfirm": "Containernya, setelannya, dan token aksesnya semua hilang. Apa pun yang sudah ditulisnya di tempat lain tetap di sana.",
+    "secretStored": "Tersimpan. Isi nilai baru untuk menggantinya.",
+    "storeVerified": "Ditandatangani kunci yang dipercaya panel ini · {{url}}",
+    "storeUnsigned": "Tidak ada yang menjamin katalog ini",
+    "storeUnsignedHelp": "Kunci penandatangan belum diisi, jadi panel tidak bisa tahu apakah daftar ini yang diterbitkan store. Isi di Setelan, lalu Plugin. Bagaimanapun, apa yang boleh dilakukan sebuah plugin ditampilkan sebelum Anda memasangnya.",
+    "storeEmpty": "Store-nya kosong",
+    "storeEmptyHelp": "Katalognya terbaca dan tidak memuat plugin.",
+    "paid": "Berbayar",
+    "buy": "Beli",
+    "alreadyInstalled": "Terpasang",
+    "upgradeAvailable": "Versi {{version}} tersedia",
+    "fromAddressHelp": "Plugin selalu bisa dipasang tanpa store — dari alamat manifesnya, atau dengan menempel manifesnya langsung. Ini jalur yang dipakai cluster tanpa akses internet, dan yang dipakai penulis plugin untuk mencoba buatannya sendiri.",
+    "manifestAddress": "Alamat manifes",
+    "orPaste": "Atau tempel manifesnya",
+    "willBeAbleTo": "Plugin ini akan bisa:",
+    "noPermissions": "Tidak meminta akses apa pun.",
+    "blocksDeploys": "Plugin ini bisa menghentikan deployment",
+    "blocksDeploysHelp": "Ia meminta ditanya sebelum setiap deploy dan boleh menolaknya. Plugin yang sedang mati tidak menghalangi apa pun, dan Anda bisa mematikannya kapan saja.",
+    "confinementNote": "Ia berjalan di namespace sendiri dan bisa menjangkau panel, DNS, dan internet — bukan app Anda, bukan database Anda, dan bukan server tempatnya berjalan.",
+    "digestNote": "Dikunci digest, jadi image-nya tidak bisa diganti setelah Anda menyetujuinya.",
+    "status": {
+      "installing": "Menyala",
+      "running": "Berjalan",
+      "failed": "Gagal",
+      "disabled": "Mati"
+    },
+    "permission": {
+      "read": "membaca",
+      "write": "membaca dan mengubah"
+    },
+    "resource": {
+      "apps": "app Anda",
+      "deployments": "deployment Anda",
+      "databases": "database Anda",
+      "backups": "backup Anda",
+      "projects": "project Anda",
+      "servers": "server Anda",
+      "templates": "katalog aplikasi",
+      "operations": "operasi berjalan lama",
+      "events": "aliran event",
+      "teams": "tim Anda",
+      "settings": "setelan panel",
+      "account": "akun Anda"
     }
   }
 }

@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +15,7 @@ import (
 	"skifity/internal/auth"
 	"skifity/internal/config"
 	"skifity/internal/errdoc"
+	"skifity/internal/pluginstore"
 	"skifity/internal/store"
 	"skifity/internal/version"
 )
@@ -30,10 +34,12 @@ Usage:
   %s admin reset-password <email>   set a new password for an account
   %s admin list-users               show the accounts on this panel
   %s admin backup-db <path>         write a consistent copy of the database
+  %s admin plugin-key               make a signing key for a plugin store
+  %s admin plugin-sign <key> <file> sign a plugin store index
 
 These run on the server the panel is installed on and read its database
 directly, so they work when nobody can sign in. They need to be run as root.
-`, version.Binary, version.Binary, version.Binary, version.Binary)
+`, version.Binary, version.Binary, version.Binary, version.Binary, version.Binary, version.Binary)
 		return nil
 	}
 
@@ -44,6 +50,10 @@ directly, so they work when nobody can sign in. They need to be run as root.
 		return adminListUsers(ctx, args[1:], out)
 	case "backup-db":
 		return adminBackupDatabase(ctx, args[1:], out)
+	case "plugin-key":
+		return adminPluginKey(args[1:], out)
+	case "plugin-sign":
+		return adminPluginSign(args[1:], out)
 	default:
 		return errdoc.BadRequest(fmt.Sprintf("%q is not an admin command. Try `%s admin help`.",
 			args[0], version.Binary))
@@ -260,4 +270,103 @@ func masterKeyPathFor(databaseOverride string) string {
 		return version.ConfigDir + "/master.key"
 	}
 	return cfg.MasterKeyPath
+}
+
+// Running a plugin store.
+//
+// Two commands, and they are here rather than in a separate tool because the
+// thing that signs and the thing that verifies have to agree byte for byte.
+// Two implementations of that is one implementation and one bug waiting.
+
+// adminPluginKey makes the keypair a store is signed with.
+func adminPluginKey(args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("plugin-key", flag.ContinueOnError)
+	flags.SetOutput(out)
+	asJSON := flags.Bool("json", false, "print the result as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() > 0 {
+		return errdoc.BadRequest("plugin-key takes no arguments.")
+	}
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("generate a signing key: %w", err)
+	}
+
+	if *asJSON {
+		// The private key is in the JSON because a script that generates a pair
+		// has nothing to do with a pair it cannot read. It is still never
+		// written to disk by this command.
+		return writeJSON(out, map[string]any{
+			"public_key":  pluginstore.EncodePublicKey(public),
+			"private_key": base64.StdEncoding.EncodeToString(private),
+			"stored":      false,
+		})
+	}
+
+	// The private key is printed and never written: a key this command wrote to
+	// a file would be a key somebody left in /root, and the one thing an
+	// operator has to do with it is put it somewhere they already trust.
+	fmt.Fprintf(out, `
+A signing key for a plugin store.
+
+Public key — paste this into Settings, then Plugins, on every panel that should
+trust this store:
+
+  %s
+
+Private key — keep this secret. It signs your index and nothing else needs it:
+
+  %s
+
+Sign an index with:
+
+  %s admin plugin-sign <private key> index.json > index.json.sig
+
+It is not stored anywhere by this command. If you lose it, make a new pair and
+change the public key on every panel; nothing else breaks.
+
+`, pluginstore.EncodePublicKey(public),
+		base64.StdEncoding.EncodeToString(private),
+		version.Binary)
+	return nil
+}
+
+// adminPluginSign signs an index so a panel will trust it.
+func adminPluginSign(args []string, out io.Writer) error {
+	flags := flag.NewFlagSet("plugin-sign", flag.ContinueOnError)
+	flags.SetOutput(out)
+	asJSON := flags.Bool("json", false, "print the result as JSON")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 2 {
+		return errdoc.BadRequest(fmt.Sprintf(
+			"Usage: %s admin plugin-sign <private key> <index.json>", version.Binary))
+	}
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(flags.Arg(0)))
+	if err != nil || len(raw) != ed25519.PrivateKeySize {
+		return errdoc.BadRequest(fmt.Sprintf(
+			"That is not a private key from `%s admin plugin-key`.", version.Binary))
+	}
+	path := flags.Arg(1)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	// The signature covers the file's exact bytes, so it has to be published
+	// exactly as it was signed — reformatting the JSON afterwards invalidates
+	// it, which is the point.
+	signature := pluginstore.Sign(ed25519.PrivateKey(raw), body)
+
+	if *asJSON {
+		return writeJSON(out, map[string]any{
+			"file": path, "signature": signature,
+		})
+	}
+	// Plain output is the signature and nothing else, because the usual thing
+	// to do with it is redirect it into index.json.sig.
+	fmt.Fprintln(out, signature)
+	return nil
 }

@@ -82,7 +82,8 @@
     "themeDark": "深色",
     "themeSystem": "跟随系统",
     "language": "语言",
-    "documentation": "文档"
+    "documentation": "文档",
+    "plugins": "插件"
   },
   "auth": {
     "signIn": "登录",
@@ -597,7 +598,8 @@
     "export": "带走你的数据",
     "exportHelp": "这个团队的一切——项目、应用、域名、数据库、变量和计划任务——导出为一个 JSON 文件，并附上每个应用的 Kubernetes 对象。",
     "exportSecrets": "标记为机密的值不会包含在内。那些值已经在你自己的集群里，是你有权访问的普通 Kubernetes Secret。",
-    "exportDownload": "下载 JSON"
+    "exportDownload": "下载 JSON",
+    "plugins": "插件"
   },
   "errors": {
     "whatHappened": "发生了什么",
@@ -745,6 +747,65 @@
       "http.method": "POST",
       "http.user_agent": "badbot",
       "http.header": "一个值"
+    }
+  },
+  "plugins": {
+    "title": "插件",
+    "subtitle": "别人写的功能，在各自的容器里于面板旁运行。",
+    "installed": "已安装",
+    "store": "商店",
+    "fromAddress": "从地址安装",
+    "empty": "还没有插件",
+    "emptyHelp": "浏览商店，或从地址或粘贴的清单安装一个。",
+    "install": "安装",
+    "review": "查看它能做什么",
+    "enabled": "插件已启用",
+    "installedWhen": "{{when}}安装",
+    "notRunning": "该插件未在运行",
+    "removeTitle": "移除 {{name}}？",
+    "removeConfirm": "它的容器、设置和访问令牌都会消失。它写在别处的东西仍留在原地。",
+    "secretStored": "已保存。输入新值以替换。",
+    "storeVerified": "由本面板信任的密钥签名 · {{url}}",
+    "storeUnsigned": "没有人为这份目录背书",
+    "storeUnsignedHelp": "未设置签名密钥，因此面板无法判断这份列表是否是商店发布的那一份。请在设置、插件中填写。无论如何，插件能做什么都会在安装前展示。",
+    "storeEmpty": "商店里没有内容",
+    "storeEmptyHelp": "目录已读取，其中没有插件。",
+    "paid": "付费",
+    "buy": "购买",
+    "alreadyInstalled": "已安装",
+    "upgradeAvailable": "有 {{version}} 版可用",
+    "fromAddressHelp": "插件始终可以不经商店安装 —— 通过其清单地址，或直接粘贴清单。没有外网的集群走的正是这条路。",
+    "manifestAddress": "清单地址",
+    "orPaste": "或粘贴清单",
+    "willBeAbleTo": "该插件将能够：",
+    "noPermissions": "它没有请求任何访问权限。",
+    "blocksDeploys": "该插件可以拦下一次部署",
+    "blocksDeploysHelp": "它要求在每次部署前被询问，并可以拒绝。已停止的插件不会拦下任何东西，你随时可以关掉它。",
+    "confinementNote": "它在自己的命名空间中运行，可以访问面板、DNS 和互联网 —— 而不是你的应用、数据库或它所在的服务器。",
+    "digestNote": "按 digest 锁定，因此你同意之后镜像无法被替换。",
+    "status": {
+      "installing": "启动中",
+      "running": "运行中",
+      "failed": "失败",
+      "disabled": "已关闭"
+    },
+    "permission": {
+      "read": "读取",
+      "write": "读取并修改"
+    },
+    "resource": {
+      "apps": "你的应用",
+      "deployments": "你的部署",
+      "databases": "你的数据库",
+      "backups": "你的备份",
+      "projects": "你的项目",
+      "servers": "你的服务器",
+      "templates": "应用目录",
+      "operations": "长时间运行的操作",
+      "events": "事件流",
+      "teams": "你的团队",
+      "settings": "面板设置",
+      "account": "你的账户"
     }
   }
 }

@@ -204,7 +204,9 @@ Honest version, two parts.
 `TegarTheGreat/Skifity`. No image has been pushed to `ghcr.io/skifity/skifity`,
 and no release has been tagged, so the CLI download in the installer has nothing
 to download. Every one-line install command in this README and in the
-documentation is what the install will be, not what it is. What works today:
+documentation is what the install will be, not what it is. `plugins.skifity.com`
+does not resolve either, so the panel's plugin store reads an index that is not
+there yet; a plugin is installed by giving its address. What works today:
 clone the repository, `make image`, and run `installer/install.sh` from inside
 the clone with `SKIFITY_IMAGE` pointed at the image you just built — the
 installer then reads its manifests from disk. [Quick

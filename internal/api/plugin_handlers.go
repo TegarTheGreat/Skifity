@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/netguard"
 	"skifity/internal/plugins"
+	"skifity/internal/pluginstore"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -510,3 +513,80 @@ func pluginSettingContext(id, key string) string { return "plugin-setting:" + id
 // validated and a link-local one when it is dialled is the oldest way around a
 // check written the other way round.
 var pluginManifestClient = netguard.Client(20 * time.Second)
+
+// storeCatalogueResponse is the store as the page shows it.
+type storeCatalogueResponse struct {
+	pluginstore.Catalogue
+	// Installed maps a plugin id to the version that is here, so the page can
+	// show "installed" and "upgrade" without a second request.
+	Installed map[string]string `json:"installed"`
+}
+
+// handleStoreCatalogue reads the store's index.
+//
+// A failure is reported rather than swallowed. A store that is down, a store
+// whose index is signed by somebody else, and a store with nothing in it are
+// three different things, and a page that showed an empty list for all three
+// would send somebody looking in the wrong place.
+func (s *Server) handleStoreCatalogue(w http.ResponseWriter, r *http.Request) {
+	if _, err := s.requireOwnerSomewhere(r); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	indexURL, _, err := s.db.GetSetting(r.Context(), settings.KeyPluginStoreURL)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(indexURL) == "" {
+		indexURL = pluginstore.DefaultIndexURL
+	}
+	key, _, _ := s.db.GetSetting(r.Context(), settings.KeyPluginStoreKey)
+
+	catalogue, err := pluginstore.Client{HTTP: pluginManifestClient}.
+		Fetch(r.Context(), indexURL, key)
+	if err != nil {
+		writeError(w, r, storeProblem(indexURL, err))
+		return
+	}
+
+	response := storeCatalogueResponse{Catalogue: catalogue, Installed: map[string]string{}}
+	installed, err := s.db.ListPlugins(r.Context())
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	for _, record := range installed {
+		response.Installed[record.ID] = record.Version
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// storeProblem turns a store failure into something that names what to do.
+func storeProblem(indexURL string, err error) error {
+	switch {
+	case errors.Is(err, pluginstore.ErrBadSignature):
+		return errdoc.New("store.bad_signature", "The plugin store's index is not signed by the key this panel trusts").
+			WithCause("%s", err).
+			WithImpact("Nothing was read from it, and nothing was installed.").
+			WithFix("Check the signing key under Settings, then Plugins. If it is right, the index at %s "+
+				"is not the one that key signs, and that is worth finding out about before installing anything from it.",
+				indexURL).
+			WithStatus(http.StatusBadGateway)
+	case errors.Is(err, pluginstore.ErrBadIndex):
+		return errdoc.New("store.bad_index", "The plugin store's index could not be read").
+			WithCause("%s", err).
+			WithImpact("Nothing was read from it.").
+			WithFix("If this is a store of your own, check that the index is the format this panel reads. " +
+				"A plugin can still be installed from a manifest address or by pasting one.").
+			WithStatus(http.StatusBadGateway)
+	default:
+		return errdoc.New("store.unreachable", "The plugin store could not be reached").
+			WithCause("%s", err).
+			WithImpact("Nothing was read from it.").
+			WithFix("Check that this cluster can reach %s. "+
+				"A plugin can still be installed from a manifest address or by pasting one, "+
+				"which is what a cluster with no way out to the internet uses.", indexURL).
+			WithStatus(http.StatusBadGateway)
+	}
+}

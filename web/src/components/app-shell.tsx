@@ -7,6 +7,7 @@ import {
   BookOpenIcon,
   BoxesIcon,
   ChevronsUpDownIcon,
+  PuzzleIcon,
   DatabaseIcon,
   FolderIcon,
   InfoIcon,
@@ -190,6 +191,7 @@ function AppSidebar() {
       alert: unhealthy > 0,
     },
     { to: "/templates", label: t("nav.templates"), icon: BoxesIcon },
+    { to: "/plugins", label: t("nav.plugins"), icon: PuzzleIcon },
     { to: "/activity", label: t("nav.activity"), icon: ActivityIcon },
   ]
 

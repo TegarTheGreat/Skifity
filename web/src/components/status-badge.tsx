@@ -64,6 +64,11 @@ export function toneFor(status: string): Tone {
     case "crashing":
     case "unhealthy":
       return "danger"
+    // Asleep is not down: scale to zero took the last instance away on
+    // purpose and the next request brings it back. It shares the idle tone
+    // with "stopped" because neither is serving, and the word tells them
+    // apart.
+    case "sleeping":
     case "stopped":
     case "cancelled":
     case "superseded":

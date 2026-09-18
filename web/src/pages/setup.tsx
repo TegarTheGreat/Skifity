@@ -179,7 +179,7 @@ export function SetupPage({ onComplete }: { onComplete: () => void }) {
                   id="team"
                   value={teamName}
                   onChange={(event) => setTeamName(event.target.value)}
-                  placeholder="Acme"
+                  placeholder={t("auth.teamNameExample")}
                 />
                 <FieldDescription>{t("auth.teamNameHelp")}</FieldDescription>
               </Field>

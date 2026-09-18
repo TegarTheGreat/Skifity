@@ -595,3 +595,39 @@ func TestAPanickingDeploymentFailsInsteadOfEndingThePanel(t *testing.T) {
 		t.Error("the deployment is still listed as running, so its slot leaked")
 	}
 }
+
+// A rollback records what it went back to as a number, not as a sentence.
+//
+// The trigger used to be the string "rollback to #3". The panel ships in five
+// languages, so that sentence was shown untranslated, and the deployments list
+// — which matched the trigger against "rollback" — missed it entirely and
+// labelled the row as a manual deploy by a person.
+func TestARollbackSaysWhatItWentBackTo(t *testing.T) {
+	d, db, app, _ := testDeployer(t)
+
+	good, err := d.Deploy(t.Context(), api.DeployRequest{AppID: app.ID, CommitSHA: "aaaaaaaaaaaa"})
+	if err != nil {
+		t.Fatalf("Deploy: %v", err)
+	}
+	markBuilt(t, db, good.ID, "registry/acme/web:good")
+
+	rolled, err := d.Rollback(t.Context(), app.ID, good.ID, "usr_1")
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if rolled.Trigger != "rollback" {
+		t.Errorf("the trigger is %q, and the interface only translates the token %q", rolled.Trigger, "rollback")
+	}
+	if rolled.RollbackOf != good.Number {
+		t.Errorf("the rollback points at #%d, not the #%d it restored", rolled.RollbackOf, good.Number)
+	}
+
+	// And it survives the round trip, so the list shows it too.
+	stored, err := db.GetDeployment(t.Context(), rolled.ID)
+	if err != nil {
+		t.Fatalf("GetDeployment: %v", err)
+	}
+	if stored.RollbackOf != good.Number {
+		t.Errorf("the stored deployment points at #%d, not #%d", stored.RollbackOf, good.Number)
+	}
+}

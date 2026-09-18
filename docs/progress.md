@@ -1649,6 +1649,92 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 56 — a live version nobody could point at, and an app asleep that read as down
+
+Four screens from Mobbin — Vercel, Render, Railway, Laravel Cloud, Cloudflare —
+against the same four screens here. Most of what they do, this panel already
+does. Four things it did not, and three of them were wrong rather than missing.
+
+### The deployments list never said which version was serving
+
+Every row looked the same. A rollback here is a new deployment carrying an old
+image, so the list is a straight line and the newest succeeded row is always the
+one in production — but nothing said so, and the row a reader assumes is live
+(the highest number) is a superseded build the moment anybody rolls back.
+Cloudflare puts "Active deployment" at the top of the list; this puts a **Live**
+badge on the row itself, derived during render from the list already on screen.
+
+The live row also stopped offering **Rollback**. Rolling back to the version
+already running is a deployment that changes nothing, and a button offering it
+invites the question of what it would do.
+
+### A rollback said "a person" deployed it, in English
+
+`Trigger` was written as the sentence `rollback to #3`. The panel ships in five
+languages, so that sentence went to the user untranslated; and the list matched
+the trigger against `"rollback"`, missed, and fell through to the default, which
+says a person deployed it by hand. The same default swallowed `create`,
+`template` and `preview`: four of the six triggers the panel stores rendered as
+the wrong one.
+
+The number is data, so it is stored as data — `rollback_of`, migration 0011 —
+and the sentence is built in the interface, where it has five translations.
+`deploy.trigger.*` now has a key per trigger and the list uses all of them.
+
+### An app asleep read as an app somebody stopped
+
+Laravel Cloud puts "Hibernating 2h" in an app's header. Scale to zero has been
+in this panel since Phase 7, and when it took the last instance away the app
+page said **Stopped**, with the grey badge and the pause icon — the same thing
+it says about an app a person deliberately took down. The cluster is not wrong:
+it can only see that the instances are gone. The panel knows the user asked for
+exactly that and that the next request brings the app back.
+
+So the status handler rewrites that one case to `sleeping`, with a sentence
+saying the next request starts it again, and the badge has a word for it in all
+five languages. A test covers both readings of zero instances: with the setting
+on it says asleep, with it off it says stopped.
+
+The status sentence under an app's name came from the cluster in English. Three
+phases have a sentence that never varies — sleeping, stopped, not deployed — and
+those are translated now; the rest carry a number or a message from Kubernetes
+and still fall back to what the panel was told.
+
+### Copying anything was three implementations and a dead prop
+
+Render puts a copy control beside every id and address. This had three
+hand-written ones that did not agree — one toasted, one did not, one put the
+word "Copy" in a button wide enough to push the value off the row — and the
+app's own address, the thing people came to the page for, had none: it could be
+clicked and not copied. One `CopyButton` now, with a tick where the icon was,
+used on the address and on every database credential.
+
+The credentials rows carried a `secret` prop that chose between `type="text"`
+and `type="text"`. The whole card is behind "Show credentials", so nothing there
+needs hiding twice; the prop that pretended otherwise is gone.
+
+### Three English words on a translated page, and the gate that missed them
+
+`label="Host"`, `label="Port"`, `label="User"` — beside a database name that was
+translated — plus `label="Architecture"` on the server page. No check saw them:
+they are not in an `sr-only` block, they carry no `aria-label`, and they are not
+keys that could go missing. `check:i18n` now refuses a capitalised literal in
+`label`, `title`, `description`, `confirmLabel` or `placeholder` anywhere
+outside the vendored `components/ui`, with an allowlist for names that are the
+same word everywhere (Kubelet, PostgreSQL, Docker) and an exemption for a
+placeholder that is code rather than prose — `DATABASE_URL` is an instruction to
+type that exact string.
+
+It found two more on the way in: the example server location was `Frankfurt` and
+the example team name was `Acme` for everybody. They are examples, so they are
+translated like everything else — an Indonesian operator is offered Jakarta.
+
+A second gate, in Go: every phase either `summarisePhase` or the status handler
+can return must have `apps.phase.*` in all five locales. Proven by deleting
+`sleeping` from `ru.json`, which failed it.
+
+931 keys, five languages. `make check` green, 14 interface tests pass.
+
 ## Phase 55 — the half of the panel that was never translated
 
 "There is still a lot of i18n missing." There was, and not where the checker was

@@ -264,6 +264,62 @@ function checkInterpolations() {
   }
 }
 
+/**
+ * A user-visible string written straight into a prop.
+ *
+ * `label="Host"` renders "Host" in Hindi, Russian and Chinese, and no other
+ * check saw it: it is not inside an sr-only block, it carries no aria-label,
+ * and it is not a key that could go missing. Three of these had been sitting
+ * on the database page since it was written — Host, Port and User beside a
+ * database name that was translated.
+ *
+ * The vendored components in components/ui are excluded: they are upstream
+ * files that are re-copied from shadcn, and their own strings are covered by
+ * the screen-reader checks above.
+ */
+const LITERAL_PROPS = /\s(label|title|description|confirmLabel|placeholder)="([A-Z][^"]{2,})"/g
+
+/**
+ * A placeholder that is code rather than prose: a variable name, a header, an
+ * environment key. SCREAMING_SNAKE_CASE is the shape of all of them, and
+ * translating one would be an instruction to type the wrong thing.
+ */
+const CODE_TOKEN = /^[A-Z][A-Z0-9_]*$/
+
+/** Names that are the same word in every language. */
+const PROPER_NOUNS = new Set([
+  "Kubelet",
+  "Kubernetes",
+  "Skifity",
+  "Docker",
+  "Dockerfile",
+  "PostgreSQL",
+  "MySQL",
+  "MariaDB",
+  "Redis",
+  "GitHub",
+  "GitLab",
+  "Traefik",
+  "WireGuard",
+])
+
+function checkLiteralProps() {
+  for (const file of walk(srcDir)) {
+    if (!file.endsWith(".tsx")) continue
+    const relative = file.slice(srcDir.length + 1)
+    if (relative.startsWith("components/ui/")) continue
+    const contents = readFileSync(file, "utf8")
+    for (const match of contents.matchAll(LITERAL_PROPS)) {
+      if (PROPER_NOUNS.has(match[2])) continue
+      if (match[1] === "placeholder" && CODE_TOKEN.test(match[2])) continue
+      const line = contents.slice(0, match.index).split("\n").length
+      problems.push(
+        `${relative}:${line} has a hardcoded ${match[1]}: "${match[2]}" — use t("…") instead`,
+      )
+    }
+  }
+}
+
 function* walk(directory) {
   let entries = []
   try {
@@ -279,6 +335,7 @@ function* walk(directory) {
 }
 
 checkSourceStrings()
+checkLiteralProps()
 checkInterpolations()
 
 if (problems.length > 0) {

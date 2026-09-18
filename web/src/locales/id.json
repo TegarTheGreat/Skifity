@@ -65,7 +65,9 @@
     "toggleSidebar": "Tampilkan atau sembunyikan bilah sisi",
     "skipToContent": "Lewati ke konten",
     "breadcrumb": "Jejak navigasi",
-    "dismiss": "Tutup"
+    "dismiss": "Tutup",
+    "copyFailed": "Papan klip tidak tersedia di sini.",
+    "copyValue": "Salin {{name}}"
   },
   "nav": {
     "overview": "Ringkasan",
@@ -148,7 +150,8 @@
       "state": "Proses masuk itu tidak kembali seperti saat berangkat. Mulai lagi.",
       "expired": "Proses masuk itu terlalu lama. Mulai lagi.",
       "disabled": "Akun itu telah dinonaktifkan di panel ini."
-    }
+    },
+    "teamNameExample": "Nusantara"
   },
   "dashboard": {
     "title": "Ringkasan",
@@ -360,7 +363,8 @@
       "stopped": "Berhenti",
       "not_deployed": "Belum di-deploy",
       "unknown": "Tidak diketahui",
-      "created": "Belum di-deploy"
+      "created": "Belum di-deploy",
+      "sleeping": "Tidur"
     },
     "runCommand": "Jalankan perintah",
     "noOutputYet": "Belum ada keluaran",
@@ -392,7 +396,13 @@
     "composeRest": "Buat layanan lainnya dengan cara yang sama, di lingkungan ini. Mereka saling terhubung lewat nama, dan itulah yang menggantikan tautan di berkas Compose.",
     "builderStatic": "Berkas statis",
     "lastBackup": "Cadangan terakhir",
-    "firewall": "Firewall"
+    "firewall": "Firewall",
+    "address": "alamat",
+    "detail": {
+      "sleeping": "Aplikasi ini tidur karena tidak ada yang memakainya. Permintaan berikutnya menyalakannya lagi.",
+      "stopped": "Aplikasi ini diskalakan ke nol instance.",
+      "not_deployed": "Aplikasi ini belum pernah di-deploy."
+    }
   },
   "deploy": {
     "title": "Deployment",
@@ -408,11 +418,6 @@
     "buildLog": "Log build",
     "noDeployments": "Belum ada yang di-deploy",
     "noDeploymentsHelp": "Deployment pertama akan membangun aplikasi Anda dan memberinya URL.",
-    "trigger": "Dipicu oleh",
-    "triggerManual": "seseorang",
-    "triggerPush": "sebuah push",
-    "triggerWebhook": "sebuah webhook",
-    "triggerRollback": "pengembalian versi",
     "commit": "Commit",
     "duration": "Butuh waktu",
     "status": {
@@ -425,7 +430,17 @@
       "superseded": "Digantikan deployment yang lebih baru"
     },
     "reusedImage": "Tidak ada yang perlu dibangun: versi ini sudah pernah dibangun, jadi image yang ada dipakai kembali.",
-    "noRebuildNeeded": "Tersimpan dan diterapkan. Tidak perlu build ulang."
+    "noRebuildNeeded": "Tersimpan dan diterapkan. Tidak perlu build ulang.",
+    "live": "Aktif",
+    "triggerRollbackTo": "Dikembalikan ke #{{number}}",
+    "trigger": {
+      "manual": "Di-deploy manual",
+      "create": "Deployment pertama aplikasi ini",
+      "template": "Dipasang dari katalog",
+      "push": "Push ke branch",
+      "preview": "Pratinjau sebuah pull request",
+      "rollback": "Sebuah rollback"
+    }
   },
   "variables": {
     "title": "Variabel",
@@ -563,7 +578,9 @@
     },
     "needAttention_other": "{{count}} server perlu perhatian",
     "adopted": "Skifity tidak memasang server ini",
-    "adoptedHelp": "Server ini sudah menjadi node cluster saat Skifity dipasang — biasanya mesin tempat panel ini sendiri berjalan. Ditampilkan di sini supaya Anda melihat isi cluster, dan tidak bisa dihapus atau dipromosikan dari panel karena tidak ada kunci ke sana. Jalankan uninstaller di mesin itu untuk mengeluarkannya."
+    "adoptedHelp": "Server ini sudah menjadi node cluster saat Skifity dipasang — biasanya mesin tempat panel ini sendiri berjalan. Ditampilkan di sini supaya Anda melihat isi cluster, dan tidak bisa dihapus atau dipromosikan dari panel karena tidak ada kunci ke sana. Jalankan uninstaller di mesin itu untuk mengeluarkannya.",
+    "architecture": "Arsitektur",
+    "locationExample": "Jakarta"
   },
   "databases": {
     "title": "Database",
@@ -616,7 +633,10 @@
     },
     "restoreStarted": "Pemulihan dimulai. Basis data tidak tersedia sampai proses selesai.",
     "deleteWarning": "Semua tabel, baris, dan jadwal pencadangan ikut terhapus. Cadangan yang sudah ada di penyimpanan tetap tersimpan, tetapi panel tidak akan mengenalinya lagi.",
-    "backupStarted": "Pencadangan dimulai. Akan muncul di daftar setelah selesai."
+    "backupStarted": "Pencadangan dimulai. Akan muncul di daftar setelah selesai.",
+    "host": "Host",
+    "port": "Port",
+    "user": "Pengguna"
   },
   "templates": {
     "title": "Template",

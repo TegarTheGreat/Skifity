@@ -237,7 +237,7 @@ export function AddServerPage() {
                       id="location"
                       value={location}
                       onChange={(event) => setLocation(event.target.value)}
-                      placeholder="Frankfurt"
+                      placeholder={t("servers.locationExample")}
                     />
                     <FieldDescription>{t("servers.locationHelp")}</FieldDescription>
                   </Field>

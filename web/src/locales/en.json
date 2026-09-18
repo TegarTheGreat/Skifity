@@ -72,7 +72,9 @@
     "toggleSidebar": "Show or hide the sidebar",
     "skipToContent": "Skip to content",
     "breadcrumb": "Breadcrumb",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "copyFailed": "The clipboard is not available here.",
+    "copyValue": "Copy {{name}}"
   },
   "nav": {
     "overview": "Overview",
@@ -156,7 +158,8 @@
       "state": "That sign-in did not come back the way it left. Start again.",
       "expired": "That sign-in took too long. Start again.",
       "disabled": "That account has been disabled on this panel."
-    }
+    },
+    "teamNameExample": "Acme"
   },
   "dashboard": {
     "title": "Overview",
@@ -368,7 +371,8 @@
       "stopped": "Stopped",
       "not_deployed": "Not deployed yet",
       "unknown": "Unknown",
-      "created": "Not deployed yet"
+      "created": "Not deployed yet",
+      "sleeping": "Sleeping"
     },
     "runCommand": "Run a command",
     "noOutputYet": "No output yet",
@@ -400,7 +404,13 @@
     "composeRest": "Create the other services the same way, in this environment. They reach each other by name, which is what the links in a Compose file become.",
     "builderStatic": "Static files",
     "lastBackup": "Last backup",
-    "firewall": "Firewall"
+    "firewall": "Firewall",
+    "address": "address",
+    "detail": {
+      "sleeping": "This app is asleep because nobody is using it. The next request starts it again.",
+      "stopped": "This app is scaled to zero instances.",
+      "not_deployed": "This app has not been deployed yet."
+    }
   },
   "deploy": {
     "title": "Deployments",
@@ -416,11 +426,6 @@
     "buildLog": "Build log",
     "noDeployments": "Nothing has been deployed yet",
     "noDeploymentsHelp": "The first deployment builds your app and gives it a URL.",
-    "trigger": "Triggered by",
-    "triggerManual": "a person",
-    "triggerPush": "a push",
-    "triggerWebhook": "a webhook",
-    "triggerRollback": "a rollback",
     "commit": "Commit",
     "duration": "Took",
     "status": {
@@ -433,7 +438,17 @@
       "superseded": "Replaced by a newer deployment"
     },
     "reusedImage": "Nothing needed building: this version was already built, so the existing image was reused.",
-    "noRebuildNeeded": "Saved and rolled out. No rebuild was needed."
+    "noRebuildNeeded": "Saved and rolled out. No rebuild was needed.",
+    "live": "Live",
+    "triggerRollbackTo": "Rolled back to #{{number}}",
+    "trigger": {
+      "manual": "Deployed by hand",
+      "create": "The app's first deployment",
+      "template": "Installed from the catalogue",
+      "push": "A push to the branch",
+      "preview": "A preview of a pull request",
+      "rollback": "A rollback"
+    }
   },
   "variables": {
     "title": "Variables",
@@ -572,7 +587,9 @@
     "needAttention_one": "{{count}} needs attention",
     "needAttention_other": "{{count}} need attention",
     "adopted": "Skifity did not install this server",
-    "adoptedHelp": "It was already a node of the cluster when Skifity was installed — usually the machine the panel itself runs on. It is shown here so you can see what the cluster has, and it cannot be removed or promoted from the panel, because there is no key to it. Run the uninstaller on the machine itself to take it out."
+    "adoptedHelp": "It was already a node of the cluster when Skifity was installed — usually the machine the panel itself runs on. It is shown here so you can see what the cluster has, and it cannot be removed or promoted from the panel, because there is no key to it. Run the uninstaller on the machine itself to take it out.",
+    "architecture": "Architecture",
+    "locationExample": "Frankfurt"
   },
   "databases": {
     "title": "Databases",
@@ -625,7 +642,10 @@
     },
     "restoreStarted": "Restore started. The database is unavailable until it finishes.",
     "deleteWarning": "Every table, row and backup schedule goes with it. Existing backups in your storage are kept, but the panel will no longer know about them.",
-    "backupStarted": "The backup has started. It will appear in the list when it finishes."
+    "backupStarted": "The backup has started. It will appear in the list when it finishes.",
+    "host": "Host",
+    "port": "Port",
+    "user": "User"
   },
   "templates": {
     "title": "Templates",

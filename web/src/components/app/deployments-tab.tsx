@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { GitCommitHorizontalIcon, RocketIcon, RotateCcwIcon, XIcon } from "lucide-react"
+import { CircleDotIcon, GitCommitHorizontalIcon, RocketIcon, RotateCcwIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Card, CardContent } from "@/components/ui/card"
@@ -35,6 +37,12 @@ export function DeploymentsTab({ app }: { app: App }) {
 
   const items = deployments.data?.items ?? []
   const running = items.find((deployment) => !TERMINAL.has(deployment.status))
+  // Which version is actually serving. A rollback is a new deployment carrying
+  // an old image, so the newest succeeded one is always the live one — but
+  // nothing on this list said so, and after a rollback the row people assume
+  // is live (the highest number) is a superseded build. Derived during render
+  // from the list itself: there is no second source to fall out of step with.
+  const live = items.find((deployment) => deployment.status === "succeeded")?.id
 
   // A running deployment opens itself: that is what the user came to look at.
   const selected = touched ? opened : (running?.id ?? null)
@@ -95,11 +103,14 @@ export function DeploymentsTab({ app }: { app: App }) {
                       defaultValue: deployment.status,
                     })}
                   />
+                  {deployment.id === live && (
+                    <Badge className="gap-1 border-success/30 bg-success/10 text-success">
+                      <CircleDotIcon className="size-3" />
+                      {t("deploy.live")}
+                    </Badge>
+                  )}
                   <span className="min-w-0 flex-1 truncate text-sm">
-                    {deployment.commit_message ||
-                      t(`deploy.trigger${triggerKey(deployment.trigger)}`, {
-                        defaultValue: deployment.trigger,
-                      })}
+                    {deployment.commit_message || triggerLabel(t, deployment)}
                   </span>
                 </button>
 
@@ -117,7 +128,11 @@ export function DeploymentsTab({ app }: { app: App }) {
                 </div>
 
                 {TERMINAL.has(deployment.status) ? (
+                  // Not on the version that is already serving: rolling back to
+                  // what is running is a deployment that changes nothing, and a
+                  // button offering it invites the question of what it would do.
                   deployment.status === "succeeded" &&
+                  deployment.id !== live &&
                   (deployment.can_rollback === false ? (
                     // Said rather than hidden. A button that is simply absent
                     // on old versions reads as a bug; this says why, and the
@@ -172,17 +187,22 @@ export function DeploymentsTab({ app }: { app: App }) {
   )
 }
 
-function triggerKey(trigger: string): string {
-  switch (trigger) {
-    case "push":
-      return "Push"
-    case "webhook":
-      return "Webhook"
-    case "rollback":
-      return "Rollback"
-    default:
-      return "Manual"
+/**
+ * What started this deployment, in the reader's language.
+ *
+ * Every trigger the panel stores has a key here. The list used to fold four of
+ * them — create, template, preview and rollback — into "a person", because it
+ * matched three strings and sent everything else to the default, and a rollback
+ * did not match any of them: its trigger was the English sentence
+ * "rollback to #3", which no language but English ever showed.
+ */
+function triggerLabel(t: TFunction, deployment: Deployment): string {
+  if (deployment.trigger === "rollback" && deployment.rollback_of) {
+    return t("deploy.triggerRollbackTo", { number: deployment.rollback_of })
   }
+  const known = ["manual", "create", "template", "push", "preview", "rollback"]
+  if (known.includes(deployment.trigger)) return t(`deploy.trigger.${deployment.trigger}`)
+  return deployment.trigger
 }
 
 /**

@@ -13,6 +13,7 @@ import { ScalingTab } from "@/components/app/scaling-tab"
 import { SettingsTab } from "@/components/app/settings-tab"
 import { StorageTab } from "@/components/app/storage-tab"
 import { useConfirm } from "@/components/confirm-dialog"
+import { CopyButton } from "@/components/copy-button"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
@@ -156,12 +157,18 @@ export function AppDetailPage() {
       {(status.data?.urls?.length ?? 0) > 0 && (
         <div className="-mt-3 flex flex-wrap items-center gap-2">
           {status.data?.urls?.map((url) => (
-            <Button key={url} variant="outline" size="sm" asChild>
-              <a href={url} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon />
-                {url.replace(/^https?:\/\//, "")}
-              </a>
-            </Button>
+            // The address and the way to take it with you, as one control: an
+            // address is read far more often than it is clicked, and reading it
+            // off the screen to paste it somewhere was the only way to do that.
+            <div key={url} className="flex items-center rounded-md border">
+              <Button variant="ghost" size="sm" className="rounded-r-none" asChild>
+                <a href={url} target="_blank" rel="noreferrer">
+                  <ExternalLinkIcon />
+                  {url.replace(/^https?:\/\//, "")}
+                </a>
+              </Button>
+              <CopyButton value={url} label={t("apps.address")} className="rounded-l-none" />
+            </div>
           ))}
         </div>
       )}
@@ -295,7 +302,12 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
       {status?.detail && (
         <Alert variant={detailTone(status.phase)}>
           <InfoIcon />
-          <AlertDescription>{status.detail}</AlertDescription>
+          {/* A phase whose sentence never varies has that sentence in every
+              language; the rest carry numbers or a message from the cluster
+              and fall back to what the panel was told, in English. */}
+          <AlertDescription>
+            {t(`apps.detail.${status.phase}`, { defaultValue: status.detail })}
+          </AlertDescription>
         </Alert>
       )}
 

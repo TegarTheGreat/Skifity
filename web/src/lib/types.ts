@@ -174,6 +174,8 @@ export type Deployment = {
   number: number
   status: DeploymentStatus
   trigger: string
+  /** The deployment number a rollback went back to; absent otherwise. */
+  rollback_of?: number
   commit_sha: string
   commit_message: string
   commit_author: string

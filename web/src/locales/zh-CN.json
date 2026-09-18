@@ -65,7 +65,9 @@
     "toggleSidebar": "显示或隐藏侧边栏",
     "skipToContent": "跳到主要内容",
     "breadcrumb": "导航路径",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "copyFailed": "此处无法使用剪贴板。",
+    "copyValue": "复制{{name}}"
   },
   "nav": {
     "overview": "总览",
@@ -148,7 +150,8 @@
       "state": "此次登录返回的内容与发出时不符。请重新开始。",
       "expired": "此次登录用时过长。请重新开始。",
       "disabled": "该账户已在此面板上停用。"
-    }
+    },
+    "teamNameExample": "示例公司"
   },
   "dashboard": {
     "title": "总览",
@@ -360,7 +363,8 @@
       "stopped": "已停止",
       "not_deployed": "尚未部署",
       "unknown": "未知",
-      "created": "尚未部署"
+      "created": "尚未部署",
+      "sleeping": "休眠中"
     },
     "runCommand": "运行命令",
     "noOutputYet": "还没有输出",
@@ -392,7 +396,13 @@
     "composeRest": "其余服务用同样的方式在这个环境里创建。它们通过名字互相访问，这就是 Compose 文件里的链接在这里的样子。",
     "builderStatic": "静态文件",
     "lastBackup": "上次备份",
-    "firewall": "防火墙"
+    "firewall": "防火墙",
+    "address": "地址",
+    "detail": {
+      "sleeping": "没有人在使用，所以这个应用正在休眠。下一个请求会让它重新启动。",
+      "stopped": "这个应用已缩容到零个实例。",
+      "not_deployed": "这个应用还没有部署过。"
+    }
   },
   "deploy": {
     "title": "部署记录",
@@ -408,11 +418,6 @@
     "buildLog": "构建日志",
     "noDeployments": "还没有部署过",
     "noDeploymentsHelp": "第一次部署会构建你的应用并为它分配网址。",
-    "trigger": "触发方式",
-    "triggerManual": "手动",
-    "triggerPush": "代码推送",
-    "triggerWebhook": "Webhook",
-    "triggerRollback": "回滚",
     "commit": "提交",
     "duration": "耗时",
     "status": {
@@ -425,7 +430,17 @@
       "superseded": "已被更新的部署取代"
     },
     "reusedImage": "无需构建：此版本此前已构建过，直接复用了现有镜像。",
-    "noRebuildNeeded": "已保存并生效，无需重新构建。"
+    "noRebuildNeeded": "已保存并生效，无需重新构建。",
+    "live": "当前版本",
+    "triggerRollbackTo": "回滚到 #{{number}}",
+    "trigger": {
+      "manual": "手动部署",
+      "create": "这个应用的第一次部署",
+      "template": "从目录安装",
+      "push": "分支收到一次推送",
+      "preview": "一个拉取请求的预览",
+      "rollback": "一次回滚"
+    }
   },
   "variables": {
     "title": "变量",
@@ -563,7 +578,9 @@
     },
     "needAttention_other": "{{count}} 台需要处理",
     "adopted": "这台服务器不是 Skifity 装的",
-    "adoptedHelp": "安装 Skifity 时它已经是集群的节点了——通常就是面板自己运行的那台机器。这里列出它是为了让你看清集群的全貌；面板无法移除或提升它，因为没有通往它的密钥。要把它移出集群，请在那台机器上运行卸载程序。"
+    "adoptedHelp": "安装 Skifity 时它已经是集群的节点了——通常就是面板自己运行的那台机器。这里列出它是为了让你看清集群的全貌；面板无法移除或提升它，因为没有通往它的密钥。要把它移出集群，请在那台机器上运行卸载程序。",
+    "architecture": "架构",
+    "locationExample": "法兰克福"
   },
   "databases": {
     "title": "数据库",
@@ -616,7 +633,10 @@
     },
     "restoreStarted": "恢复已开始。完成之前数据库不可用。",
     "deleteWarning": "所有表、数据行和备份计划都会一并消失。存储中已有的备份会保留，但面板将不再知道它们。",
-    "backupStarted": "备份已开始，完成后会出现在列表中。"
+    "backupStarted": "备份已开始，完成后会出现在列表中。",
+    "host": "主机",
+    "port": "端口",
+    "user": "用户"
   },
   "templates": {
     "title": "模板",

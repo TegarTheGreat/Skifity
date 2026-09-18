@@ -212,7 +212,7 @@ export function ServerDetailPage() {
             value={current.memory_mb ? formatMemory(current.memory_mb) : "—"}
           />
           <Fact label={t("servers.disk")} value={current.disk_gb ? `${current.disk_gb} GB` : "—"} />
-          <Fact label="Architecture" value={current.arch || "—"} />
+          <Fact label={t("servers.architecture")} value={current.arch || "—"} />
           <Fact label={t("apps.node")} value={current.node_name || "—"} mono />
           <Fact
             label={t("servers.lastSeen")}

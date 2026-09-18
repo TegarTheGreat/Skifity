@@ -286,24 +286,29 @@ func (s DeploymentStatus) Terminal() bool {
 
 // Deployment is one attempt to run a particular version of an app.
 type Deployment struct {
-	ID               string           `json:"id"`
-	AppID            string           `json:"app_id"`
-	Number           int              `json:"number"`
-	Status           DeploymentStatus `json:"status"`
-	Trigger          string           `json:"trigger"`
-	CommitSHA        string           `json:"commit_sha"`
-	CommitMessage    string           `json:"commit_message"`
-	CommitAuthor     string           `json:"commit_author"`
-	Image            string           `json:"image"`
-	BuildFingerprint string           `json:"build_fingerprint"`
-	RuntimeSpec      string           `json:"runtime_spec"`
-	ErrorCode        string           `json:"error_code,omitempty"`
-	ErrorMessage     string           `json:"error_message,omitempty"`
-	ErrorHint        string           `json:"error_hint,omitempty"`
-	CreatedBy        string           `json:"created_by"`
-	CreatedAt        time.Time        `json:"created_at"`
-	StartedAt        time.Time        `json:"started_at,omitzero"`
-	FinishedAt       time.Time        `json:"finished_at,omitzero"`
+	ID     string           `json:"id"`
+	AppID  string           `json:"app_id"`
+	Number int              `json:"number"`
+	Status DeploymentStatus `json:"status"`
+	// Trigger is one of manual, create, template, push, preview or rollback.
+	// It is a token the interface translates, never a sentence.
+	Trigger string `json:"trigger"`
+	// RollbackOf is the deployment number a rollback went back to, and zero
+	// for every other trigger.
+	RollbackOf       int       `json:"rollback_of,omitempty"`
+	CommitSHA        string    `json:"commit_sha"`
+	CommitMessage    string    `json:"commit_message"`
+	CommitAuthor     string    `json:"commit_author"`
+	Image            string    `json:"image"`
+	BuildFingerprint string    `json:"build_fingerprint"`
+	RuntimeSpec      string    `json:"runtime_spec"`
+	ErrorCode        string    `json:"error_code,omitempty"`
+	ErrorMessage     string    `json:"error_message,omitempty"`
+	ErrorHint        string    `json:"error_hint,omitempty"`
+	CreatedBy        string    `json:"created_by"`
+	CreatedAt        time.Time `json:"created_at"`
+	StartedAt        time.Time `json:"started_at,omitzero"`
+	FinishedAt       time.Time `json:"finished_at,omitzero"`
 
 	// CanRollback is worked out when a list is built, not stored. The panel
 	// keeps far more deployment records than the registry keeps images, so an

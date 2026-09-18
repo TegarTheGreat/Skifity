@@ -446,7 +446,8 @@ func (d *Deployer) Rollback(ctx context.Context, appID, deploymentID, actorID st
 	deployment := store.Deployment{
 		AppID:            appID,
 		Status:           store.DeployQueued,
-		Trigger:          fmt.Sprintf("rollback to #%d", previous.Number),
+		Trigger:          "rollback",
+		RollbackOf:       previous.Number,
 		CommitSHA:        previous.CommitSHA,
 		CommitMessage:    previous.CommitMessage,
 		CommitAuthor:     previous.CommitAuthor,

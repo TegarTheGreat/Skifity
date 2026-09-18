@@ -379,6 +379,14 @@ func (s *Server) handleAppStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, AppRuntimeStatus{Phase: "unknown", Detail: err.Error()})
 		return
 	}
+	// An app that is asleep is not an app that is down. The cluster only knows
+	// that the last instance is gone, so it says "stopped"; the panel knows the
+	// user asked for exactly that and that the next request brings the app
+	// back, and "Stopped" on a healthy app reads as a failure.
+	if app.ScaleToZero && status.Phase == "stopped" {
+		status.Phase = "sleeping"
+		status.Detail = "This app is asleep because nobody is using it. The next request starts it again."
+	}
 	domains, err := s.db.ListDomains(r.Context(), app.ID)
 	if err == nil {
 		for _, d := range domains {

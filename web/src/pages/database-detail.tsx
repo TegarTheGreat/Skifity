@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CopyButton } from "@/components/copy-button"
 import { EmptyState } from "@/components/empty-state"
 import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { useConfirm } from "@/components/confirm-dialog"
@@ -177,15 +178,6 @@ function ConnectionPanel({ databaseId }: { databaseId: string }) {
     gcTime: 0,
   })
 
-  const copy = async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success(t("common.copied"))
-    } catch {
-      toast.error(t("errors.somethingWentWrong"))
-    }
-  }
-
   if (!revealed) {
     return (
       <Card>
@@ -214,49 +206,29 @@ function ConnectionPanel({ databaseId }: { databaseId: string }) {
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <CredentialRow label="Host" value={data.host} onCopy={copy} />
-          <CredentialRow label="Port" value={String(data.port)} onCopy={copy} />
-          <CredentialRow label={t("databases.databaseName")} value={data.database} onCopy={copy} />
-          <CredentialRow label="User" value={data.username} onCopy={copy} />
+          <CredentialRow label={t("databases.host")} value={data.host} />
+          <CredentialRow label={t("databases.port")} value={String(data.port)} />
+          <CredentialRow label={t("databases.databaseName")} value={data.database} />
+          <CredentialRow label={t("databases.user")} value={data.username} />
         </div>
-        <CredentialRow label={t("auth.password")} value={data.password} onCopy={copy} secret />
-        <CredentialRow
-          label={t("databases.connectionString")}
-          value={data.url}
-          onCopy={copy}
-          secret
-        />
+        <CredentialRow label={t("auth.password")} value={data.password} />
+        <CredentialRow label={t("databases.connectionString")} value={data.url} />
         <p className="text-xs text-muted-foreground">{t("databases.credentialsWarning")}</p>
       </CardContent>
     </Card>
   )
 }
 
-function CredentialRow({
-  label,
-  value,
-  onCopy,
-  secret,
-}: {
-  label: string
-  value: string
-  onCopy: (value: string) => Promise<void>
-  secret?: boolean
-}) {
-  const { t } = useTranslation()
+function CredentialRow({ label, value }: { label: string; value: string }) {
   return (
     <Field>
       <FieldLabel className="text-xs text-muted-foreground">{label}</FieldLabel>
       <div className="flex items-center gap-2">
-        <Input
-          readOnly
-          value={value}
-          className="font-mono text-xs"
-          type={secret ? "text" : "text"}
-        />
-        <Button variant="outline" size="sm" onClick={() => void onCopy(value)}>
-          {t("common.copy")}
-        </Button>
+        <Input readOnly value={value} className="font-mono text-xs" />
+        {/* The whole card is behind "Show credentials", so nothing here is
+            hidden a second time. The prop that used to say so chose between
+            "text" and "text" and had never masked anything. */}
+        <CopyButton value={value} label={label} variant="outline" />
       </div>
     </Field>
   )

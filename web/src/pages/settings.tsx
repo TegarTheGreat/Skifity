@@ -11,6 +11,7 @@ import {
   LinkIcon,
   PackagePlusIcon,
   PlusIcon,
+  ShieldAlertIcon,
   Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -23,13 +24,7 @@ import { NotificationChannels } from "@/components/settings/notification-channel
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Field,
   FieldContent,
@@ -63,7 +58,15 @@ import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
 import { queryClient } from "@/lib/query"
-import type { AuditEvent, Component, Invitation, Role, Setting, User } from "@/lib/types"
+import type {
+  AuditEvent,
+  Component,
+  Invitation,
+  Role,
+  Setting,
+  StoreCatalogue,
+  User,
+} from "@/lib/types"
 
 const GROUPS: { key: string; label: string }[] = [
   { key: "general", label: "settings.general" },
@@ -75,6 +78,7 @@ const GROUPS: { key: string; label: string }[] = [
   { key: "email", label: "settings.email" },
   { key: "notifications", label: "settings.notifications" },
   { key: "registry", label: "settings.registry" },
+  { key: "plugins", label: "settings.plugins" },
 ]
 
 export function SettingsPage() {
@@ -90,14 +94,15 @@ export function SettingsPage() {
           <TabsTrigger value="git">{t("settings.git")}</TabsTrigger>
           <TabsTrigger value="notifications">{t("settings.notifications")}</TabsTrigger>
           <TabsTrigger value="components">{t("settings.components")}</TabsTrigger>
+          <TabsTrigger value="plugins">{t("settings.plugins")}</TabsTrigger>
           <TabsTrigger value="members">{t("settings.members")}</TabsTrigger>
           <TabsTrigger value="security">{t("settings.security")}</TabsTrigger>
           <TabsTrigger value="audit">{t("settings.auditLog")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="panel" className="space-y-6 pt-4">
-          {/* Git has its own tab, where the connected accounts are. */}
-          <SettingGroups except={["git"]} />
+          {/* Git and plugins have tabs of their own, below. */}
+          <SettingGroups except={["git", "plugins"]} />
           <ExportCard />
           <VersionCard />
         </TabsContent>
@@ -110,6 +115,10 @@ export function SettingsPage() {
         </TabsContent>
         <TabsContent value="components" className="pt-4">
           <ComponentsPanel />
+        </TabsContent>
+        <TabsContent value="plugins" className="space-y-6 pt-4">
+          <SettingGroups only={["plugins"]} />
+          <StoreCheckCard />
         </TabsContent>
         <TabsContent value="members" className="pt-4">
           <MembersPanel />
@@ -383,6 +392,69 @@ function ExportCard() {
           </Button>
           <code className="rounded bg-muted px-2 py-1 font-mono text-xs">skifity export</code>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+/**
+ * Reading the store, on purpose, to find out whether these two settings work.
+ *
+ * An address and a key are a pair you otherwise find out is wrong on the day
+ * you wanted a plugin. This reads the catalogue the same way the Plugins page
+ * does and says which of the three answers came back: signed by the key set
+ * here, readable but vouched for by nobody, or a failure that names itself.
+ */
+function StoreCheckCard() {
+  const { t } = useTranslation()
+
+  // Not a useQuery on mount: an address an operator is halfway through typing
+  // should not be fetched, and a store that is down should not make the
+  // settings page look broken. It runs when somebody asks for it.
+  const check = useMutation({
+    mutationFn: () => api.get<StoreCatalogue>("/api/plugins/store"),
+  })
+
+  const catalogue = check.data
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{t("settings.pluginStoreCheck")}</CardTitle>
+        <CardDescription>{t("settings.pluginStoreCheckHelp")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Button variant="outline" disabled={check.isPending} onClick={() => check.mutate()}>
+          {check.isPending && <Spinner />}
+          {t("settings.pluginStoreCheckAction")}
+        </Button>
+
+        {check.error != null && <ErrorDisplay error={check.error} />}
+
+        {/* Unsigned is a warning and not a fault: the catalogue was read, and
+            nobody vouched for it. Red here would be red for something that
+            works, which teaches people to ignore red. */}
+        {catalogue != null && (
+          <Alert variant={catalogue.verified ? "success" : "warning"}>
+            {catalogue.verified ? <CheckCircle2Icon /> : <ShieldAlertIcon />}
+            <AlertTitle>
+              {catalogue.verified ? t("settings.pluginStoreVerified") : t("plugins.storeUnsigned")}
+            </AlertTitle>
+            <AlertDescription>
+              <span>
+                {t("settings.pluginStoreCount", { count: catalogue.index.plugins.length })}
+              </span>
+              <span className="font-mono text-xs break-all">{catalogue.url}</span>
+              {!catalogue.verified && <span>{t("plugins.storeUnsignedHelp")}</span>}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          <Link className="underline underline-offset-4" to="/plugins">
+            {t("settings.pluginStoreGoToPlugins")}
+          </Link>
+        </p>
       </CardContent>
     </Card>
   )

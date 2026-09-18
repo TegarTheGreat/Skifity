@@ -599,7 +599,13 @@
     "exportHelp": "Semua milik tim ini — proyek, aplikasi, domain, basis data, variabel dan jadwal — dalam satu berkas JSON, lengkap dengan objek Kubernetes setiap aplikasi.",
     "exportSecrets": "Nilai dari apa pun yang ditandai rahasia tidak disertakan. Nilai itu sudah ada di cluster Anda sendiri, sebagai Secret Kubernetes biasa yang bisa Anda akses.",
     "exportDownload": "Unduh JSON",
-    "plugins": "Plugin"
+    "plugins": "Plugin",
+    "pluginStoreCheck": "Periksa store",
+    "pluginStoreCheckHelp": "Membaca katalog dengan nilai yang tersimpan, jadi alamat atau kunci yang salah ketahuan di sini, bukan pada hari Anda membutuhkan sebuah plugin.",
+    "pluginStoreCheckAction": "Baca katalognya",
+    "pluginStoreVerified": "Ditandatangani oleh kunci yang diatur di sini",
+    "pluginStoreCount_other": "{{count}} plugin di katalog",
+    "pluginStoreGoToPlugins": "Buka Plugin untuk memasang salah satunya"
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

@@ -610,7 +610,14 @@
     "exportHelp": "Everything this team has — projects, apps, domains, databases, variables and schedules — as one JSON file, with each app's Kubernetes objects beside it.",
     "exportSecrets": "The value of anything marked secret is not included. Those values are already in your own cluster, as ordinary Kubernetes Secrets you have access to.",
     "exportDownload": "Download the JSON",
-    "plugins": "Plugins"
+    "plugins": "Plugins",
+    "pluginStoreCheck": "Check the store",
+    "pluginStoreCheckHelp": "Reads the catalogue with the values as they are saved, so a wrong address or a wrong key turns up here rather than on the day you wanted a plugin.",
+    "pluginStoreCheckAction": "Read the catalogue",
+    "pluginStoreVerified": "Signed by the key set here",
+    "pluginStoreCount_one": "{{count}} plugin in the catalogue",
+    "pluginStoreCount_other": "{{count}} plugins in the catalogue",
+    "pluginStoreGoToPlugins": "Go to Plugins to install one"
   },
   "errors": {
     "whatHappened": "What happened",

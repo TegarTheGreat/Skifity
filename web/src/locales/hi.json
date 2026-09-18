@@ -612,7 +612,14 @@
     "exportHelp": "इस टीम की हर चीज़ — प्रोजेक्ट, ऐप, डोमेन, डेटाबेस, वेरिएबल और शेड्यूल — एक JSON फ़ाइल में, हर ऐप के Kubernetes ऑब्जेक्ट के साथ।",
     "exportSecrets": "गुप्त चिह्नित किसी भी चीज़ का मान शामिल नहीं है। वे मान पहले से ही आपके अपने क्लस्टर में हैं, सामान्य Kubernetes Secret के रूप में जिन तक आपकी पहुँच है।",
     "exportDownload": "JSON डाउनलोड करें",
-    "plugins": "प्लगइन"
+    "plugins": "प्लगइन",
+    "pluginStoreCheck": "स्टोर जाँचें",
+    "pluginStoreCheckHelp": "यह सहेजे गए मानों के साथ कैटलॉग पढ़ता है, ताकि ग़लत पता या ग़लत कुंजी यहीं सामने आ जाए, उस दिन नहीं जब आपको कोई प्लगइन चाहिए।",
+    "pluginStoreCheckAction": "कैटलॉग पढ़ें",
+    "pluginStoreVerified": "यहाँ सेट की गई कुंजी से हस्ताक्षरित",
+    "pluginStoreCount_one": "कैटलॉग में {{count}} प्लगइन",
+    "pluginStoreCount_other": "कैटलॉग में {{count}} प्लगइन",
+    "pluginStoreGoToPlugins": "इंस्टॉल करने के लिए प्लगइन पर जाएँ"
   },
   "errors": {
     "whatHappened": "क्या हुआ",

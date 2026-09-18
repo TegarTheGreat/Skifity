@@ -599,7 +599,13 @@
     "exportHelp": "这个团队的一切——项目、应用、域名、数据库、变量和计划任务——导出为一个 JSON 文件，并附上每个应用的 Kubernetes 对象。",
     "exportSecrets": "标记为机密的值不会包含在内。那些值已经在你自己的集群里，是你有权访问的普通 Kubernetes Secret。",
     "exportDownload": "下载 JSON",
-    "plugins": "插件"
+    "plugins": "插件",
+    "pluginStoreCheck": "检查插件商店",
+    "pluginStoreCheckHelp": "用已保存的值读取目录，让错误的地址或错误的密钥在这里就暴露出来，而不是在你需要插件的那天。",
+    "pluginStoreCheckAction": "读取目录",
+    "pluginStoreVerified": "由此处设置的密钥签名",
+    "pluginStoreCount_other": "目录中有 {{count}} 个插件",
+    "pluginStoreGoToPlugins": "前往插件页面安装"
   },
   "errors": {
     "whatHappened": "发生了什么",

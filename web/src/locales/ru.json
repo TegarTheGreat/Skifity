@@ -638,7 +638,16 @@
     "exportHelp": "Всё, что есть у этой команды — проекты, приложения, домены, базы данных, переменные и расписания — одним файлом JSON, вместе с объектами Kubernetes каждого приложения.",
     "exportSecrets": "Значения того, что помечено как секрет, не включены. Они уже есть в вашем собственном кластере, как обычные Kubernetes Secret, к которым у вас есть доступ.",
     "exportDownload": "Скачать JSON",
-    "plugins": "Плагины"
+    "plugins": "Плагины",
+    "pluginStoreCheck": "Проверить магазин",
+    "pluginStoreCheckHelp": "Читает каталог с сохранёнными значениями, чтобы неверный адрес или неверный ключ обнаружились здесь, а не в день, когда понадобился плагин.",
+    "pluginStoreCheckAction": "Прочитать каталог",
+    "pluginStoreVerified": "Подписан ключом, указанным здесь",
+    "pluginStoreCount_one": "{{count}} плагин в каталоге",
+    "pluginStoreCount_few": "{{count}} плагина в каталоге",
+    "pluginStoreCount_many": "{{count}} плагинов в каталоге",
+    "pluginStoreCount_other": "{{count}} плагинов в каталоге",
+    "pluginStoreGoToPlugins": "Откройте «Плагины», чтобы установить"
   },
   "errors": {
     "whatHappened": "Что произошло",

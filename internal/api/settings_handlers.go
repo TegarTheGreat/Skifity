@@ -222,7 +222,15 @@ func (s *Server) handleRotateMasterKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refs, err := s.db.ListSealedSecrets(r.Context())
+	// The rewrap runs on a context of its own. On the request's, a browser tab
+	// closed halfway through cancels it: the secrets already rewrapped are
+	// fine, the rest keep the old key, and nobody is told which is which. The
+	// old key is only dropped when every one succeeded, so finishing the pass
+	// is what makes the difference between a clean rotation and a half one.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Minute)
+	defer cancel()
+
+	refs, err := s.db.ListSealedSecrets(ctx)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -240,7 +248,7 @@ func (s *Server) handleRotateMasterKey(w http.ResponseWriter, r *http.Request) {
 		if !changed {
 			continue
 		}
-		if err := s.db.UpdateSealed(r.Context(), ref, next); err != nil {
+		if err := s.db.UpdateSealed(ctx, ref, next); err != nil {
 			s.log.Error("could not store a rewrapped secret",
 				"table", ref.Table, "column", ref.Column, "id", ref.ID, "error", err)
 			failed++

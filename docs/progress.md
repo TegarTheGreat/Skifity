@@ -1649,6 +1649,103 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 51 — the keyring under load, a code used twice, and the secrets rotation stepped over
+
+An audit of `internal/api`, `internal/auth`, `internal/store` and
+`internal/crypto`. Four real defects, three of them in the parts that are only
+exercised on the day they matter.
+
+### One keyring, no lock
+
+The `Keyring` is shared by everything in the panel — the API, the deployer, the
+backup manager, the cluster adapter — and rotation writes to its map while all
+of them read it. There was no mutex. A Go map read during a map write is not a
+race the program survives: the runtime **throws**, and a throw is not a panic,
+so `runsafe.Recover` never sees it. Rotating the master key on a busy panel
+could take the panel down, which is also the one thing that makes the cluster
+unreachable.
+
+The lock is held for every read of the map as well as every write, because
+`DropKey` zeroes a key's bytes and a slice read after that is a key of zeros.
+`BeginRotation` now picks the id, adds the key and promotes it under one lock:
+two rotations started together would otherwise choose the same id, and the
+second would fail after the first had already moved the active key.
+
+The test runs four goroutines sealing and opening while five rotations run
+through them. Under `-race` it fails on the old code and passes on the new, and
+`make check` runs the race detector.
+
+### The rotation stepped over the plugin secrets
+
+`ListSealedSecrets` is the list master key rotation walks. It named eight
+columns. The database has ten: `plugins.hmac_sealed` and the sealed rows in
+`plugin_settings` were both missing — added by the plugin work three commits
+earlier, and not added here.
+
+The consequence is silent and permanent. Rotation drops the retired keys once
+every secret it knows about has been rewrapped, so the two it did not know about
+stay wrapped in a key that no longer exists. Nothing reports it. The first sign
+would be plugins that quietly stop receiving events, because the panel can no
+longer read the secret it signs them with.
+
+Both are listed now, `SealedRef` carries a second key column for a row
+identified by two, and `TestEverySealedColumnIsRotated` walks the schema the
+panel actually creates: a column named `*_enc` or `*_sealed`, or a `value`
+beside an `encrypted` flag, has to be in the list. Removing one line from the
+list fails the test with the column's name in it.
+
+### A two-factor code that worked twice
+
+RFC 6238 says a one-time password is used once. The panel accepted a code for
+the current thirty-second step and one either side, and recorded nothing, so a
+code read over a shoulder, off a screen share or out of a proxy log stayed valid
+for up to ninety seconds.
+
+`VerifyTOTP` now returns the step it matched, and the step is spent in a single
+statement — `UPDATE … WHERE totp_last_counter < ?` — so two sign-ins arriving
+with the same code in the same instant cannot both win. The code that switches
+two-factor on is spent as well, so it cannot be the code that gets past it a
+moment later.
+
+### A plugin heard about every team
+
+A plugin is installed panel-wide by an owner, and the dispatcher sent every
+subscribed plugin every event. On a panel with more than one team that means an
+owner of one team could install a plugin and have it watch another team's
+deploys — and, with a blocking hook, refuse them.
+
+A plugin's token already belongs to whoever installed it, so it can read what
+that person can read. The events draw the same line now: a plugin hears about a
+team only when its installer is a member. An event that carries no team reaches
+nobody, which is the safe direction, and both refusals are logged rather than
+silent, because a plugin that receives nothing looks exactly like a plugin that
+is broken.
+
+### Two smaller things
+
+Rotation ran on the request's context, so closing the tab halfway through
+cancelled it: the secrets already rewrapped were fine, the rest kept the old key,
+and nobody was told which was which. It runs on its own context now.
+`SaveKeyring` wrote and renamed without syncing the directory, so a crash
+seconds later could lose the rename — on the one file whose loss cannot be
+undone.
+
+### What was checked and found sound
+
+Envelope encryption: per-secret data keys, AES-256-GCM both levels, the wrapped
+key bound to its key id and the ciphertext bound to where it is stored, a strict
+base64 decoder so an envelope has exactly one textual form, and bounds checked
+before every slice. Passwords: Argon2id at the OWASP parameters, parameters read
+back from the hash so old ones keep working, an unknown account costing the same
+hash as a known one, and a lockout per account and per address. Sessions and API
+tokens: SHA-256 at rest, expiry checked after the read, a disabled account cut
+off immediately rather than at expiry. CSRF: double-submit, enforced only where a
+cookie could carry the request, exempt for bearer tokens. The store: one
+interpolated statement, and its table and column names come from a fixed list.
+The API's authorization is gated by tests that walk the router rather than a
+list somebody maintains — every route refuses an anonymous request, every route
+that takes an id refuses another team's.
+
 ## Phase 50 — the schedules, the sweep, and six documents that were wrong
 
 An audit of the builder, the deploy path, the cluster adapter and cron, and a

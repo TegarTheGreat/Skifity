@@ -41,8 +41,8 @@ func newPluginServer(t *testing.T, secret string, answer func() (int, string)) *
 	return p
 }
 
-func targetsOf(list ...Target) func(context.Context, string) ([]Target, error) {
-	return func(context.Context, string) ([]Target, error) { return list, nil }
+func targetsOf(list ...Target) func(context.Context, string, string) ([]Target, error) {
+	return func(context.Context, string, string) ([]Target, error) { return list, nil }
 }
 
 // A notification reaches every subscriber, signed.
@@ -55,7 +55,7 @@ func TestNotifyReachesEveryPluginAndIsSigned(t *testing.T) {
 		Target{ID: "a", URL: first.URL, Secret: secret},
 		Target{ID: "b", URL: second.URL, Secret: secret},
 	)}
-	d.Notify(context.Background(), EventDeploySucceeded, map[string]string{"app": "web"})
+	d.Notify(context.Background(), EventDeploySucceeded, "team_1", map[string]string{"app": "web"})
 
 	for name, server := range map[string]*pluginServer{"first": first, "second": second} {
 		if server.received.Load() != 1 {
@@ -83,7 +83,7 @@ func TestAPluginThatIsDownDoesNotBreakTheNotification(t *testing.T) {
 	)}
 	// It returns nothing at all, so the only thing to assert is that the other
 	// plugin was still told.
-	d.Notify(context.Background(), EventDeployFailed, nil)
+	d.Notify(context.Background(), EventDeployFailed, "team_1", nil)
 	if alive.received.Load() != 1 {
 		t.Error("a plugin that was up did not get the event because another was down")
 	}
@@ -100,7 +100,7 @@ func TestABlockingPluginCanRefuse(t *testing.T) {
 		Blocking: true, Timeout: time.Second,
 	})}
 
-	verdict, who := d.Ask(context.Background(), EventDeployBefore, nil)
+	verdict, who := d.Ask(context.Background(), EventDeployBefore, "team_1", nil)
 	if verdict.Allow {
 		t.Fatal("a plugin that refused was not listened to")
 	}
@@ -120,7 +120,7 @@ func TestAnEmptyAnswerIsNotConsent(t *testing.T) {
 	d := Dispatcher{Targets: targetsOf(Target{
 		ID: "quiet", Name: "Quiet", URL: server.URL, Secret: secret, Blocking: true,
 	})}
-	if verdict, _ := d.Ask(context.Background(), EventDeployBefore, nil); verdict.Allow {
+	if verdict, _ := d.Ask(context.Background(), EventDeployBefore, "team_1", nil); verdict.Allow {
 		t.Error("an empty answer was taken as permission")
 	}
 }
@@ -132,7 +132,7 @@ func TestAPluginThatCannotBeReachedHasNotRefused(t *testing.T) {
 		ID: "gone", Name: "Gone", URL: "http://127.0.0.1:1", Secret: "x",
 		Blocking: true, Timeout: 200 * time.Millisecond,
 	})}
-	verdict, _ := d.Ask(context.Background(), EventDeployBefore, nil)
+	verdict, _ := d.Ask(context.Background(), EventDeployBefore, "team_1", nil)
 	if !verdict.Allow {
 		t.Error("a plugin that was unreachable stopped a deploy")
 	}
@@ -150,7 +150,7 @@ func TestEveryBlockingPluginHasToAgree(t *testing.T) {
 		Target{ID: "yes", URL: yes.URL, Secret: secret, Blocking: true},
 		Target{ID: "no", Name: "The strict one", URL: no.URL, Secret: secret, Blocking: true},
 	)}
-	if verdict, who := d.Ask(context.Background(), EventDeployBefore, nil); verdict.Allow {
+	if verdict, who := d.Ask(context.Background(), EventDeployBefore, "team_1", nil); verdict.Allow {
 		t.Errorf("one plugin's yes overruled another's no (attributed to %q)", who)
 	}
 }
@@ -163,7 +163,7 @@ func TestABlockingSubscriberIsNotAlsoNotified(t *testing.T) {
 	d := Dispatcher{Targets: targetsOf(Target{
 		ID: "both", URL: server.URL, Secret: secret, Blocking: true,
 	})}
-	d.Notify(context.Background(), EventDeployBefore, nil)
+	d.Notify(context.Background(), EventDeployBefore, "team_1", nil)
 	if server.received.Load() != 0 {
 		t.Error("a blocking subscriber was also sent the notification")
 	}
@@ -206,7 +206,7 @@ func TestABlockingHookCannotHoldADeployForever(t *testing.T) {
 		Blocking: true, Timeout: 100 * time.Millisecond,
 	})}
 	started := time.Now()
-	verdict, _ := d.Ask(context.Background(), EventDeployBefore, nil)
+	verdict, _ := d.Ask(context.Background(), EventDeployBefore, "team_1", nil)
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Errorf("a slow plugin held the deploy for %s", elapsed)
 	}

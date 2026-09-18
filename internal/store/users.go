@@ -448,3 +448,23 @@ func (db *DB) DeleteRecoveryCodes(ctx context.Context, userID string) error {
 	}
 	return nil
 }
+
+// SpendTOTPCounter records that a one-time password step has been used, and
+// reports whether it was still unused.
+//
+// The check and the write are one statement on purpose. Two sign-ins arriving
+// with the same code in the same instant would both pass a read-then-write, and
+// the whole point of the counter is that the second one loses.
+func (db *DB) SpendTOTPCounter(ctx context.Context, userID string, counter uint64) (bool, error) {
+	res, err := db.Exec(ctx,
+		`UPDATE users SET totp_last_counter = ? WHERE id = ? AND totp_last_counter < ?`,
+		counter, userID, counter)
+	if err != nil {
+		return false, fmt.Errorf("record the two-factor code as used: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("record the two-factor code as used: %w", err)
+	}
+	return n == 1, nil
+}

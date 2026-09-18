@@ -237,7 +237,7 @@ func (c *Cluster) RestartPlugin(ctx context.Context, id string) error {
 // Read from the database on every event rather than cached, because plugins are
 // installed, switched off and removed while the panel runs, and a cached list
 // is a plugin that keeps being sent events after somebody turned it off.
-func (c *Cluster) PluginTargets(ctx context.Context, event string) ([]plugins.Target, error) {
+func (c *Cluster) PluginTargets(ctx context.Context, event, teamID string) ([]plugins.Target, error) {
 	installed, err := c.db.ListPlugins(ctx)
 	if err != nil {
 		return nil, err
@@ -245,6 +245,9 @@ func (c *Cluster) PluginTargets(ctx context.Context, event string) ([]plugins.Ta
 	var targets []plugins.Target
 	for _, record := range installed {
 		if !record.Enabled || record.Status == "disabled" {
+			continue
+		}
+		if !c.pluginMaySee(ctx, record, teamID) {
 			continue
 		}
 		var manifest plugins.Manifest
@@ -273,6 +276,35 @@ func (c *Cluster) PluginTargets(ctx context.Context, event string) ([]plugins.Ta
 		})
 	}
 	return targets, nil
+}
+
+// pluginMaySee reports whether a plugin should hear about something that
+// happened in a team.
+//
+// A plugin is installed panel-wide and runs with a token belonging to whoever
+// installed it, so it can already read what that person can read. The events it
+// is sent have to draw the same line: an owner of one team must not install a
+// plugin and have it told about another team's deploys — or, for a blocking
+// hook, be able to stop them.
+//
+// An event with no team attached reaches nobody, and a plugin whose installer
+// cannot be identified hears nothing. Both are recorded rather than silent,
+// because a plugin that receives nothing looks exactly like a plugin that is
+// broken.
+func (c *Cluster) pluginMaySee(ctx context.Context, record store.Plugin, teamID string) bool {
+	if teamID == "" {
+		c.log.Warn("an event carried no team, so no plugin was sent it", "plugin", record.ID)
+		return false
+	}
+	if record.InstalledBy == "" {
+		c.log.Warn("a plugin has no record of who installed it, so it was not sent an event",
+			"plugin", record.ID)
+		return false
+	}
+	if _, err := c.db.GetMembership(ctx, teamID, record.InstalledBy); err != nil {
+		return false
+	}
+	return true
 }
 
 func subscriptionFor(manifest plugins.Manifest, event string) (plugins.EventSubscription, bool) {

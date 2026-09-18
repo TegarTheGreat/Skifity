@@ -328,34 +328,77 @@ func (db *DB) DeleteSharedVariable(ctx context.Context, projectID, key string) e
 	return nil
 }
 
+// sealedSource is one column that holds envelopes.
+//
+// The whole list is here so that rotation, and the test that checks nothing is
+// missing from it, read the same thing. A column that holds a sealed value and
+// is not on this list is a secret wrapped in a key that rotation is about to
+// drop — and nothing says so until something tries to read it back.
+type sealedSource struct {
+	table, valueCol, ctxPrefix string
+	// keyCol defaults to "id"; keyCol2 is for a row identified by two columns.
+	keyCol, keyCol2 string
+	// where narrows the rows, for a table whose column holds a sealed value
+	// only when a flag beside it says so.
+	where string
+}
+
+var sealedSources = []sealedSource{
+	{table: "app_variables", valueCol: "value_enc", ctxPrefix: "variable"},
+	{table: "shared_variables", valueCol: "value_enc", ctxPrefix: "shared_variable"},
+	{table: "servers", valueCol: "ssh_key_enc", ctxPrefix: "server_key"},
+	{table: "databases", valueCol: "credentials_enc", ctxPrefix: "database_credentials"},
+	{table: "git_sources", valueCol: "config_enc", ctxPrefix: "git_source"},
+	{table: "notification_channels", valueCol: "config_enc", ctxPrefix: "notification_channel"},
+	{table: "users", valueCol: "totp_secret_enc", ctxPrefix: "totp"},
+	{table: "plugins", valueCol: "hmac_sealed", ctxPrefix: "plugin"},
+	{table: "settings", valueCol: "value", keyCol: "key", ctxPrefix: "setting", where: "encrypted = 1"},
+	{table: "plugin_settings", valueCol: "value", keyCol: "plugin_id", keyCol2: "key",
+		ctxPrefix: "plugin-setting", where: "encrypted = 1"},
+}
+
 // ListSealedSecrets returns every sealed value in the database with the context
 // it was sealed under. Master key rotation walks this list.
 func (db *DB) ListSealedSecrets(ctx context.Context) ([]SealedRef, error) {
-	queries := []struct{ table, idCol, valueCol, ctxPrefix string }{
-		{"app_variables", "id", "value_enc", "variable"},
-		{"shared_variables", "id", "value_enc", "shared_variable"},
-		{"servers", "id", "ssh_key_enc", "server_key"},
-		{"databases", "id", "credentials_enc", "database_credentials"},
-		{"git_sources", "id", "config_enc", "git_source"},
-		{"notification_channels", "id", "config_enc", "notification_channel"},
-		{"users", "id", "totp_secret_enc", "totp"},
-	}
 	out := []SealedRef{}
-	for _, q := range queries {
-		rows, err := db.QueryContext(ctx, fmt.Sprintf(
-			`SELECT %s, %s FROM %s WHERE %s != ''`, q.idCol, q.valueCol, q.table, q.valueCol))
+	for _, source := range sealedSources {
+		keyCol := source.keyCol
+		if keyCol == "" {
+			keyCol = "id"
+		}
+		columns := keyCol
+		if source.keyCol2 != "" {
+			columns += ", " + source.keyCol2
+		}
+		where := source.valueCol + " != ''"
+		if source.where != "" {
+			where = source.where + " AND " + where
+		}
+		// Table and column names come from this fixed list, never from user
+		// input, so interpolating them is safe.
+		query := fmt.Sprintf(`SELECT %s, %s FROM %s WHERE %s`,
+			columns, source.valueCol, source.table, where)
+
+		rows, err := db.QueryContext(ctx, query)
 		if err != nil {
-			return nil, fmt.Errorf("list sealed values in %s: %w", q.table, err)
+			return nil, fmt.Errorf("list sealed values in %s: %w", source.table, err)
 		}
 		for rows.Next() {
-			var ref SealedRef
-			if err := rows.Scan(&ref.ID, &ref.Sealed); err != nil {
-				rows.Close()
-				return nil, fmt.Errorf("scan sealed value in %s: %w", q.table, err)
+			ref := SealedRef{
+				Table: source.table, Column: source.valueCol,
+				KeyColumn: keyCol, KeyColumn2: source.keyCol2,
+				ContextPrefix: source.ctxPrefix,
 			}
-			ref.Table = q.table
-			ref.Column = q.valueCol
-			ref.ContextPrefix = q.ctxPrefix
+			var err error
+			if source.keyCol2 != "" {
+				err = rows.Scan(&ref.ID, &ref.ID2, &ref.Sealed)
+			} else {
+				err = rows.Scan(&ref.ID, &ref.Sealed)
+			}
+			if err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan sealed value in %s: %w", source.table, err)
+			}
 			out = append(out, ref)
 		}
 		rows.Close()
@@ -363,32 +406,25 @@ func (db *DB) ListSealedSecrets(ctx context.Context) ([]SealedRef, error) {
 			return nil, err
 		}
 	}
-	// settings rows are keyed by name rather than id.
-	rows, err := db.QueryContext(ctx, `SELECT key, value FROM settings WHERE encrypted = 1 AND value != ''`)
-	if err != nil {
-		return nil, fmt.Errorf("list sealed settings: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var ref SealedRef
-		if err := rows.Scan(&ref.ID, &ref.Sealed); err != nil {
-			return nil, fmt.Errorf("scan sealed setting: %w", err)
-		}
-		ref.Table = "settings"
-		ref.Column = "value"
-		ref.KeyColumn = "key"
-		ref.ContextPrefix = "setting"
-		out = append(out, ref)
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // SealedRef points at one encrypted column value, for rotation.
+//
+// A row this misses is a secret that stays wrapped in a key the rotation is
+// about to drop, and nothing notices until something tries to read it back —
+// which for a plugin's signing secret is the next event nobody receives.
+// TestEverySealedColumnIsRotated walks the schema so that a new one cannot be
+// added without being listed here.
 type SealedRef struct {
-	Table         string
-	Column        string
-	KeyColumn     string // defaults to "id"
-	ID            string
+	Table     string
+	Column    string
+	KeyColumn string // defaults to "id"
+	ID        string
+	// KeyColumn2 and ID2 are the second half of a composite key, for a table
+	// whose row is identified by two columns rather than one.
+	KeyColumn2    string
+	ID2           string
 	Sealed        string
 	ContextPrefix string
 }
@@ -401,9 +437,13 @@ func (db *DB) UpdateSealed(ctx context.Context, ref SealedRef, sealed string) er
 	}
 	// Table and column names come from the fixed list in ListSealedSecrets, never
 	// from user input, so interpolating them is safe here.
-	_, err := db.Exec(ctx, fmt.Sprintf(`UPDATE %s SET %s = ? WHERE %s = ?`, ref.Table, ref.Column, keyCol),
-		sealed, ref.ID)
-	if err != nil {
+	query := fmt.Sprintf(`UPDATE %s SET %s = ? WHERE %s = ?`, ref.Table, ref.Column, keyCol)
+	args := []any{sealed, ref.ID}
+	if ref.KeyColumn2 != "" {
+		query += fmt.Sprintf(` AND %s = ?`, ref.KeyColumn2)
+		args = append(args, ref.ID2)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("rewrap %s.%s: %w", ref.Table, ref.Column, err)
 	}
 	return nil

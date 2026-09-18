@@ -134,7 +134,7 @@ func TestVerifyTOTPAcceptsClockDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TOTPCode: %v", err)
 	}
-	if err := VerifyTOTP(secret, code, now); err != nil {
+	if _, err := VerifyTOTP(secret, code, now); err != nil {
 		t.Fatalf("the current code was rejected: %v", err)
 	}
 	// A phone 30 seconds fast or slow must still work.
@@ -143,13 +143,13 @@ func TestVerifyTOTPAcceptsClockDrift(t *testing.T) {
 		if err != nil {
 			t.Fatalf("TOTPCode: %v", err)
 		}
-		if err := VerifyTOTP(secret, drifted, now); err != nil {
+		if _, err := VerifyTOTP(secret, drifted, now); err != nil {
 			t.Fatalf("a code %s out of date was rejected: %v", drift, err)
 		}
 	}
 	// Two minutes out is a replay, not drift.
 	stale, _ := TOTPCode(secret, now.Add(-2*time.Minute))
-	if err := VerifyTOTP(secret, stale, now); !errors.Is(err, ErrInvalidTOTP) {
+	if _, err := VerifyTOTP(secret, stale, now); !errors.Is(err, ErrInvalidTOTP) {
 		t.Fatalf("a two-minute-old code was accepted: %v", err)
 	}
 }
@@ -158,14 +158,14 @@ func TestVerifyTOTPRejectsBadInput(t *testing.T) {
 	secret, _ := GenerateTOTPSecret()
 	now := time.Now()
 	for _, bad := range []string{"", "123", "abcdef", "1234567"} {
-		if err := VerifyTOTP(secret, bad, now); !errors.Is(err, ErrInvalidTOTP) {
+		if _, err := VerifyTOTP(secret, bad, now); !errors.Is(err, ErrInvalidTOTP) {
 			t.Fatalf("VerifyTOTP(%q) gave %v, want ErrInvalidTOTP", bad, err)
 		}
 	}
 	// A code typed with the space authenticator apps display must work.
 	code, _ := TOTPCode(secret, now)
 	spaced := code[:3] + " " + code[3:]
-	if err := VerifyTOTP(secret, spaced, now); err != nil {
+	if _, err := VerifyTOTP(secret, spaced, now); err != nil {
 		t.Fatalf("a code typed with a space was rejected: %v", err)
 	}
 }
@@ -483,5 +483,65 @@ func TestAScopeNamingSomethingUnknownIsRefused(t *testing.T) {
 		if err := ValidateScopes(scopes); err == nil {
 			t.Errorf("ValidateScopes(%q) was accepted", scopes)
 		}
+	}
+}
+
+// A one-time password is one-time. The window is three thirty-second steps
+// wide, so a code somebody read over a shoulder, off a screen share or out of a
+// proxy log is otherwise good for another ninety seconds.
+func TestATwoFactorCodeCannotBeUsedTwice(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("create a keyring: %v", err)
+	}
+	service := NewService(db, keyring, time.Hour, false)
+
+	const email = "owner@example.test"
+	const password = "a reasonable passphrase"
+	hash, err := HashPassword(password)
+	if err != nil {
+		t.Fatalf("hash the password: %v", err)
+	}
+	user := store.User{Email: email, Name: "Owner", PasswordHash: hash, IsAdmin: true}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+
+	secret, _, err := service.SetupTOTP(ctx, &user, "Skifity")
+	if err != nil {
+		t.Fatalf("set up two-factor: %v", err)
+	}
+	code, err := TOTPCode(secret, time.Now())
+	if err != nil {
+		t.Fatalf("generate a code: %v", err)
+	}
+	if err := service.ConfirmTOTP(ctx, &user, code); err != nil {
+		t.Fatalf("confirm two-factor: %v", err)
+	}
+
+	// The code that switched two-factor on is spent, so it cannot be the code
+	// that gets past it.
+	if _, err := service.Login(ctx, email, password, code, "198.51.100.10", "test"); !errors.Is(err, ErrInvalidTOTP) {
+		t.Fatalf("the confirmation code signed somebody in: %v", err)
+	}
+
+	// A code from the next step works once...
+	next, err := TOTPCode(secret, time.Now().Add(30*time.Second))
+	if err != nil {
+		t.Fatalf("generate the next code: %v", err)
+	}
+	if _, err := service.Login(ctx, email, password, next, "198.51.100.10", "test"); err != nil {
+		t.Fatalf("a fresh code was refused: %v", err)
+	}
+	// ...and not twice.
+	if _, err := service.Login(ctx, email, password, next, "198.51.100.10", "test"); !errors.Is(err, ErrInvalidTOTP) {
+		t.Fatalf("the same code was accepted a second time: %v", err)
 	}
 }

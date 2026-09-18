@@ -62,25 +62,32 @@ func TOTPCode(secret string, at time.Time) (string, error) {
 	return totpAt(key, uint64(at.Unix())/uint64(totpPeriod.Seconds())), nil
 }
 
-// VerifyTOTP checks a user-supplied code, allowing for a little clock drift.
-func VerifyTOTP(secret, code string, at time.Time) error {
+// VerifyTOTP checks a user-supplied code, allowing for a little clock drift,
+// and returns the counter the code belongs to.
+//
+// The counter is what makes a code single-use. RFC 6238 says a one-time
+// password must be accepted once, and the window here is three steps wide, so
+// without recording which step was spent a code read off somebody's screen
+// stays valid for up to ninety seconds. The caller stores it; this function
+// stays pure.
+func VerifyTOTP(secret, code string, at time.Time) (uint64, error) {
 	code = strings.TrimSpace(strings.ReplaceAll(code, " ", ""))
 	if len(code) != totpDigits {
-		return ErrInvalidTOTP
+		return 0, ErrInvalidTOTP
 	}
 	key, err := decodeTOTPSecret(secret)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	counter := uint64(at.Unix()) / uint64(totpPeriod.Seconds())
 	for delta := -totpSkew; delta <= totpSkew; delta++ {
-		candidate := totpAt(key, uint64(int64(counter)+int64(delta)))
+		candidate := uint64(int64(counter) + int64(delta))
 		// Constant time so a timing side channel cannot reveal digits.
-		if subtle.ConstantTimeCompare([]byte(candidate), []byte(code)) == 1 {
-			return nil
+		if subtle.ConstantTimeCompare([]byte(totpAt(key, candidate)), []byte(code)) == 1 {
+			return candidate, nil
 		}
 	}
-	return ErrInvalidTOTP
+	return 0, ErrInvalidTOTP
 }
 
 func totpAt(key []byte, counter uint64) string {

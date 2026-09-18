@@ -88,7 +88,13 @@ type Target struct {
 type Dispatcher struct {
 	// Targets returns who wants an event, and is a function rather than a list
 	// because plugins are installed and switched off while the panel runs.
-	Targets func(ctx context.Context, event string) ([]Target, error)
+	//
+	// It takes the team the event belongs to as well as the event's name. A
+	// plugin is installed panel-wide but hears only about the teams whoever
+	// installed it can already see: without that, an owner of one team installs
+	// a plugin and it is told about every other team's deploys, and can refuse
+	// them.
+	Targets func(ctx context.Context, event, teamID string) ([]Target, error)
 	Client  *http.Client
 	Log     *slog.Logger
 }
@@ -122,11 +128,11 @@ func (d Dispatcher) log() *slog.Logger {
 // Errors are logged and not returned: a deploy that succeeded did succeed, and
 // a plugin that was restarting must not turn that into a failure on somebody's
 // page.
-func (d Dispatcher) Notify(ctx context.Context, event string, data any) {
+func (d Dispatcher) Notify(ctx context.Context, event, teamID string, data any) {
 	if d.Targets == nil {
 		return
 	}
-	targets, err := d.Targets(ctx, event)
+	targets, err := d.Targets(ctx, event, teamID)
 	if err != nil {
 		d.log().Error("could not work out which plugins wanted an event",
 			"event", event, "error", err)
@@ -160,11 +166,11 @@ func (d Dispatcher) Notify(ctx context.Context, event string, data any) {
 // Every plugin is asked and all of them have to agree, which is the only
 // composition that means anything: a plugin installed to stop something must
 // not be overruled by another plugin that does not care.
-func (d Dispatcher) Ask(ctx context.Context, event string, data any) (Verdict, string) {
+func (d Dispatcher) Ask(ctx context.Context, event, teamID string, data any) (Verdict, string) {
 	if d.Targets == nil {
 		return Verdict{Allow: true}, ""
 	}
-	targets, err := d.Targets(ctx, event)
+	targets, err := d.Targets(ctx, event, teamID)
 	if err != nil {
 		// A panel that cannot read its own plugin list must not start refusing
 		// deploys over it. This is the one place the answer is yes on failure,

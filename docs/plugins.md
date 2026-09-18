@@ -112,6 +112,13 @@ they will not install.
 Subscribing to an event the panel does not send is refused at install time, not
 discovered six months later when you notice your plugin has never run.
 
+**You hear about the teams whoever installed you is in, and no others.** A
+plugin is installed panel-wide and given a token belonging to the person who
+installed it, so it can already read what they can read; the events draw the
+same line. On a panel with one team that is everything. On a panel with several,
+an owner of one team cannot install a plugin and have it watch — or, with a
+blocking hook, stop — another team's deploys.
+
 **Blocking is only for an event that happens before something.** Refusing a
 deploy is a decision; refusing to acknowledge that a backup already finished is
 not, so `blocking: true` on anything else is refused. A blocking hook holds up

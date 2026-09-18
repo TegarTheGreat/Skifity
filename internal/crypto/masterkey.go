@@ -88,12 +88,20 @@ func SaveKeyring(path string, ring *Keyring) error {
 	var b strings.Builder
 	b.WriteString("# Skifity master keys. Anyone holding this file can read every stored secret.\n")
 	b.WriteString("# Losing it means losing every stored secret. Keep the recovery key somewhere safe.\n")
+
+	// One read lock for the whole file: a rotation halfway through would
+	// otherwise write an active line naming a key the loop had not reached.
+	ring.mu.RLock()
 	fmt.Fprintf(&b, "active = %s\n", ring.activeID)
-	ids := ring.IDs()
+	ids := make([]string, 0, len(ring.keys))
+	for id := range ring.keys {
+		ids = append(ids, id)
+	}
 	sort.Strings(ids)
 	for _, id := range ids {
 		fmt.Fprintf(&b, "%s = %s\n", id, base64.StdEncoding.EncodeToString(ring.keys[id]))
 	}
+	ring.mu.RUnlock()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create key directory: %w", err)
@@ -123,6 +131,17 @@ func SaveKeyring(path string, ring *Keyring) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("install key file: %w", err)
 	}
+	// The rename itself has to reach the disk. Without this a crash seconds
+	// later can leave the directory entry unwritten, and the file this whole
+	// design exists to protect is the one file whose loss cannot be undone.
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open key directory to sync it: %w", err)
+	}
+	defer dir.Close()
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("sync key directory: %w", err)
+	}
 	return nil
 }
 
@@ -150,6 +169,12 @@ func InitKeyring(path string) (*Keyring, error) {
 
 // NextKeyID returns an unused key id of the form k<n>, used when rotating.
 func (k *Keyring) NextKeyID() string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	return k.nextKeyIDLocked()
+}
+
+func (k *Keyring) nextKeyIDLocked() string {
 	for n := len(k.keys) + 1; ; n++ {
 		id := fmt.Sprintf("k%d", n)
 		if _, taken := k.keys[id]; !taken {
@@ -166,8 +191,14 @@ func (k *Keyring) BeginRotation() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id := k.NextKeyID()
-	if err := k.AddRetired(id, key); err != nil {
+	// One lock around choosing the id, adding the key and promoting it: two
+	// rotations started at the same moment would otherwise pick the same id,
+	// and the second would fail after the first had already moved the active
+	// key — a rotation half-done for a reason nobody could see.
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	id := k.nextKeyIDLocked()
+	if err := k.addLocked(id, key); err != nil {
 		return "", err
 	}
 	k.activeID = id
@@ -177,6 +208,8 @@ func (k *Keyring) BeginRotation() (string, error) {
 // DropKey removes a retired key once nothing references it any more. Refusing to
 // drop the active key stops an operator from locking themselves out with one call.
 func (k *Keyring) DropKey(id string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if id == k.activeID {
 		return errors.New("refusing to drop the active master key")
 	}
@@ -193,6 +226,8 @@ func (k *Keyring) DropKey(id string) error {
 //
 //	SKIFITY-RECOVERY-v1-k1-ABCDEFGH-IJKLMNOP-...
 func (k *Keyring) RecoveryKey() (string, error) {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
 	key, ok := k.keys[k.activeID]
 	if !ok {
 		return "", ErrUnknownKey

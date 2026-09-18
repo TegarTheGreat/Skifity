@@ -961,3 +961,83 @@ func TestOnlyRecentVersionsCanBeRolledBackTo(t *testing.T) {
 		t.Error("the oldest version is offered although its image is gone")
 	}
 }
+
+// TestEverySealedColumnIsRotated walks the schema the panel actually creates.
+//
+// A column that holds an envelope and is not in sealedSources is a secret the
+// master key rotation steps over: it stays wrapped in a key the rotation drops
+// at the end, and nothing says so until something tries to read it back. That
+// happened — the plugins table and its settings were both missed — so this
+// reads the schema rather than a list somebody remembered to extend.
+func TestEverySealedColumnIsRotated(t *testing.T) {
+	db := testDB(t)
+
+	covered := map[string]bool{}
+	for _, source := range sealedSources {
+		covered[source.table+"."+source.valueCol] = true
+	}
+
+	tables, err := db.QueryContext(t.Context(),
+		`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	defer tables.Close()
+
+	checked := 0
+	for tables.Next() {
+		var table string
+		if err := tables.Scan(&table); err != nil {
+			t.Fatalf("scan table name: %v", err)
+		}
+		columns, encrypted := columnsOf(t, db, table)
+		for _, column := range columns {
+			// Two spellings mean "this holds an envelope": a name ending in
+			// _enc or _sealed, and a value column beside an `encrypted` flag.
+			sealed := strings.HasSuffix(column, "_enc") || strings.HasSuffix(column, "_sealed") ||
+				(encrypted && column == "value")
+			if !sealed {
+				continue
+			}
+			checked++
+			if !covered[table+"."+column] {
+				t.Errorf("%s.%s holds sealed values and is not in sealedSources, "+
+					"so a master key rotation would leave it behind", table, column)
+			}
+		}
+	}
+	if err := tables.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if checked < len(sealedSources) {
+		t.Fatalf("only %d sealed columns were found in the schema and %d are listed; "+
+			"this test is not reading the schema", checked, len(sealedSources))
+	}
+}
+
+// columnsOf returns a table's column names and whether one of them is the
+// `encrypted` flag that marks a value column as holding an envelope.
+func columnsOf(t *testing.T, db *DB, table string) ([]string, bool) {
+	t.Helper()
+	rows, err := db.QueryContext(t.Context(), `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		t.Fatalf("read the columns of %s: %v", table, err)
+	}
+	defer rows.Close()
+	var names []string
+	encrypted := false
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan a column of %s: %v", table, err)
+		}
+		if name == "encrypted" {
+			encrypted = true
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return names, encrypted
+}

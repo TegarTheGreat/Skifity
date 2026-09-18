@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -393,5 +394,74 @@ func TestAKeyIDTooLongForTheHeaderIsRefused(t *testing.T) {
 	}
 	if err := ring.AddRetired(strings.Repeat("r", 256), retired); err == nil {
 		t.Fatal("a 256-byte retired key id was accepted")
+	}
+}
+
+// One keyring is shared by everything in the panel, and a rotation writes to it
+// while deploys, backups and the API read it. A Go map read during a map write
+// is a runtime throw, which nothing recovers: the panel is simply gone. This is
+// the test that has to be run with -race, and `make check` does.
+func TestAKeyringSurvivesARotationWhileItIsBeingUsed(t *testing.T) {
+	key, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring, err := NewKeyring("k1", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := ring.Seal([]byte("a secret"), "variable:app_1:TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if _, err := ring.Seal([]byte("another"), "variable:app_2:TOKEN"); err != nil {
+					t.Error(err)
+					return
+				}
+				if _, err := ring.Open(sealed, "variable:app_1:TOKEN"); err != nil {
+					t.Error(err)
+					return
+				}
+				_ = ring.ActiveID()
+				_ = ring.IDs()
+			}
+		}()
+	}
+
+	for range 5 {
+		if _, err := ring.BeginRotation(); err != nil {
+			t.Error(err)
+			break
+		}
+		if _, _, err := ring.Rewrap(sealed); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	close(stop)
+	wg.Wait()
+
+	// The secret sealed before any of it still opens, which is the promise
+	// rotation makes: old envelopes stay readable through the retired keys.
+	plaintext, err := ring.Open(sealed, "variable:app_1:TOKEN")
+	if err != nil {
+		t.Fatalf("the secret sealed before the rotation cannot be opened: %v", err)
+	}
+	if string(plaintext) != "a secret" {
+		t.Fatalf("opened %q", plaintext)
 	}
 }

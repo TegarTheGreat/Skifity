@@ -136,7 +136,21 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 		if err != nil {
 			return LoginResult{}, fmt.Errorf("read two-factor secret: %w", err)
 		}
-		if err := VerifyTOTP(string(secret), totpCode, time.Now()); err != nil {
+		counter, err := VerifyTOTP(string(secret), totpCode, time.Now())
+		if err == nil {
+			// A code is good for one sign-in. The window is three steps wide,
+			// so without this a code somebody read over a shoulder or out of a
+			// screen share works again for up to ninety seconds.
+			spent, spendErr := s.db.SpendTOTPCounter(ctx, user.ID, counter)
+			if spendErr != nil {
+				return LoginResult{}, fmt.Errorf("record the two-factor code: %w", spendErr)
+			}
+			if !spent {
+				s.recordFailure(ctx, email, ip)
+				return LoginResult{}, ErrInvalidTOTP
+			}
+		}
+		if err != nil {
 			// A phone is lost often enough that the codes written down when
 			// two-factor was turned on have to actually work. They are tried
 			// second, so a real code is never spent by a mistyped one.
@@ -327,7 +341,13 @@ func (s *Service) ConfirmTOTP(ctx context.Context, user *store.User, code string
 	if err != nil {
 		return fmt.Errorf("read two-factor secret: %w", err)
 	}
-	if err := VerifyTOTP(string(secret), code, time.Now()); err != nil {
+	counter, err := VerifyTOTP(string(secret), code, time.Now())
+	if err != nil {
+		return err
+	}
+	// Spent here too, so the code that switched two-factor on cannot be the
+	// code that gets past it a moment later.
+	if _, err := s.db.SpendTOTPCounter(ctx, user.ID, counter); err != nil {
 		return err
 	}
 	user.TOTPEnabled = true

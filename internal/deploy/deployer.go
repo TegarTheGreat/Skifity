@@ -174,6 +174,16 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 
 	d.setStatus(ctx, &deployment, store.DeployDeploying)
 
+	// Which team this belongs to, because a plugin only hears about the teams
+	// whoever installed it can already see. A team that cannot be read means no
+	// plugin is told, which is the safe direction: silence rather than an event
+	// crossing a boundary it should not.
+	teamID, err := d.db.TeamIDForApp(ctx, app.ID)
+	if err != nil {
+		d.log.Warn("could not work out which team this deployment belongs to",
+			"app", app.ID, "error", err)
+	}
+
 	// Plugins get their say after the image exists and before anything reaches
 	// the cluster: the point of a blocking hook is to stop a deploy, and one
 	// that ran after the rollout would be a hook that watched it happen.
@@ -181,7 +191,7 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 	// Every plugin that subscribed is asked and all of them have to agree. One
 	// that is down has not refused — a plugin that stops every deploy the
 	// moment it is upgraded is a plugin nobody installs twice.
-	verdict, refusedBy := d.Plugins.Ask(ctx, plugins.EventDeployBefore, map[string]any{
+	verdict, refusedBy := d.Plugins.Ask(ctx, plugins.EventDeployBefore, teamID, map[string]any{
 		"app_id": app.ID, "app": app.Slug, "environment": env.Slug,
 		"deployment_id": deployment.ID, "image": deployment.Image,
 		"commit": deployment.CommitSHA,
@@ -220,7 +230,7 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 	})
 	// Told, not asked: this already happened, and a plugin that is down must
 	// not turn a deploy that succeeded into a failure on somebody's page.
-	d.Plugins.Notify(ctx, plugins.EventDeploySucceeded, map[string]any{
+	d.Plugins.Notify(ctx, plugins.EventDeploySucceeded, teamID, map[string]any{
 		"app_id": app.ID, "app": app.Slug, "environment": env.Slug,
 		"deployment_id": deployment.ID, "image": deployment.Image,
 		"commit": deployment.CommitSHA,

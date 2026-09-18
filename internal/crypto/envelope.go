@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 const (
@@ -62,7 +63,14 @@ type Envelope struct {
 // Keyring holds the master keys. It has exactly one active key, which is used for
 // new and rewrapped envelopes, plus any number of retired keys kept so existing
 // envelopes can still be opened during a rotation.
+//
+// One Keyring is shared by everything in the panel — the API, the deployer, the
+// backup manager, the cluster adapter — and a rotation writes to it while those
+// are reading. A Go map read during a map write is not a race the program
+// survives: the runtime throws, and a throw is not a panic, so nothing recovers
+// it. Hence the lock, held for every read of the map as well as every write.
 type Keyring struct {
+	mu       sync.RWMutex
 	keys     map[string][]byte
 	activeID string
 }
@@ -113,6 +121,14 @@ func (k *Keyring) AddRetired(id string, key []byte) error {
 	if err := checkKeyID(id); err != nil {
 		return err
 	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.addLocked(id, key)
+}
+
+// addLocked is AddRetired with the lock already held, for the callers that hold
+// it while doing something else in the same breath.
+func (k *Keyring) addLocked(id string, key []byte) error {
 	if _, exists := k.keys[id]; exists {
 		return ErrDuplicateKeyI
 	}
@@ -121,10 +137,16 @@ func (k *Keyring) AddRetired(id string, key []byte) error {
 }
 
 // ActiveID is the id of the key that seals new envelopes.
-func (k *Keyring) ActiveID() string { return k.activeID }
+func (k *Keyring) ActiveID() string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+	return k.activeID
+}
 
 // IDs lists every key id in the keyring, active and retired.
 func (k *Keyring) IDs() []string {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
 	out := make([]string, 0, len(k.keys))
 	for id := range k.keys {
 		out = append(out, id)
@@ -135,6 +157,8 @@ func (k *Keyring) IDs() []string {
 // Promote makes an already-registered key the active one. Used by rotation once
 // the new key has been persisted.
 func (k *Keyring) Promote(id string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
 	if _, ok := k.keys[id]; !ok {
 		return ErrUnknownKey
 	}
@@ -156,10 +180,16 @@ func GenerateKey() ([]byte, error) {
 // context binds the ciphertext to where it lives, for example
 // "variable:app_7f3a:DATABASE_URL". The same context must be passed to Open.
 func (k *Keyring) Seal(plaintext []byte, context string) (string, error) {
+	// Held across the seal rather than only across the map read: DropKey zeroes
+	// a key's bytes, and a slice read after that is a key of zeros.
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+
 	if len(k.keys) == 0 {
 		return "", ErrEmptyKeyring
 	}
-	master, ok := k.keys[k.activeID]
+	activeID := k.activeID
+	master, ok := k.keys[activeID]
 	if !ok {
 		return "", ErrUnknownKey
 	}
@@ -176,12 +206,12 @@ func (k *Keyring) Seal(plaintext []byte, context string) (string, error) {
 	}
 	// The wrapped DEK is bound to the key id, so a wrapped DEK cannot be
 	// replayed under a different master key entry.
-	wrapped, err := sealWith(master, dek, []byte(k.activeID))
+	wrapped, err := sealWith(master, dek, []byte(activeID))
 	if err != nil {
 		return "", fmt.Errorf("wrap data key: %w", err)
 	}
 
-	return encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: ciphertext})
+	return encode(Envelope{KeyID: activeID, WrappedDEK: wrapped, Ciphertext: ciphertext})
 }
 
 // Open decrypts an envelope produced by Seal. context must match exactly.
@@ -190,6 +220,8 @@ func (k *Keyring) Open(stored, context string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	k.mu.RLock()
+	defer k.mu.RUnlock()
 	master, ok := k.keys[env.KeyID]
 	if !ok {
 		return nil, fmt.Errorf("%w: key id %q", ErrUnknownKey, env.KeyID)
@@ -215,14 +247,18 @@ func (k *Keyring) Rewrap(stored string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	if env.KeyID == k.activeID {
+	k.mu.RLock()
+	defer k.mu.RUnlock()
+
+	activeID := k.activeID
+	if env.KeyID == activeID {
 		return stored, false, nil
 	}
 	old, ok := k.keys[env.KeyID]
 	if !ok {
 		return "", false, fmt.Errorf("%w: key id %q", ErrUnknownKey, env.KeyID)
 	}
-	active, ok := k.keys[k.activeID]
+	active, ok := k.keys[activeID]
 	if !ok {
 		return "", false, ErrUnknownKey
 	}
@@ -233,11 +269,11 @@ func (k *Keyring) Rewrap(stored string) (string, bool, error) {
 	}
 	defer zero(dek)
 
-	wrapped, err := sealWith(active, dek, []byte(k.activeID))
+	wrapped, err := sealWith(active, dek, []byte(activeID))
 	if err != nil {
 		return "", false, fmt.Errorf("wrap data key: %w", err)
 	}
-	sealed, err := encode(Envelope{KeyID: k.activeID, WrappedDEK: wrapped, Ciphertext: env.Ciphertext})
+	sealed, err := encode(Envelope{KeyID: activeID, WrappedDEK: wrapped, Ciphertext: env.Ciphertext})
 	if err != nil {
 		return "", false, err
 	}

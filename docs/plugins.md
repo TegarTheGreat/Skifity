@@ -141,6 +141,74 @@ it, check it against your own server, and refuse to work without it. That keeps
 Skifity out of being a payment processor, and it keeps your customer
 relationship yours.
 
+## What your container is given
+
+Everything arrives as environment variables, from one Secret:
+
+| | |
+|---|---|
+| `SKIFITY_PLUGIN_ID` | your own id |
+| `SKIFITY_API` | the panel's address inside the cluster |
+| `SKIFITY_TOKEN` | your API token, carrying exactly the permissions you asked for |
+| `SKIFITY_SIGNING_SECRET` | the key events are signed with |
+| `SKIFITY_SETTING_<KEY>` | one per declared setting, upper-cased |
+| `PORT` | the port to listen on |
+
+**Your image has to run as a non-root user.** Your namespace enforces the strict
+Pod Security profile, and an image that starts as root is refused. Unlike an
+off-the-shelf application image, you control the Dockerfile, so this is a
+requirement rather than a problem — and an image that will not start is the most
+common reason a plugin looks broken.
+
+You get one replica, a read-only root filesystem, no Kubernetes API token, and a
+namespace of your own with a network policy that lets you reach **the panel, DNS
+and the internet** — and nothing else. Not another plugin, not an app, not a
+database, not the node network, and not the cloud metadata address.
+
+## Receiving events
+
+The panel POSTs to `/events` on your port:
+
+```
+POST /events
+X-Skifity-Event: deploy.succeeded
+X-Skifity-Signature: sha256=<hmac>
+Content-Type: application/json
+
+{"event":"deploy.succeeded","at":"2026-09-18T09:00:00Z","data":{...}}
+```
+
+**Verify the signature.** It is an HMAC-SHA256 over the exact request body,
+keyed with `SKIFITY_SIGNING_SECRET`. Your endpoint is only reachable from the
+panel's namespace, which is the first line — but a plugin that does not check
+the signature is a plugin that trusts its network. Compare in constant time.
+
+Answer `200`. For a **blocking** event, answer with a verdict:
+
+```json
+{"allow": false, "reason": "there is a change freeze until Monday"}
+```
+
+Three things about that answer:
+
+* **Silence is not consent.** An empty body is a refusal, because a plugin that
+  answered `200` and nothing else has said nothing.
+* **Not answering is not a refusal.** If you are down or slow, the deploy goes
+  ahead. A plugin that stops every deploy the moment it is upgraded is a plugin
+  nobody installs twice.
+* **Every blocking plugin has to agree.** One plugin's yes does not overrule
+  another's no.
+
+Give a reason. It is shown to the person whose deploy you just stopped, and
+without one they are told a plugin refused and nothing else.
+
+### Delivery is not guaranteed
+
+A notification is posted once, with a short timeout. A plugin that was
+restarting misses it, and there is no retry queue — saying so plainly is better
+than a loop that looks like a guarantee and is not one. If you must not miss
+anything, read the state back through the API. That is what your token is for.
+
 ## Publishing
 
 Publish the manifest anywhere it can be fetched over HTTPS. An operator installs
@@ -150,8 +218,11 @@ An operator who does not want a store at all can point the panel at their own
 index, or install from a manifest file on disk. That path is not an afterthought:
 a cluster with no way out to the internet has to be able to run plugins too.
 
-> **Not yet installable.** The standard, its validator and the permission model
-> exist and are tested. Nothing installs a plugin yet: the runtime that deploys
-> the container, the event delivery and the store are not written. This page
-> describes what a plugin *is*, so that one can be written against it; it does
-> not describe something you can run today. See the Status section of the README.
+> **Never run against a real cluster.** The manifest standard, the permission
+> model, the rendered Kubernetes objects, the event delivery and the blocking
+> verdicts are all unit-tested. Whether a real plugin image starts in the
+> namespace this renders, and whether an event reaches it over a real cluster
+> network, has not been tried — the same gap as everything else in ADR-0010.
+>
+> There is also no store yet: a plugin is installed by pasting a manifest or
+> giving its address. See the Status section of the README.

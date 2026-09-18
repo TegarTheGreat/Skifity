@@ -19,6 +19,7 @@ import (
 	"skifity/internal/kube"
 	"skifity/internal/metrics"
 	"skifity/internal/notify"
+	"skifity/internal/plugins"
 	"skifity/internal/registry"
 	"skifity/internal/runsafe"
 	"skifity/internal/settings"
@@ -35,7 +36,11 @@ type Deployer struct {
 	// registry checks for it, because a deployer in a test has no monitoring.
 	Metrics  *metrics.Registry
 	notifier notify.Notifier
-	log      *slog.Logger
+	// Plugins is how installed plugins hear about a deploy and, for the one
+	// blocking hook, get to stop it. The zero value sends nothing and refuses
+	// nothing, which is what a deployer in a test wants.
+	Plugins plugins.Dispatcher
+	log     *slog.Logger
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -172,6 +177,26 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 
 	d.setStatus(ctx, &deployment, store.DeployDeploying)
 
+	// Plugins get their say after the image exists and before anything reaches
+	// the cluster: the point of a blocking hook is to stop a deploy, and one
+	// that ran after the rollout would be a hook that watched it happen.
+	//
+	// Every plugin that subscribed is asked and all of them have to agree. One
+	// that is down has not refused — a plugin that stops every deploy the
+	// moment it is upgraded is a plugin nobody installs twice.
+	verdict, refusedBy := d.Plugins.Ask(ctx, plugins.EventDeployBefore, map[string]any{
+		"app_id": app.ID, "app": app.Slug, "environment": env.Slug,
+		"deployment_id": deployment.ID, "image": deployment.Image,
+		"commit": deployment.CommitSHA,
+	})
+	if !verdict.Allow {
+		d.fail(ctx, deployment, errdoc.New("deploy.refused_by_plugin", "A plugin stopped this deployment").
+			WithCause("%s refused it: %s", refusedBy, verdict.Reason).
+			WithImpact("Nothing was changed. The version that was serving is still serving.").
+			WithFix("Take up whatever it is asking for, or switch that plugin off under Plugins."))
+		return
+	}
+
 	// The release command runs after the image exists and before anything is
 	// applied, so a migration that fails stops the deployment rather than
 	// leaving the new code talking to the old schema. The version that was
@@ -195,6 +220,13 @@ func (d *Deployer) run(ctx context.Context, deploymentID string) {
 		Title: app.Name + " is live",
 		Body:  "The deployment finished and the new version is serving traffic.",
 		Level: "success",
+	})
+	// Told, not asked: this already happened, and a plugin that is down must
+	// not turn a deploy that succeeded into a failure on somebody's page.
+	d.Plugins.Notify(ctx, plugins.EventDeploySucceeded, map[string]any{
+		"app_id": app.ID, "app": app.Slug, "environment": env.Slug,
+		"deployment_id": deployment.ID, "image": deployment.Image,
+		"commit": deployment.CommitSHA,
 	})
 
 	// Build logs are by far the largest thing stored; keep the last few.

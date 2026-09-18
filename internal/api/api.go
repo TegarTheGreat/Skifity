@@ -286,6 +286,14 @@ func (s *Server) routes() chi.Router {
 			authed.Get("/operations/{operationID}", s.handleGetOperation)
 			authed.Post("/operations/{operationID}/cancel", s.handleCancelOperation)
 
+			// Plugins are owner-only: a plugin receives a token and runs a
+			// container somebody else wrote.
+			authed.Get("/plugins", s.handleListPlugins)
+			authed.Post("/plugins/inspect", s.handleInspectPlugin)
+			authed.Post("/plugins", s.handleInstallPlugin)
+			authed.Patch("/plugins/{pluginID}", s.handleUpdatePlugin)
+			authed.Delete("/plugins/{pluginID}", s.handleUninstallPlugin)
+
 			authed.Get("/templates", s.handleListTemplates)
 			authed.Get("/templates/{templateID}/icon", s.handleTemplateIcon)
 			authed.Post("/templates/{templateID}/install", s.handleInstallTemplate)

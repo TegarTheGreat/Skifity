@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"skifity/internal/plugins"
 	"skifity/internal/store"
 )
 
@@ -104,6 +105,19 @@ type Cluster interface {
 	Manifests(ctx context.Context, app store.App, env store.Environment) (string, error)
 	// InstallComponent installs an optional add-on on first use.
 	InstallComponent(ctx context.Context, name string) error
+	// InstallPlugin issues a plugin's credentials and starts its container.
+	InstallPlugin(ctx context.Context, record store.Plugin, manifest plugins.Manifest, token string) error
+	// RestartPlugin rolls a plugin, which is what a settings change needs: a
+	// Secret read into the environment is read once when the process starts.
+	RestartPlugin(ctx context.Context, id string) error
+	// StartPlugin and StopPlugin switch a plugin on and off without losing its
+	// settings or its token.
+	StartPlugin(ctx context.Context, id string) error
+	StopPlugin(ctx context.Context, id string) error
+	// RemovePlugin takes a plugin's namespace away, and everything in it.
+	RemovePlugin(ctx context.Context, id string) error
+	// NewPluginSigningSecret makes the sealed key a plugin verifies events with.
+	NewPluginSigningSecret(id string) (string, error)
 	// RefreshFirewall writes the current rules into the cluster and puts the
 	// guard's middleware in front of every protected app. Saving a rule that
 	// never reaches the cluster is a firewall that exists only in SQLite.

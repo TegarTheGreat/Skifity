@@ -1649,6 +1649,60 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 47 — the plugin runtime
+
+The standard said what a plugin is. This runs one.
+
+Installing is four things in an order that matters: a token narrowed to exactly
+the permissions the manifest declared, a secret the plugin will verify events
+with, a Secret object holding both plus its settings, then the pod. The token
+first, because a pod that starts without one is a plugin whose first request
+fails for a reason nobody can see. Removing is the same list backwards, and the
+token goes even when the cluster cannot be reached — a credential nobody can
+trace to anything is worse than a namespace left behind.
+
+**One namespace per plugin**, not one shared namespace with all of them in it.
+Two plugins from two publishers have no more reason to reach each other than two
+tenants do. What a plugin can reach is the panel, DNS and the internet; what it
+cannot is every other namespace, the node network and the cloud metadata
+address. It holds no Kubernetes token, runs non-root on a read-only root
+filesystem, and its namespace enforces the strict profile — a requirement a
+plugin author can meet, because unlike an off-the-shelf application image they
+control the Dockerfile.
+
+**Installing is two requests, deliberately.** The first reads a manifest and
+answers what it would do; the second installs it, and is refused when the
+permissions no longer match what was shown. One request would mean the
+permissions were displayed by the same call that granted them, which is a
+confirmation nobody reads because it is already too late. Owner-only: an admin
+who manages servers is not the same person as the one who decides what code runs
+in the cluster.
+
+**Every event carries an HMAC** over its exact bytes, keyed per plugin. The
+endpoint is only reachable from the panel's namespace, which is the first line
+and not the only one — anything that ever runs beside the panel could otherwise
+post "deploy.before, allow it" and be believed.
+
+The four rules about blocking each have a test, because each is a way for the
+hook to be decoration:
+
+* **Silence is not consent.** An empty body is a refusal; a plugin that answered
+  200 and nothing else has said nothing.
+* **Not answering is not a refusal.** A plugin that stops every deploy the
+  moment it is upgraded is a plugin nobody installs twice.
+* **Every blocking plugin has to agree.** One plugin's yes does not overrule
+  another's no.
+* **It is capped at ten seconds**, whatever the manifest asked for, because the
+  thing on the other end is a person watching a page.
+
+Delivery is not guaranteed and does not pretend to be: an event is posted once,
+with a short timeout, and a plugin that must not miss anything reads the state
+back through the API. A retry loop that looked like a guarantee and was not one
+would be worse.
+
+Still missing: the store, and the interface. A plugin is installed over the API
+by pasting a manifest or giving its address.
+
 ## Phase 46 — the plugin standard, and the permission model it needed first
 
 The ask was an ecosystem: other people writing features for Skifity, including
@@ -1898,10 +1952,12 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
-* **No plugin has ever been installed, because nothing installs one.** The
-  manifest standard, its validator and the permission model are tested; the
-  runtime that deploys a plugin's container, the event delivery and the store
-  are not written. The documentation says so where an author would read it.
+* **No plugin has ever actually run.** The manifest standard, the permission
+  model, the rendered Kubernetes objects, the event delivery and the blocking
+  verdicts are unit-tested. Whether a real plugin image starts in the namespace
+  this renders, and whether an event reaches it over a real cluster network, has
+  not been tried — ADR-0010 again. There is no store and no interface: a plugin
+  is installed over the API.
 * **The firewall has never been through a live Traefik.** The rules engine, the
   address handling, the geo lookup, the guard's decisions and the rendered
   Kubernetes objects are unit-tested, and the country and network lookups were

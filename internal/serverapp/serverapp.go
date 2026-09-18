@@ -26,6 +26,7 @@ import (
 	"skifity/internal/logging"
 	"skifity/internal/metrics"
 	"skifity/internal/notify"
+	"skifity/internal/plugins"
 	"skifity/internal/provision"
 	"skifity/internal/runsafe"
 	"skifity/internal/settings"
@@ -96,6 +97,16 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 
 	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
 	deployer.Metrics = registry
+	// Installed plugins hear about a deploy and, for the one blocking hook, get
+	// to stop it. The target list is read from the database on every event
+	// rather than cached, because a cached list is a plugin that keeps being
+	// sent events after somebody switched it off.
+	if clusterAdapter != nil {
+		deployer.Plugins = plugins.Dispatcher{
+			Targets: clusterAdapter.PluginTargets,
+			Log:     log,
+		}
+	}
 	provisioner := provision.New(provision.Options{
 		DB: db, Keyring: keyring, Hub: hub, Cluster: clusterAdapter,
 		Notifier: dispatcher, ClusterTokenPath: cfg.ClusterTokenPath, Logger: log,

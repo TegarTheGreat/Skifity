@@ -347,7 +347,8 @@
     "restarts": "重启次数",
     "node": "服务器",
     "noInstances": "没有正在运行的实例。",
-    "noInstancesHelp": "一次部署会构建应用并启动第一个实例。",
+    "noInstancesTitle": "还没有任何实例在运行",
+    "noInstancesHelp": "页面顶部的“{{action}}”会构建应用并启动第一个实例。",
     "phase": {
       "running": "运行中",
       "starting": "启动中",

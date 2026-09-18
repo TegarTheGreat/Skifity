@@ -1686,15 +1686,26 @@ looks for it now, and the pattern found the other one — a `Close` button in th
 dialog footer, hardcoded, behind a flag nothing passes today. A hardcoded
 English button waiting for the first person to turn it on.
 
-### Two deploy buttons
+### Two deploy buttons, and the answer changing on a second look
 
-Asked about, and worth writing down: on an app with nothing running, the header
-offers **Deploy now** and so does the Instances card. That is the panel's
-pattern, not an accident — Databases, Servers and Projects all repeat their
-primary action in the empty state, where somebody is looking, rather than only
-in the corner of the page. What was an accident is that this one was a bespoke
-paragraph with a loose button instead of the shared `EmptyState`. It is the
-shared one now, with a line saying what deploying will do.
+Asked about, answered "that is the pattern", asked again, and looked again —
+this time the answer is different, because the second look was at the screen
+rather than at the other pages.
+
+The pattern is real: Databases, Servers and Projects all repeat their primary
+action in the empty state. On those pages the empty state **is** the page, so
+the two buttons are obviously the same thing, because there is nothing else they
+could be. The app page is not that: the empty state sits in a card titled
+"Instances", among other cards, with "Deploy now" already in the header. A
+second "Deploy now" inside a card about instances invites the reading that it
+starts an instance without deploying — which is not a thing this panel does.
+
+So the app page is the one place that does not repeat the action. The sentence
+does the work instead, and names the button by its own label rather than in
+English: it reads "Deploy sekarang" in Indonesian and "立即部署" in Chinese,
+which is what the button at the top of that page actually says. The empty state
+also has a title now rather than the logs tab's full sentence with a full stop
+in it.
 
 ### What is still English, said plainly
 

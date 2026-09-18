@@ -347,7 +347,8 @@
     "restarts": "Mulai ulang",
     "node": "Server",
     "noInstances": "Tidak ada instance yang berjalan.",
-    "noInstancesHelp": "Sebuah deployment membangun aplikasi dan menjalankan yang pertama.",
+    "noInstancesTitle": "Belum ada yang berjalan",
+    "noInstancesHelp": "{{action}}, di bagian atas halaman ini, membangun aplikasi dan menjalankan instance pertamanya.",
     "phase": {
       "running": "Berjalan",
       "starting": "Menyala",

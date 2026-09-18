@@ -305,17 +305,29 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
         </CardHeader>
         <CardContent className="p-0">
           {instances.length === 0 ? (
-            // The shared empty state, like every other one in the panel, rather
-            // than a paragraph and a loose button. The deploy button repeats
-            // the header's on purpose — the same pattern as Databases, Servers
-            // and Projects, where the action people came for is offered where
-            // they are looking rather than only in the corner of the page.
+            // No button here, and that is the one place this panel does not
+            // repeat its primary action in an empty state.
+            //
+            // On Databases, Servers and Projects the empty state is the whole
+            // page: the header's button and the empty state's are obviously the
+            // same thing, because there is nothing else to be. This one sits in
+            // a card titled "Instances", among other cards, with "Deploy now"
+            // already in the header — and a second "Deploy now" inside a card
+            // about instances reads as though it might start an instance
+            // without deploying, which is not a thing. The sentence says what
+            // deploying does instead, and the button it names is at the top of
+            // the page, on every tab.
             <EmptyState
               bordered={false}
               icon={RocketIcon}
-              title={t("apps.noInstances")}
-              description={t("apps.noInstancesHelp")}
-              action={<DeployButton appId={app.id} />}
+              // A title, not the sentence the logs tab uses as a description:
+              // "No instances are running." with a full stop reads as a
+              // paragraph where every other empty state has a heading.
+              title={t("apps.noInstancesTitle")}
+              // The button's own label, so the sentence names what is actually
+              // written at the top of the page: it says "Deploy sekarang" in
+              // Indonesian and "立即部署" in Chinese.
+              description={t("apps.noInstancesHelp", { action: t("deploy.deployNow") })}
             />
           ) : (
             <Table>

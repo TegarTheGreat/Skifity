@@ -355,7 +355,8 @@
     "restarts": "Restarts",
     "node": "Server",
     "noInstances": "No instances are running.",
-    "noInstancesHelp": "A deployment builds the app and starts the first one.",
+    "noInstancesTitle": "Nothing is running yet",
+    "noInstancesHelp": "{{action}}, at the top of this page, builds the app and starts the first one.",
     "phase": {
       "running": "Running",
       "starting": "Starting",

@@ -74,6 +74,48 @@ case "$fail_text" in
 *) t_fail "a failure should say how to fix it" ;;
 esac
 
+# --- the installer refuses an image nobody published ------------------------
+
+# There is no published Skifity image. The default name is in a namespace this
+# project does not own, so an install that carried on would either fail on the
+# pull after k3s was already on the machine, or — once somebody registers that
+# name — run a stranger's image as root. The refusal has to come before
+# anything changes.
+( IMAGE="${UNPUBLISHED_IMAGE}:latest"; check_image >/dev/null 2>&1 ) &&
+  t_fail "the installer should refuse the unpublished default image" ||
+  t_pass "the unpublished default image is refused"
+
+image_text=$( (IMAGE="${UNPUBLISHED_IMAGE}:latest"; check_image) 2>&1 || true)
+case "$image_text" in
+*"${UNPUBLISHED_IMAGE}:latest"*) t_pass "the refusal names the image it will not use" ;;
+*) t_fail "the refusal should name the image, got: $image_text" ;;
+esac
+case "$image_text" in
+*"make image"*"SKIFITY_IMAGE"*) t_pass "the refusal says how to build and pass one" ;;
+*) t_fail "the refusal should say how to build an image and pass it" ;;
+esac
+case "$image_text" in
+*"Nothing on this server has been changed"*) t_pass "the refusal says the server is untouched" ;;
+*) t_fail "the refusal should say nothing was changed" ;;
+esac
+
+( IMAGE="registry.example.test/skifity:1.2.3"; check_image >/dev/null 2>&1 ) &&
+  t_pass "an image the operator built is accepted" ||
+  t_fail "check_image should accept an image the operator names"
+
+# And it has to be asked before the machine is touched: preflight runs first,
+# and check_image runs inside it before any step that changes anything.
+if awk '/^preflight\(\) \{/,/^\}/' "$ROOT/installer/install.sh" | grep -q 'check_image'; then
+  t_pass "the image is checked inside preflight"
+else
+  t_fail "check_image is no longer called from preflight"
+fi
+if awk '/^preflight$/{p=1} /^install_k3s$/{k=1; if (p) print "ordered"}' "$ROOT/installer/install.sh" | grep -q ordered; then
+  t_pass "preflight runs before k3s is installed"
+else
+  t_fail "install.sh no longer runs preflight before installing k3s"
+fi
+
 # --- the manifests render ---------------------------------------------------
 
 SOURCE_DIR="$ROOT"

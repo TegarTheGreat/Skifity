@@ -3,6 +3,12 @@
 #
 #   curl -fsSL https://get.skifity.com | sh
 #
+# That command does not work yet: get.skifity.com does not resolve and no image
+# has been published. Until it has, install from a clone:
+#
+#   make image
+#   sudo SKIFITY_IMAGE=<your image> SKIFITY_MANIFEST_BASE=./deploy sh installer/install.sh
+#
 # Turns a fresh Ubuntu or Debian server into a Skifity control plane: k3s, the
 # panel, and a URL to open. It is safe to run again: every step checks what is
 # already there before changing anything.
@@ -30,7 +36,14 @@
 set -eu
 
 VERSION="${SKIFITY_VERSION:-latest}"
-IMAGE="${SKIFITY_IMAGE:-ghcr.io/skifity/skifity:${VERSION}}"
+# The name the project would publish under if it had a published home. It does
+# not: ghcr.io/skifity and github.com/skifity are not namespaces this project
+# owns, and nothing has ever been pushed to either. So this is not a default
+# that happens to fail — it is a default that would, the day somebody else
+# registers that name, silently start working and run a stranger's image as
+# root on your server. preflight refuses it before the machine is touched.
+UNPUBLISHED_IMAGE="ghcr.io/skifity/skifity"
+IMAGE="${SKIFITY_IMAGE:-${UNPUBLISHED_IMAGE}:${VERSION}}"
 NAMESPACE="skifity-system"
 CONFIG_DIR="/etc/skifity"
 DATA_DIR="/var/lib/skifity"
@@ -104,6 +117,28 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # --- preflight --------------------------------------------------------------
 
+# The image has to be one that exists. Called by preflight before anything on
+# this machine changes: carrying on would install k3s, change the firewall and
+# write to /etc, and only then fail on a pull — leaving a half-built cluster
+# behind — or, once somebody registers that namespace, succeed with an image
+# nobody here published.
+check_image() {
+	case "$IMAGE" in
+	"${UNPUBLISHED_IMAGE}:"*)
+		fail \
+			"There is no published Skifity image yet, and ${IMAGE} is not a name this project owns." \
+			"Build one from the repository and point the installer at it:
+
+  git clone <this repository> && cd skifity
+  make image                     # builds and tags a local image
+  sudo SKIFITY_IMAGE=<your image> SKIFITY_MANIFEST_BASE=./deploy sh installer/install.sh
+
+Running installer/install.sh from inside a clone reads deploy/*.yaml from disk,
+so no manifest is fetched either. Nothing on this server has been changed."
+		;;
+	esac
+}
+
 preflight() {
 	step "Checking this server"
 
@@ -111,11 +146,13 @@ preflight() {
 		"This installer has to run as root: it installs k3s and writes to /etc." \
 		"Run it again with sudo:
 
-  curl -fsSL https://get.skifity.com | sudo sh"
+  sudo sh installer/install.sh"
 
 	mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
 	: >>"$LOG_FILE" 2>/dev/null || LOG_FILE=/dev/null
 	log "skifity installer starting, image ${IMAGE}"
+
+	check_image
 
 	OS_NAME="unknown"; OS_VERSION=""
 	if [ -r /etc/os-release ]; then

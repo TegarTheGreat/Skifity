@@ -75,20 +75,33 @@ func TestParseScheduleRejectsNonsense(t *testing.T) {
 	}
 }
 
-func TestDescribe(t *testing.T) {
-	cases := map[string]string{
-		"0 3 * * *":  "every day at 03:00 UTC",
-		"30 2 * * 0": "every Sunday at 02:30 UTC",
-		"0 * * * *":  "every hour at 00 minutes past",
+// A step after a plain number means "from here to the end of the field", and
+// dropping it is silent: the schedule parses, it just fires a fraction as often
+// as it was written.
+func TestAStepAfterANumberIsARange(t *testing.T) {
+	schedule, err := ParseSchedule("0 5/6 * * *")
+	if err != nil {
+		t.Fatalf("ParseSchedule: %v", err)
 	}
-	for expression, want := range cases {
-		schedule, err := ParseSchedule(expression)
-		if err != nil {
-			t.Fatalf("ParseSchedule(%q): %v", expression, err)
+	want := []int{5, 11, 17, 23}
+	if len(schedule.Hours) != len(want) {
+		t.Fatalf("hours = %v, want %v", schedule.Hours, want)
+	}
+	for i, hour := range want {
+		if schedule.Hours[i] != hour {
+			t.Fatalf("hours = %v, want %v", schedule.Hours, want)
 		}
-		if got := schedule.Describe(); got != want {
-			t.Errorf("Describe(%q) = %q, want %q", expression, got, want)
+	}
+
+	for _, at := range []string{"2026-09-16T11:00:00Z", "2026-09-16T23:00:00Z"} {
+		moment, _ := time.Parse(time.RFC3339, at)
+		if !schedule.Matches(moment) {
+			t.Errorf("%s should be on the schedule 0 5/6 * * *", at)
 		}
+	}
+	noon, _ := time.Parse(time.RFC3339, "2026-09-16T12:00:00Z")
+	if schedule.Matches(noon) {
+		t.Error("12:00 is not on the schedule 0 5/6 * * *")
 	}
 }
 

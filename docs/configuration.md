@@ -57,13 +57,23 @@ to get started.
 | Group | What it is for |
 |---|---|
 | **General** | The panel's own URL, the default builder, and an explicit switch for usage reporting — which is off, and has always been off, and exists so that its absence is visible rather than assumed. |
-| **Domains and HTTPS** | A wildcard domain so every app gets a free subdomain, the address domains should point at, and the email Let's Encrypt sends expiry warnings to. |
-| **Git** | A GitHub App, for organisations that would rather not use a personal token. Personal tokens for GitHub, GitLab and Gitea are added under Settings → Git without anything here. |
+| **Cluster** | The k3s version new servers are installed with, the pod network they join on, how long a preview environment lives, and how much history — deployments per app, activity log in days — is kept. |
+| **Domains and HTTPS** | A wildcard domain so every app gets a free subdomain, the address domains should point at, the email Let's Encrypt sends expiry warnings to, a Cloudflare Tunnel token for a cluster with no public address, the proxies whose forwarded addresses are believed, and the country and network databases the firewall reads. |
 | **Backup storage** | S3 or anything that speaks S3, including MinIO. Credentials never leave the panel: a backup Job is handed a presigned URL that expires. |
 | **DNS** | A provider token, for wildcard certificates, which need a DNS challenge. |
 | **Email** | SMTP, for notifications. |
 | **Image registry** | Where built images go. An in-cluster registry is installed on first use if this is left empty. |
 | **Sign-in** | An OpenID Connect provider, so people sign in with the account they already have. See below. |
+| **Plugins** | The store the Plugins page reads, and the public key its index has to be signed by. See [Writing a Skifity plugin](plugins.md). |
+
+**Git** is a tab rather than a group of settings: a connection to GitHub, GitLab
+or Gitea is a row you add, with a personal access token. There was a group here
+for a GitHub App — an app id, a client id, a client secret, a private key — and
+nothing ever read one of them, so it is gone until the code behind it exists.
+
+**Notifications** is a tab rather than a group of settings: a channel is a row
+you add, and Skifity sends to Telegram, Discord, a webhook of your own, or email
+through the SMTP settings above.
 
 ## Adding somebody to the team
 

@@ -46,9 +46,22 @@ internal/
   manifests/        Renders the panel's own Kubernetes objects from deploy/.
   templates/        The one-click catalogue: catalogue/*.yaml, one per app.
   buildctx/         No code: the tests that check the image could be built.
-  settings/, notify/, gitsrc/, audit/, events/, logging/, config/, runsafe/
+  plugins/          The plugin standard: the manifest, permissions, events.
+  pluginstore/      Reading and verifying a plugin store's signed index.
+  edgerules/, geoip/, guard/
+                    The firewall: the rule engine, the databases it reads, and
+                    the process that enforces it in front of an app.
+  cron/             The five-field parser backups and scheduled commands share.
+  registry/         The in-cluster registry's HTTP API, for the sweep.
+  serverapp/        Wiring: the HTTP server, the minute tick, startup recovery.
+  docsite/          Serves docs/ in the panel and checks every link resolves.
+  netguard/, shellsafe/, runsafe/
+                    The three "do not let this be a hole" packages: an address
+                    the panel dials, a string a shell runs, a panic in a
+                    goroutine.
+  settings/, notify/, gitsrc/, audit/, events/, logging/, config/
+  metrics/, watch/, version/
 web/                The frontend. Built into web/dist and embedded in the binary.
-  docsite/          Renders docs/ into the panel, so the links in errors work.
 deploy/             The panel's own Kubernetes objects, with placeholders.
 docs/               Also a Go package: the user-facing pages are embedded.
 installer/          install.sh and uninstall.sh. POSIX shell, no bashisms.

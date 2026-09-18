@@ -86,8 +86,11 @@ properly.
 ## Volumes
 
 A volume backup is a compressed tar of everything on the volume, taken while the
-app keeps running. Take one from an app's **Storage** tab, or set a schedule the
-same way as for a database.
+app keeps running. Take one from an app's **Storage** tab.
+
+**A volume has no schedule yet.** Databases do; a volume is backed up when
+somebody asks for one. Saying so is better than a settings page that looks like
+it has a nightly copy of your uploads and does not.
 
 The volume is mounted read-only for the copy. A backup that can write to the
 thing it is copying is one bug away from being what destroyed it.

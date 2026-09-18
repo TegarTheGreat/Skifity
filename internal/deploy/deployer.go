@@ -71,12 +71,9 @@ func (d *Deployer) Deploy(ctx context.Context, req api.DeployRequest) (store.Dep
 		return store.Deployment{}, err
 	}
 
+	// Empty means the build clones the branch tip, and the image is tagged with
+	// the deployment number instead of a commit.
 	commit := req.CommitSHA
-	if commit == "" {
-		// Without a commit the build clones the branch tip, and the resulting
-		// image is tagged with whatever it turns out to be.
-		commit = ""
-	}
 
 	buildArgs, err := d.buildTimeVariables(ctx, app)
 	if err != nil {

@@ -130,8 +130,14 @@ func (c *Cluster) CollectRegistryGarbage(ctx context.Context) error {
 	c.log.Info("untagged images nothing can reach", "count", removed)
 
 	namespace := c.client.BuildNamespace()
-	// A finished Job with this name would refuse the next one.
-	_ = c.client.Applier().Delete(ctx, "batch/v1", "Job", namespace, registryGCJob)
+	// A finished Job with this name would refuse the next one, and the name is
+	// the same every sweep — so the delete has to have finished before the next
+	// one is applied. Applying onto an object that is still being deleted is
+	// accepted by the API server and then collected, which leaves the wait
+	// below watching for a Job that is not coming back.
+	if err := c.client.Applier().DeleteAndWait(ctx, "batch/v1", "Job", namespace, registryGCJob, 2*time.Minute); err != nil {
+		return fmt.Errorf("clear the previous registry sweep: %w", err)
+	}
 	if err := c.client.Applier().Apply(ctx, registryGCJobSpec(namespace)); err != nil {
 		return fmt.Errorf("start the registry sweep: %w", err)
 	}

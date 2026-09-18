@@ -102,8 +102,14 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 	}
 
 	// Remove any leftover Job with the same name, so a retry is not rejected
-	// because a finished Job is still sitting there.
-	_ = d.cluster.Client().Applier().Delete(ctx, "batch/v1", "Job", spec.Namespace, spec.Name)
+	// because a finished Job is still sitting there — and wait for it to go,
+	// because an apply onto an object that is still being deleted is accepted
+	// and then collected, which would leave this build waiting for a pod that
+	// never arrives.
+	if err := d.cluster.Client().Applier().DeleteAndWait(ctx, "batch/v1", "Job",
+		spec.Namespace, spec.Name, time.Minute); err != nil {
+		return "", fmt.Errorf("clear the previous build: %w", err)
+	}
 
 	d.appendLog(ctx, deployment.ID, fmt.Sprintf("Building %s with the %s builder.", app.Name, chosen))
 	if err := d.cluster.Client().Applier().Apply(ctx, job); err != nil {
@@ -149,8 +155,6 @@ func (d *Deployer) buildKitAddress() string {
 
 // streamBuild follows the build pod's logs and reports the outcome.
 func (d *Deployer) streamBuild(ctx context.Context, deployment *store.Deployment, namespace, jobName string, chosen builder.Builder) error {
-	clientset := d.cluster.Client().Clientset()
-
 	pod, err := d.waitForBuildPod(ctx, namespace, jobName)
 	if err != nil {
 		return err
@@ -184,7 +188,6 @@ func (d *Deployer) streamBuild(ctx context.Context, deployment *store.Deployment
 			With("exit_code", fmt.Sprint(exitCode)).
 			With("builder", string(chosen))
 	}
-	_ = clientset
 	return nil
 }
 

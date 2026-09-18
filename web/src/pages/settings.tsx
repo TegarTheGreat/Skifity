@@ -68,6 +68,15 @@ import type {
   User,
 } from "@/lib/types"
 
+/**
+ * The order groups are shown in, and what each is called.
+ *
+ * It is an ordering and not the list: the list comes from the settings the
+ * server sends. A hand-kept copy of the server's groups is a group that renders
+ * as nothing at all the day somebody adds one — which is what happened to
+ * single sign-on and to plugins, both of which existed, were documented, and
+ * had nowhere to be set.
+ */
 const GROUPS: { key: string; label: string }[] = [
   { key: "general", label: "settings.general" },
   { key: "cluster", label: "settings.cluster" },
@@ -78,8 +87,25 @@ const GROUPS: { key: string; label: string }[] = [
   { key: "email", label: "settings.email" },
   { key: "notifications", label: "settings.notifications" },
   { key: "registry", label: "settings.registry" },
+  { key: "signin", label: "settings.signin" },
   { key: "plugins", label: "settings.plugins" },
 ]
+
+/**
+ * Every group present in the settings, in the order above, with anything the
+ * server knows about and this build does not put at the end under its own key.
+ */
+function groupsOf(items: Setting[]): { key: string; label: string }[] {
+  const present = new Set(items.map((setting) => setting.group))
+  const ordered = GROUPS.filter((group) => present.has(group.key))
+  const known = new Set(GROUPS.map((group) => group.key))
+  for (const key of present) {
+    // No translation for a group this build has never heard of, so the key is
+    // shown as it came. Untranslated is a great deal better than invisible.
+    if (!known.has(key)) ordered.push({ key, label: key })
+  }
+  return ordered
+}
 
 export function SettingsPage() {
   const { t } = useTranslation()
@@ -159,7 +185,7 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
 
   const items = settings.data?.items ?? []
   const dirty = Object.keys(draft).length > 0
-  const shown = GROUPS.filter(
+  const shown = groupsOf(items).filter(
     (group) => (!only || only.includes(group.key)) && (!except || !except.includes(group.key)),
   )
 
@@ -177,7 +203,9 @@ function SettingGroups({ only, except }: { only?: string[]; except?: string[] })
         return (
           <Card key={group.key}>
             <CardHeader>
-              <CardTitle className="text-base">{t(group.label)}</CardTitle>
+              <CardTitle className="text-base">
+                {group.label.includes(".") ? t(group.label) : group.label}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <FieldGroup>

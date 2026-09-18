@@ -368,6 +368,12 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
+
+	// The last minute that was evaluated, so a tick that arrives late can catch
+	// up on the ones it stepped over. Go drops ticks it could not deliver, and
+	// without this a slow minute is a schedule that silently did not fire.
+	last := time.Now().UTC().Truncate(time.Minute)
+
 	for {
 		// A panic costs this minute, not the scheduler. Recovering around the
 		// loop instead would keep the process alive and leave it with no
@@ -375,14 +381,23 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 		// the backups simply stop happening.
 		func() {
 			defer runsafe.Recover(log, "the minute tick", nil)
-			backups.RunScheduled(ctx)
+			now := time.Now().UTC().Truncate(time.Minute)
+			backups.RunScheduledAt(ctx, minutesAfter(last, now))
+			last = now
+
+			pruneHistory(ctx, db, log)
 			// Maintenance is on the same minute tick rather than a timer of its
 			// own, because "due" has to survive a restart: a panel restarted
 			// daily would never reach a weekly timer, and the disk would fill
-			// anyway.
-			pruneHistory(ctx, db, log)
+			// anyway. It runs beside the tick and not inside it: the registry
+			// sweep waits for every build in flight and then for a Job that is
+			// allowed half an hour, and a backup due in that window is a backup
+			// that would never have been taken.
 			if c != nil {
-				c.MaintainRegistry(ctx)
+				go func() {
+					defer runsafe.Recover(log, "the registry sweep", nil)
+					c.MaintainRegistry(ctx)
+				}()
 			}
 		}()
 		select {
@@ -391,6 +406,29 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 		case <-ticker.C:
 		}
 	}
+}
+
+// catchUpLimit bounds how far back a late tick looks.
+//
+// The same five minutes Kubernetes gives a CronJob that could not start on
+// time: long enough to cover a slow minute or a restart, short enough that a
+// panel switched on after a week off does not fire a week of backups at once.
+const catchUpLimit = 5
+
+// minutesAfter lists the minutes from last (exclusive) to now (inclusive).
+//
+// A clock that went backwards — an NTP correction, a virtual machine resumed —
+// yields the current minute and nothing else, because the alternative is a loop
+// that never ends.
+func minutesAfter(last, now time.Time) []time.Time {
+	if !now.After(last) {
+		return []time.Time{now}
+	}
+	minutes := make([]time.Time, 0, catchUpLimit)
+	for at := now; at.After(last) && len(minutes) < catchUpLimit; at = at.Add(-time.Minute) {
+		minutes = append(minutes, at)
+	}
+	return minutes
 }
 
 // portOf pulls the port out of a listen address, for the setup message.

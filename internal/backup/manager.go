@@ -438,13 +438,30 @@ func (m *Manager) publish(ctx context.Context, databaseID string) {
 
 // RunScheduled is called by the scheduler for every enabled policy that is due.
 func (m *Manager) RunScheduled(ctx context.Context) {
+	m.RunScheduledAt(ctx, []time.Time{time.Now().UTC()})
+}
+
+// RunScheduledAt runs the policies due in any of the given minutes.
+//
+// More than one minute because the scheduler's tick can arrive late — a slow
+// minute, a restart — and a policy due in a minute nobody evaluated is a backup
+// that silently did not happen. A policy that matches several of them still
+// runs once: catching up is not a reason to take the same backup twice.
+func (m *Manager) RunScheduledAt(ctx context.Context, minutes []time.Time) {
 	policies, err := m.db.ListEnabledBackupPolicies(ctx)
 	if err != nil {
 		m.log.Warn("could not read the backup schedules", "error", err)
 		return
 	}
 	for _, policy := range policies {
-		if !dueNow(policy.Schedule, time.Now().UTC()) {
+		due := false
+		for _, minute := range minutes {
+			if dueNow(policy.Schedule, minute.UTC()) {
+				due = true
+				break
+			}
+		}
+		if !due {
 			continue
 		}
 		if _, err := m.Run(ctx, policy.TargetType, policy.TargetID, "scheduled"); err != nil {

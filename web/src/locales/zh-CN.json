@@ -553,6 +553,7 @@
     "email": "邮件",
     "notifications": "通知",
     "registry": "镜像仓库",
+    "signin": "单点登录",
     "security": "安全",
     "components": "组件",
     "team": "团队",

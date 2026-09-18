@@ -96,21 +96,6 @@ func (s Schedule) Matches(t time.Time) bool {
 	}
 }
 
-// Describe renders a schedule in words, for the UI.
-func (s Schedule) Describe() string {
-	if len(s.Minutes) == 1 && len(s.Hours) == 1 && !s.dayOfMonthRestricted && !s.dayOfWeekRestricted {
-		return fmt.Sprintf("every day at %02d:%02d UTC", s.Hours[0], s.Minutes[0])
-	}
-	if len(s.Minutes) == 1 && len(s.Hours) == 1 && s.dayOfWeekRestricted && len(s.DaysOfWeek) == 1 {
-		return fmt.Sprintf("every %s at %02d:%02d UTC",
-			time.Weekday(s.DaysOfWeek[0]).String(), s.Hours[0], s.Minutes[0])
-	}
-	if len(s.Hours) == 24 && len(s.Minutes) == 1 {
-		return fmt.Sprintf("every hour at %02d minutes past", s.Minutes[0])
-	}
-	return "on a custom schedule"
-}
-
 // parseField reads one cron field.
 func parseField(field string, low, high int) ([]int, error) {
 	if field == "*" {
@@ -153,6 +138,14 @@ func parseField(field string, low, high int) ([]int, error) {
 			}
 			if value < low || value > high {
 				return nil, fmt.Errorf("%d is outside %d-%d", value, low, high)
+			}
+			// "5/15" is cron for "from 5 to the end of the field, every 15",
+			// and this used to parse it as plain 5 and drop the step on the
+			// floor. A schedule that runs a quarter as often as it was written
+			// is the failure this package exists to avoid, and it is silent.
+			if step > 1 {
+				out = append(out, rangeOf(value, high, step)...)
+				continue
 			}
 			out = append(out, value)
 		}

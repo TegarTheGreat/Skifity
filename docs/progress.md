@@ -35,7 +35,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 * `docs/research/stack.md` — component versions verified 2026-09-16, reconciled
   with the code 2026-09-17.
 * `docs/architecture.md` — layers, deploy path, add-server state machine, data model, isolation.
-* `docs/decisions.md` — ADR-0001 to ADR-0017.
+* `docs/decisions.md` — ADR-0001 onwards; there are nineteen.
 
 ### Phase 1 — done
 
@@ -1649,6 +1649,106 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 50 — the schedules, the sweep, and six documents that were wrong
+
+An audit of the builder, the deploy path, the cluster adapter and cron, and a
+read of every document against the code.
+
+### The settings that had nowhere to be set
+
+Single sign-on is built — OIDC, PKCE, a verified ID token, a nonce, a spent
+state. Six settings, a section of the documentation, and **no way to set them in
+the panel**: the frontend kept its own list of setting groups, and `signin` was
+not in it, so the group rendered as nothing at all. Plugins had been the same
+thing a commit earlier.
+
+The list is now an *ordering*, not the list. The groups come from the settings
+the server sends; anything this build has not heard of is shown at the end under
+its own key. Untranslated is worse than translated and a great deal better than
+invisible, and a hand-kept copy of somebody else's list is a list that is wrong
+the day it changes.
+
+### A backup schedule nothing could parse
+
+`PUT /api/databases/{id}/backup-policy` verified that backup storage worked —
+"rather than at three in the morning", as the comment says — and did not verify
+the schedule. Anything at all was accepted, stored, and then never matched, so
+the backups simply did not happen. Nothing could report it: by then it is a row
+that is never due. It is parsed now, and refused with the same message the
+scheduled-command path uses.
+
+### "5/15" meant five
+
+In cron, a step after a plain number means "from here to the end of the field,
+every n". The parser cut the step off, parsed the number, and dropped the step on
+the floor — so `0 5/6 * * *`, four times a day, ran once. The schedule parsed.
+Nothing was logged. It is the exact failure the package comment says it exists to
+prevent, written in the package itself.
+
+`Describe` is gone rather than fixed. It rendered a schedule in words and would
+say "every day at 03:00 UTC" for `0 3 * 1 *`, which runs in January — and it had
+no callers, because a sentence built in Go cannot be shown in an interface where
+every string is a translation key.
+
+### The minute tick that could stop for half an hour
+
+Scheduled backups run on the panel's own minute tick. The registry sweep ran
+inside that tick: it takes the build lock, which waits for every build in flight
+— a build is allowed forty minutes — and then waits up to thirty more for its
+Job. For that whole window no backup was evaluated, and a nightly backup due
+inside it never ran. Maintenance now runs beside the tick rather than in it.
+
+Ticks are dropped by Go when the receiver is late, so the tick also catches up:
+it evaluates every minute since the last one it looked at, capped at five —
+Kubernetes' own starting deadline for a CronJob that could not start on time.
+Long enough for a slow minute or a restart, short enough that a panel switched on
+after a week off does not fire a week of backups at once. A policy that matches
+several caught-up minutes still runs once.
+
+### Applying onto a corpse
+
+`Delete` returns when the API server accepts the request. With foreground
+propagation the object stays — deletion timestamp, finalizer — until its
+dependents are collected. Two places deleted a Job and applied the same name
+immediately: the build, and the registry sweep, whose Job has the same name every
+single time. The apply is accepted, the object is collected a moment later, and
+the wait that follows waits for something that is not coming: a build that never
+starts, or a sweep that reports it did not finish while the disk fills. There is
+a `DeleteAndWait` now, with a test that an object held by a finalizer produces a
+refusal rather than an apply.
+
+### What the documents claimed
+
+* `CLAUDE.md`'s package layout was missing fourteen packages — plugins, the
+  firewall, cron, the registry client, the three guard packages — and listed a
+  doc-site directory under the frontend that does not exist. The doc site is
+  `internal/docsite`, and the check in it caught this paragraph naming the path
+  that is gone, which is the check working.
+* `docs/configuration.md` described a **Git** settings group that is empty: the
+  GitHub App settings were removed when it turned out nothing read them, and the
+  table still offered them. It was missing **Cluster**, **Sign-in** (six
+  settings, already documented in the same file) and **Plugins**, and described
+  Domains without the tunnel token, the trusted proxies or the geo databases.
+* `docs/backups.md` said a volume backup could be put on a schedule "the same way
+  as for a database". There is no volume policy: no route, no handler, no
+  control. Databases have schedules; volumes are taken when somebody asks.
+* `llms.txt` — the page the product hands an AI assistant — had no firewall and
+  no plugins in it at all, in either the endpoint list or the notes.
+* `docs/progress.md` said `docs/decisions.md` holds ADR-0001 to ADR-0017. It
+  holds nineteen.
+
+### What was checked and found sound
+
+The deploy path handles the things that usually go wrong: a deployment
+interrupted by a restart is marked failed at startup rather than left "building"
+forever, a superseded build is stopped rather than left to roll out an older
+version behind a newer one, a panic in one deployment is caught without taking
+the panel with it, the fingerprint match only ever reuses an image from a
+deployment that succeeded, and a rollback outside the registry's keep window is
+refused with a reason instead of sitting in ImagePullBackOff. Scheduled commands
+are Kubernetes CronJobs and not the panel's business: "a panel that is restarting
+at 03:00 should not be the reason a nightly job did not run."
+
 ## Phase 49 — the settings nobody could open, and a domain nobody owned
 
 Two settings and a rename.
@@ -2024,7 +2124,10 @@ all ten pages the panel serves rather than eight.
    points at.
 3. Deploy a real application from Git, end to end, on that server — the one
    flow that has never been exercised against a live cluster.
-4. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
+4. A schedule for a volume backup. The scheduler already runs a policy whose
+   target is a volume; there is no route, no handler and no control, and
+   `docs/backups.md` now says so rather than implying otherwise.
+5. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
    signature, and the public key in the documentation. The panel reads one
    already; nothing is there to read.
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"skifity/internal/cron"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
 	"skifity/internal/store"
@@ -331,9 +332,21 @@ func (s *Server) handleSetBackupPolicy(w http.ResponseWriter, r *http.Request) {
 	if req.Retention < 1 {
 		req.Retention = 7
 	}
+	schedule := defaultString(strings.TrimSpace(req.Schedule), "0 3 * * *")
+	// The same reason storage is verified above: a schedule nothing can parse
+	// is accepted, stored, and then never matches, so the backups simply do not
+	// happen and nothing anywhere says why. The scheduler cannot report it —
+	// by then it is a row that is never due.
+	if _, err := cron.ParseSchedule(schedule); err != nil {
+		writeError(w, r, errdoc.New("backup.bad_schedule", "That is not a schedule Skifity understands").
+			WithCause("%s", err).
+			WithImpact("The schedule was not changed.").
+			WithFix("Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC."))
+		return
+	}
 	policy := store.BackupPolicy{
 		TargetType: "database", TargetID: record.ID,
-		Schedule: defaultString(req.Schedule, "0 3 * * *"), Retention: req.Retention,
+		Schedule: schedule, Retention: req.Retention,
 		Destination: "s3", Enabled: req.Enabled,
 	}
 	if err := s.db.SetBackupPolicy(r.Context(), &policy); err != nil {

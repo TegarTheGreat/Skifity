@@ -127,9 +127,15 @@ GET    /api/apps/{app}/scaling                scaling
 PUT    /api/apps/{app}/scaling                change it
 GET    /api/apps/{app}/scaling/readiness      what would break with more instances
 GET    /api/apps/{app}/advanced               the Kubernetes objects, as YAML
+GET    /api/apps/{app}/firewall               the rules in front of this app
+PUT    /api/apps/{app}/firewall               replace them
 GET    /api/environments/{env}/databases      databases
 GET    /api/databases/{db}/backups            backups
 GET    /api/events?topics=team:{team}         everything happening, as events
+GET    /api/plugins                           installed plugins
+POST   /api/plugins/inspect                   read a manifest, and say what it would be allowed to do
+POST   /api/plugins                           install one, with the permissions that were shown
+GET    /api/plugins/store                     the store catalogue
 ```
 
 Lists come back as `{"items": [...], "total": n}`.
@@ -171,6 +177,16 @@ a person. Act on it rather than guessing, and quote `code` when asking for help.
   you run a second instance.
 - **Kubernetes is available when you need it.** `GET /api/apps/{id}/advanced`
   returns the exact objects the panel applies.
+- **An app can have a firewall.** Rules over IP address, country and AS number,
+  combined with and/or, evaluated at the edge before a request reaches the app.
+  A condition whose answer cannot be worked out — no country database, an
+  address nobody can attribute — is unknown rather than false: that rule is
+  skipped rather than guessed at, and the rule set's default action decides.
+- **Plugins are containers, not code inside the panel.** One namespace each, a
+  token narrowed to exactly the permissions their manifest declared, and a
+  signed event for anything that happens. Installing is two requests on purpose:
+  the first says what a plugin would be allowed to do, the second installs it
+  and is refused if that changed in between.
 
 ## Installing
 

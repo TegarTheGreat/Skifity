@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -175,6 +176,41 @@ func (a *Applier) Delete(ctx context.Context, apiVersion, kind, namespace, name 
 		return fmt.Errorf("delete %s/%s: %w", kind, name, err)
 	}
 	return nil
+}
+
+// DeleteAndWait removes an object and waits until it is actually gone.
+//
+// Delete returns as soon as the API server has accepted the request, and with
+// foreground propagation the object stays — with a deletion timestamp and a
+// finalizer — until its dependents are collected. Applying the same name in
+// that window patches a corpse: the apply is accepted, the object disappears a
+// moment later, and whatever was waiting for it waits for something that is not
+// coming. That matters wherever a name is reused, which is every Job the panel
+// recreates.
+//
+// A timeout is not a failure here. The caller wanted the name free; if it is
+// still not free, saying so is more useful than applying anyway.
+func (a *Applier) DeleteAndWait(ctx context.Context, apiVersion, kind, namespace, name string, timeout time.Duration) error {
+	if err := a.Delete(ctx, apiVersion, kind, namespace, name); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if _, err := a.Get(ctx, apiVersion, kind, namespace, name); err != nil {
+			if IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s/%s is still being deleted after %s", kind, name, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 // Get fetches an object in its generic form.

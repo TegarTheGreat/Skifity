@@ -7,6 +7,8 @@
     "delete": "删除",
     "remove": "移除",
     "close": "关闭",
+    "navigation": "导航",
+    "navigationHelp": "面板的导航，在小屏幕上以抽屉形式呈现。",
     "create": "创建",
     "edit": "编辑",
     "add": "添加",
@@ -345,6 +347,7 @@
     "restarts": "重启次数",
     "node": "服务器",
     "noInstances": "没有正在运行的实例。",
+    "noInstancesHelp": "一次部署会构建应用并启动第一个实例。",
     "phase": {
       "running": "运行中",
       "starting": "启动中",
@@ -709,7 +712,181 @@
     "pluginStoreCheckAction": "读取目录",
     "pluginStoreVerified": "由此处设置的密钥签名",
     "pluginStoreCount_other": "目录中有 {{count}} 个插件",
-    "pluginStoreGoToPlugins": "前往插件页面安装"
+    "pluginStoreGoToPlugins": "前往插件页面安装",
+    "field": {
+      "cluster_flannel_backend": {
+        "label": "服务器之间如何通信",
+        "help": "WireGuard 会加密服务器之间的流量，服务器分布在不同服务商时尤其重要。它需要每台服务器都有 wireguard 内核模块。vxlan 到处都能用，但不加密。同一集群中的每台服务器必须一致，所以请在添加服务器之前修改，而不是之后。"
+      },
+      "cluster_k3s_version": {
+        "label": "Kubernetes 版本",
+        "help": "从这里添加的服务器所安装的 k3s 版本。留空则跟随稳定通道，新集群用的就是它。固定版本可以让你下个月添加的服务器与现有的一致。"
+      },
+      "cluster_preview_ttl_days": {
+        "label": "多久后移除预览环境",
+        "help": "拉取请求的预览环境在多少天没有部署后被移除。仍在被推送的预览会一直存在，直到拉取请求关闭。填 0 表示保留到拉取请求关闭 —— 这也是通常的移除方式 —— 但一个始终没有送达的 webhook 会让它永远运行下去。"
+      },
+      "dns_api_token": {
+        "label": "DNS API 令牌",
+        "help": "仅限编辑某一个区域记录的令牌。不要使用全局账户密钥。"
+      },
+      "dns_provider": {
+        "label": "DNS 服务商",
+        "help": "让 Skifity 在你添加域名时替你创建 DNS 记录。留空则自行创建。"
+      },
+      "dns_zone": {
+        "label": "DNS 区域",
+        "help": "记录创建在哪个区域。"
+      },
+      "domains_acme_email": {
+        "label": "Let's Encrypt 邮箱",
+        "help": "Let's Encrypt 发送证书到期提醒的地址。签发 HTTPS 证书前必须填写。"
+      },
+      "domains_acme_server": {
+        "label": "ACME 目录地址",
+        "help": "留空表示使用 Let's Encrypt 正式环境。测试时请指向 staging 目录，以免触发速率限制。"
+      },
+      "domains_cloudflare_tunnel_token": {
+        "label": "Cloudflare tunnel 令牌",
+        "help": "让你的应用无需公网 IP、无需开放端口、也无需固定地址供 DNS 指向就能对外提供服务。在 Cloudflare 控制台的 Zero Trust → Networks → Tunnels 创建隧道；选择 Cloudflared 连接器并复制显示的令牌。然后在该隧道上添加一个 public hostname —— 像 *.apps.example.com 这样的通配符可一次覆盖所有应用 —— 服务选 HTTP，地址填 traefik.kube-system.svc.cluster.local:80。令牌保存后在“组件”里安装 Cloudflare tunnel。"
+      },
+      "domains_cluster_ip": {
+        "label": "集群公网 IP",
+        "help": "你的域名应当指向的地址。会自动探测；如果集群在负载均衡器后面，请手动覆盖。"
+      },
+      "domains_geo_asn_url": {
+        "label": "网络数据库",
+        "help": "同上，用于访问者地址所属的网络，也就是 AS 号规则所检查的对象。"
+      },
+      "domains_geo_country_url": {
+        "label": "国家数据库",
+        "help": "防火墙的国家数据来源，采用 MaxMind 的 .mmdb 格式。留空则使用 DB-IP 的免费月度文件，无需账户。地址中的 %s 会被替换为月份。你也可以指向自己的副本或 MaxMind 的下载地址。"
+      },
+      "domains_geo_enabled": {
+        "label": "查询访问者的国家与网络",
+        "help": "默认开启。防火墙会下载 DB-IP 的免费月度数据库（无需账户），以便规则能指定国家或网络。在无法访问互联网的集群上，或你不希望下载任何东西时，请关闭 —— 关于国家的规则届时将无法保存，这比一条被悄悄跳过的规则要好。"
+      },
+      "domains_trusted_proxies": {
+        "label": "受信任的代理",
+        "help": "位于本集群前面、可以声明访问者身份的地址段。Pod 网络和 Service 网络已默认受信任；如果你有负载均衡器，把它的地址段加在这里。反方向配错，访问者就能自己挑选防火墙规则据以判断的地址，所以只添加你自己掌控的地址段。"
+      },
+      "domains_wildcard": {
+        "label": "通配符域名",
+        "help": "一个带通配符 DNS 记录并指向本集群的域名。每个应用都会在它下面获得一个免费子域名。留空则使用 sslip.io 地址。"
+      },
+      "email_smtp_from": {
+        "label": "发件地址",
+        "help": "通知看起来的发件地址。通常必须是你的邮件服务器允许代发的地址，否则邮件会被拒收。"
+      },
+      "email_smtp_host": {
+        "label": "SMTP 主机",
+        "help": "邮件通知和密码重置邮件都需要它。"
+      },
+      "email_smtp_password": {
+        "label": "SMTP 密码",
+        "help": "加密存储。多数服务商希望这里填应用专用密码，而不是账户密码。"
+      },
+      "email_smtp_port": {
+        "label": "SMTP 端口",
+        "help": "587 用于 STARTTLS，现在几乎所有服务都用它。465 是隐式 TLS；25 不加密，通常被主机商封锁。"
+      },
+      "email_smtp_tls": {
+        "label": "使用 STARTTLS",
+        "help": "除非你的邮件服务器只接受明文连接，否则保持开启。"
+      },
+      "email_smtp_user": {
+        "label": "SMTP 用户名",
+        "help": "如果你的邮件服务器无需登录即可接收本集群的邮件，请留空。"
+      },
+      "general_default_builder": {
+        "label": "默认构建器",
+        "help": "仓库里没有 Dockerfile 时使用哪个构建器。Railpack 生成的镜像更小；Nixpacks 更老，经受过更广泛的验证。"
+      },
+      "general_panel_url": {
+        "label": "面板地址",
+        "help": "别人访问这个面板时使用的地址。用于通知里的链接和 webhook 的 URL。"
+      },
+      "general_telemetry_disabled": {
+        "label": "关闭使用情况上报",
+        "help": "Skifity 默认不向任何地方发送任何数据。这个开关存在，是为了让“没有遥测”这件事看得见，而不是靠假设。"
+      },
+      "maintenance_audit_history_days": {
+        "label": "活动日志保留时长",
+        "help": "天数。活动日志保留的时间远长于这里的其他数据，因为会遗忘的日志和没有日志相差无几。除非有理由，否则不要缩短。"
+      },
+      "maintenance_deployment_history": {
+        "label": "每个应用保留的部署记录数",
+        "help": "一个应用保留多少条历史部署及其构建日志。更早的会被删除，以免面板数据库无止境地增长。只有最近十条可以回滚，因为镜像仓库保留的镜像数与 Kubernetes 自身记住的修订数都是十。"
+      },
+      "plugins_store_public_key": {
+        "label": "插件商店签名密钥",
+        "help": "商店的 Ed25519 公钥，base64 编码。设置后，不是由它签名的索引会被拒绝。留空时目录仍可读取，每一项都会显示为无人背书。用以下命令生成密钥对：skifity admin plugin-key"
+      },
+      "plugins_store_url": {
+        "label": "插件商店",
+        "help": "面板到哪里去找插件。留空表示 Skifity 商店。指向你自己的索引即可运行自己的商店；清空下面的公钥则可浏览未签名的商店 —— 插件始终可以通过清单地址安装或直接粘贴清单，无法访问互联网的集群用的就是这种方式。"
+      },
+      "registry_password": {
+        "label": "仓库密码",
+        "help": "具有推送权限的令牌。加密存储，之后不再显示。"
+      },
+      "registry_url": {
+        "label": "外部镜像仓库",
+        "help": "构建好的镜像推送到哪里。留空表示使用集群内部的仓库，这是最简单的选择。"
+      },
+      "registry_username": {
+        "label": "仓库用户名",
+        "help": "只有外部仓库才需要。集群内部的仓库不需要凭据。"
+      },
+      "signin_oidc_allowed_domains": {
+        "label": "允许的邮箱域名",
+        "help": "用逗号分隔。只有已验证邮箱属于这些域名的人才能登录。留空表示接受提供方担保的任何人，只有提供方是你自己的时才安全。"
+      },
+      "signin_oidc_auto_create": {
+        "label": "首次登录时创建账户",
+        "help": "关闭后，提供方认识而本面板不认识的人会被拒绝，于是账户由邀请创建，而不是任何拥有公司邮箱的人都能创建。"
+      },
+      "signin_oidc_button_label": {
+        "label": "登录按钮文字",
+        "help": "登录页面上按钮显示的文字。留空则使用通用文案。"
+      },
+      "signin_oidc_client_id": {
+        "label": "Client ID",
+        "help": "来自你在提供方注册的应用。它的 redirect URI 是本面板地址加上 /api/auth/sso/callback。"
+      },
+      "signin_oidc_client_secret": {
+        "label": "Client secret",
+        "help": "加密存储，之后不再显示。"
+      },
+      "signin_oidc_issuer": {
+        "label": "单点登录 issuer",
+        "help": "你的身份提供方的 OpenID Connect issuer 地址 —— Okta、Entra、Authentik、Keycloak、Zitadel、Google。Skifity 会从该地址下的 /.well-known/openid-configuration 读取配置。留空表示只用密码登录。"
+      },
+      "storage_s3_access_key": {
+        "label": "S3 访问密钥",
+        "help": "请使用只能写入这个存储桶的密钥。"
+      },
+      "storage_s3_bucket": {
+        "label": "S3 存储桶",
+        "help": "备份写入的存储桶。Skifity 不会替你创建。"
+      },
+      "storage_s3_endpoint": {
+        "label": "S3 端点",
+        "help": "任何兼容 S3 的服务都可以：AWS、Backblaze B2、Cloudflare R2、Wasabi，或你自己运行的 MinIO。"
+      },
+      "storage_s3_path_style": {
+        "label": "使用 path 风格地址",
+        "help": "MinIO 和大多数自建 S3 服务需要打开它。"
+      },
+      "storage_s3_region": {
+        "label": "S3 区域",
+        "help": "有些服务商会忽略它；AWS 不会。"
+      },
+      "storage_s3_secret_key": {
+        "label": "S3 私密密钥",
+        "help": "加密存储，之后不再显示。"
+      }
+    }
   },
   "errors": {
     "whatHappened": "发生了什么",

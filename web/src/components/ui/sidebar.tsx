@@ -165,6 +165,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { t } = useTranslation()
 
   if (collapsible === "none") {
     return (
@@ -196,9 +197,11 @@ function Sidebar({
           }
           side={side}
         >
+          {/* A screen reader reads these out, so they are strings like any
+              other: they were English in all five languages. */}
           <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+            <SheetTitle>{t("common.navigation")}</SheetTitle>
+            <SheetDescription>{t("common.navigationHelp")}</SheetDescription>
           </SheetHeader>
           <div className="flex h-full w-full flex-col">{children}</div>
         </SheetContent>

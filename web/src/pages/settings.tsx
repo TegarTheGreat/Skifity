@@ -277,12 +277,22 @@ function SettingField({
   const placeholder =
     setting.secret && setting.configured ? t("settings.secretStored") : setting.placeholder
 
+  // The server's label and help are English, because the server has one
+  // language and the API, the CLI and an assistant all read them. The panel has
+  // five, and this page was the largest English surface left in it: every label
+  // and every paragraph, in Indonesian, Hindi, Russian and Chinese alike. The
+  // translation is looked up by the setting's own key, with the server's text
+  // as the fallback for a setting added before anybody has translated it.
+  const field = `settings.field.${setting.key.replace(".", "_")}`
+  const label = t(`${field}.label`, { defaultValue: setting.label })
+  const help = setting.help ? t(`${field}.help`, { defaultValue: setting.help }) : ""
+
   if (setting.kind === "bool") {
     return (
       <Field orientation="horizontal">
         <FieldContent>
-          <FieldLabel htmlFor={id}>{setting.label}</FieldLabel>
-          <FieldDescription>{setting.help}</FieldDescription>
+          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          <FieldDescription>{help}</FieldDescription>
         </FieldContent>
         <Switch
           id={id}
@@ -296,7 +306,7 @@ function SettingField({
   return (
     <Field data-edited={edited || undefined}>
       <FieldLabel htmlFor={id}>
-        {setting.label}
+        {label}
         {setting.secret && setting.configured && !edited && (
           <Badge variant="outline" className="ml-2 text-[10px]">
             {t("settings.configured")}
@@ -344,7 +354,7 @@ function SettingField({
         />
       )}
 
-      <FieldDescription>{setting.help}</FieldDescription>
+      <FieldDescription>{help}</FieldDescription>
     </Field>
   )
 }

@@ -191,6 +191,17 @@ const SCREEN_READER = [
   /aria-label="[A-Za-z]/g,
 ]
 
+/**
+ * Text inside an sr-only block, rather than directly in the tag that carries
+ * the class.
+ *
+ * The pattern above looks at what follows the class on the same tag, so a
+ * header marked sr-only with a title and a description inside it slipped
+ * through: the mobile sidebar read out "Sidebar. Displays the mobile sidebar."
+ * in every language, and nothing said so.
+ */
+const SR_BLOCK = /className="sr-only"[\s\S]{0,400}?>\s*([A-Z][A-Za-z ,.'’-]{3,})\s*</g
+
 function checkSourceStrings() {
   for (const file of walk(srcDir)) {
     if (!file.endsWith(".tsx")) continue
@@ -203,6 +214,13 @@ function checkSourceStrings() {
             `reader reads out: ${match[0].trim()}… — use t("…") instead`,
         )
       }
+    }
+    for (const match of contents.matchAll(SR_BLOCK)) {
+      const line = contents.slice(0, match.index).split("\n").length
+      problems.push(
+        `${file.slice(srcDir.length + 1)}:${line} has hardcoded text inside an ` +
+          `sr-only block: "${match[1]}" — use t("…") instead`,
+      )
     }
   }
 }

@@ -13,6 +13,7 @@ import { ScalingTab } from "@/components/app/scaling-tab"
 import { SettingsTab } from "@/components/app/settings-tab"
 import { StorageTab } from "@/components/app/storage-tab"
 import { useConfirm } from "@/components/confirm-dialog"
+import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
@@ -304,12 +305,18 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
         </CardHeader>
         <CardContent className="p-0">
           {instances.length === 0 ? (
-            <div className="space-y-4 px-6 pb-6 text-sm text-muted-foreground">
-              <p>{t("apps.noInstances")}</p>
-              <div className="flex">
-                <DeployButton appId={app.id} />
-              </div>
-            </div>
+            // The shared empty state, like every other one in the panel, rather
+            // than a paragraph and a loose button. The deploy button repeats
+            // the header's on purpose — the same pattern as Databases, Servers
+            // and Projects, where the action people came for is offered where
+            // they are looking rather than only in the corner of the page.
+            <EmptyState
+              bordered={false}
+              icon={RocketIcon}
+              title={t("apps.noInstances")}
+              description={t("apps.noInstancesHelp")}
+              action={<DeployButton appId={app.id} />}
+            />
           ) : (
             <Table>
               <TableHeader>

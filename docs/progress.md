@@ -1649,6 +1649,62 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 55 — the half of the panel that was never translated
+
+"There is still a lot of i18n missing." There was, and not where the checker was
+looking: every key existed in all five languages — 825 of them — and the largest
+page in the panel was still entirely English, because its words do not come from
+the locale at all. They come from the server.
+
+### Settings, in English, in every language
+
+`internal/settings` carries a label and a help paragraph for each of the
+forty-three settings, and the panel showed them as they are. With the interface
+in Indonesian the chrome read Pengaturan, Umum, Klaster — and every field under
+it read "Panel URL", "Which builder to use when a repository has no
+Dockerfile…". Six and a half thousand characters of English on the page an
+operator spends the most time on. The screenshot of it is in `docs/images`,
+before and after.
+
+The server keeps its English: it has one language, and the API, the CLI and an
+assistant all read those strings. The panel looks them up by the setting's own
+key — `settings.field.<key>.label` — with the server's text as the fallback for
+a setting added before anybody has translated it. Eighty-six strings, five
+languages.
+
+`TestEverySettingHasItsWordsInTheInterface` checks that every definition has
+words in the interface **and that the English matches character for character**.
+Two copies of the same sentence drift, and the one that drifts is the one nobody
+reads.
+
+### Two screen readers' worth of English, and a button nobody has pressed
+
+The mobile sidebar's drawer announced itself as "Sidebar. Displays the mobile
+sidebar." in all five languages: text inside an `sr-only` block rather than on
+the tag carrying the class, which is the shape the checker did not look for. It
+looks for it now, and the pattern found the other one — a `Close` button in the
+dialog footer, hardcoded, behind a flag nothing passes today. A hardcoded
+English button waiting for the first person to turn it on.
+
+### Two deploy buttons
+
+Asked about, and worth writing down: on an app with nothing running, the header
+offers **Deploy now** and so does the Instances card. That is the panel's
+pattern, not an accident — Databases, Servers and Projects all repeat their
+primary action in the empty state, where somebody is looking, rather than only
+in the corner of the page. What was an accident is that this one was a bespoke
+paragraph with a loose button instead of the shared `EmptyState`. It is the
+shared one now, with a line saying what deploying will do.
+
+### What is still English, said plainly
+
+* **Every error.** Ninety `errdoc.New` sites, each with a title, a cause, an
+  impact and a fix — the panel's best writing, and none of it translated. It is
+  the next piece, and it is larger than this one was.
+* **The template catalogue.** Two hundred and eighty-two names and descriptions,
+  which are mostly upstream product copy; the categories are translated.
+* **A plugin's own manifest**, which belongs to whoever wrote it.
+
 ## Phase 54 — a page of snake_case, an app with no address, and a trail to nowhere
 
 The project page, the app page and Activity, read the way somebody meets them.
@@ -2438,10 +2494,14 @@ all ten pages the panel serves rather than eight.
    points at.
 3. Deploy a real application from Git, end to end, on that server — the one
    flow that has never been exercised against a live cluster.
-4. A schedule for a volume backup. The scheduler already runs a policy whose
+4. Translate the error catalogue. Every `errdoc.Problem` — title, cause, impact
+   and fix — is English in all five languages. The settings page was the same
+   until Phase 55 and the mechanism it uses works here too: a key per error
+   code, with the server's English as the fallback.
+5. A schedule for a volume backup. The scheduler already runs a policy whose
    target is a volume; there is no route, no handler and no control, and
    `docs/backups.md` now says so rather than implying otherwise.
-5. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
+6. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
    signature, and the public key in the documentation. The panel reads one
    already; nothing is there to read.
 

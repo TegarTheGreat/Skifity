@@ -7,6 +7,8 @@
     "delete": "Hapus",
     "remove": "Keluarkan",
     "close": "Tutup",
+    "navigation": "Navigasi",
+    "navigationHelp": "Navigasi panel, sebagai laci pada layar kecil.",
     "create": "Buat",
     "edit": "Ubah",
     "add": "Tambah",
@@ -345,6 +347,7 @@
     "restarts": "Mulai ulang",
     "node": "Server",
     "noInstances": "Tidak ada instance yang berjalan.",
+    "noInstancesHelp": "Sebuah deployment membangun aplikasi dan menjalankan yang pertama.",
     "phase": {
       "running": "Berjalan",
       "starting": "Menyala",
@@ -709,7 +712,181 @@
     "pluginStoreCheckAction": "Baca katalognya",
     "pluginStoreVerified": "Ditandatangani oleh kunci yang diatur di sini",
     "pluginStoreCount_other": "{{count}} plugin di katalog",
-    "pluginStoreGoToPlugins": "Buka Plugin untuk memasang salah satunya"
+    "pluginStoreGoToPlugins": "Buka Plugin untuk memasang salah satunya",
+    "field": {
+      "cluster_flannel_backend": {
+        "label": "Cara server saling berkomunikasi",
+        "help": "WireGuard mengenkripsi lalu lintas antar server Anda, yang penting bila server berada di penyedia berbeda. Ia memerlukan modul kernel wireguard di setiap server. vxlan bekerja di mana saja dan tidak terenkripsi. Setiap server dalam satu cluster harus memakai yang sama, jadi ubah ini sebelum menambah server, bukan sesudahnya."
+      },
+      "cluster_k3s_version": {
+        "label": "Versi Kubernetes",
+        "help": "Versi k3s yang dipasang pada server yang ditambahkan dari sini. Kosongkan untuk mengikuti kanal stabil, yang dipakai cluster baru. Kunci versinya agar server yang Anda tambahkan bulan depan sama dengan yang sudah ada."
+      },
+      "cluster_preview_ttl_days": {
+        "label": "Hapus environment pratinjau setelah",
+        "help": "Jumlah hari tanpa deployment sebelum environment pratinjau sebuah pull request dihapus. Pratinjau yang masih menerima push bertahan selama pull request-nya terbuka. Isi 0 untuk menahannya sampai pull request ditutup — cara normalnya — tetapi webhook yang tidak pernah datang akan membiarkannya berjalan selamanya."
+      },
+      "dns_api_token": {
+        "label": "Token API DNS",
+        "help": "Token yang hanya berhak menyunting catatan di satu zona. Jangan memakai kunci akun global."
+      },
+      "dns_provider": {
+        "label": "Penyedia DNS",
+        "help": "Membuat Skifity bisa membuat catatan DNS untuk Anda saat menambah domain. Kosongkan untuk membuatnya sendiri."
+      },
+      "dns_zone": {
+        "label": "Zona DNS",
+        "help": "Zona tempat catatan dibuat."
+      },
+      "domains_acme_email": {
+        "label": "Email Let's Encrypt",
+        "help": "Tujuan peringatan kedaluwarsa sertifikat dari Let's Encrypt. Wajib diisi sebelum sertifikat HTTPS bisa diterbitkan."
+      },
+      "domains_acme_server": {
+        "label": "URL direktori ACME",
+        "help": "Kosongkan untuk Let's Encrypt produksi. Arahkan ke direktori staging selama pengujian agar tidak kena batas laju."
+      },
+      "domains_cloudflare_tunnel_token": {
+        "label": "Token Cloudflare tunnel",
+        "help": "Membuat aplikasi Anda bisa diakses dari internet tanpa IP publik, tanpa port terbuka, dan tanpa alamat tetap untuk DNS. Buat tunnel di dasbor Cloudflare pada Zero Trust, Networks, Tunnels; pilih konektor Cloudflared lalu salin tokennya. Kemudian tambahkan satu public hostname pada tunnel itu — wildcard seperti *.apps.example.com mencakup semua aplikasi sekaligus — dengan service HTTP dan alamat traefik.kube-system.svc.cluster.local:80. Pasang Cloudflare tunnel di Komponen setelah tokennya disimpan."
+      },
+      "domains_cluster_ip": {
+        "label": "IP publik cluster",
+        "help": "Alamat yang harus dituju domain Anda. Terdeteksi otomatis; timpa bila cluster Anda berada di belakang load balancer."
+      },
+      "domains_geo_asn_url": {
+        "label": "Basis data jaringan",
+        "help": "Sama, untuk jaringan tempat alamat pengunjung berada, yang diuji oleh aturan nomor AS."
+      },
+      "domains_geo_country_url": {
+        "label": "Basis data negara",
+        "help": "Sumber data negara untuk firewall, dalam format .mmdb milik MaxMind. Kosongkan untuk berkas bulanan gratis DB-IP yang tidak perlu akun. Sebuah %s pada alamat diganti dengan bulan. Arahkan ke salinan Anda sendiri, atau ke unduhan MaxMind, bila Anda mau."
+      },
+      "domains_geo_enabled": {
+        "label": "Cari tahu negara dan jaringan pengunjung",
+        "help": "Aktif secara bawaan. Firewall mengunduh basis data bulanan gratis dari DB-IP, yang tidak perlu akun, agar sebuah aturan bisa menyebut negara atau jaringan. Matikan pada cluster tanpa jalan keluar ke internet, atau bila Anda lebih suka tidak ada yang diunduh — aturan tentang negara lalu tidak bisa disimpan, yang lebih baik daripada aturan yang diam-diam dilewati."
+      },
+      "domains_trusted_proxies": {
+        "label": "Proxy tepercaya",
+        "help": "Rentang alamat di depan cluster ini yang boleh menyebut siapa pengunjungnya. Jaringan pod dan service sudah dipercaya; tambahkan rentang load balancer bila Anda punya. Salah di arah sebaliknya berarti pengunjung bisa memilih sendiri alamat yang dinilai aturan firewall Anda, jadi tambahkan hanya rentang yang Anda kuasai."
+      },
+      "domains_wildcard": {
+        "label": "Domain wildcard",
+        "help": "Domain dengan catatan DNS wildcard yang mengarah ke cluster ini. Setiap aplikasi mendapat subdomain gratis di bawahnya. Kosongkan untuk memakai alamat sslip.io."
+      },
+      "email_smtp_from": {
+        "label": "Kirim email sebagai",
+        "help": "Alamat yang tampak sebagai pengirim notifikasi. Biasanya harus alamat yang diizinkan server surat Anda, atau surat akan ditolak."
+      },
+      "email_smtp_host": {
+        "label": "Host SMTP",
+        "help": "Diperlukan untuk notifikasi email dan email pengaturan ulang kata sandi."
+      },
+      "email_smtp_password": {
+        "label": "Kata sandi SMTP",
+        "help": "Disimpan terenkripsi. Kebanyakan penyedia menginginkan app password di sini, bukan kata sandi akun Anda."
+      },
+      "email_smtp_port": {
+        "label": "Port SMTP",
+        "help": "587 untuk STARTTLS, yang dipakai hampir semua layanan sekarang. 465 adalah TLS implisit; 25 tidak terenkripsi dan biasanya diblokir penyedia hosting."
+      },
+      "email_smtp_tls": {
+        "label": "Pakai STARTTLS",
+        "help": "Biarkan menyala kecuali server surat Anda hanya menerima koneksi polos."
+      },
+      "email_smtp_user": {
+        "label": "Nama pengguna SMTP",
+        "help": "Kosongkan bila server surat Anda menerima surat dari cluster ini tanpa perlu masuk."
+      },
+      "general_default_builder": {
+        "label": "Builder bawaan",
+        "help": "Builder yang dipakai ketika repositori tidak punya Dockerfile. Railpack menghasilkan image lebih kecil; Nixpacks lebih lama ada dan lebih banyak diuji."
+      },
+      "general_panel_url": {
+        "label": "URL panel",
+        "help": "Alamat yang dipakai orang untuk membuka panel ini. Dipakai pada tautan di dalam notifikasi dan pada URL webhook."
+      },
+      "general_telemetry_disabled": {
+        "label": "Matikan pelaporan penggunaan",
+        "help": "Skifity tidak mengirim apa pun ke mana pun secara bawaan. Pengaturan ini ada supaya ketiadaan telemetri terlihat, bukan diasumsikan."
+      },
+      "maintenance_audit_history_days": {
+        "label": "Simpan log aktivitas selama",
+        "help": "Hari. Log aktivitas disimpan jauh lebih lama daripada apa pun di sini, karena log yang lupa hampir sama saja dengan tidak punya log. Perpendek hanya jika Anda punya alasan."
+      },
+      "maintenance_deployment_history": {
+        "label": "Catatan deployment yang disimpan, per aplikasi",
+        "help": "Berapa banyak deployment lama yang disimpan sebuah aplikasi, beserta log build-nya. Yang lebih lama dihapus agar database panel tidak tumbuh tanpa henti. Hanya sepuluh terbaru yang bisa di-rollback, karena sebanyak itulah image yang disimpan registry dan revisi yang diingat Kubernetes sendiri."
+      },
+      "plugins_store_public_key": {
+        "label": "Kunci penandatangan store plugin",
+        "help": "Kunci publik Ed25519 milik store, base64. Bila diisi, indeks yang tidak ditandatangani olehnya akan ditolak. Bila kosong, katalog tetap terbaca dan setiap entri ditampilkan sebagai tidak dijamin siapa pun. Buat sepasang kunci dengan: skifity admin plugin-key"
+      },
+      "plugins_store_url": {
+        "label": "Store plugin",
+        "help": "Tempat panel mencari plugin. Kosongkan untuk store Skifity. Arahkan ke indeks Anda sendiri untuk menjalankan store sendiri, atau kosongkan kunci publik di bawah untuk menelusuri store yang tidak ditandatangani — plugin selalu bisa dipasang dari alamat manifest atau dengan menempelkannya, yang dipakai cluster tanpa jalan keluar ke internet."
+      },
+      "registry_password": {
+        "label": "Kata sandi registry",
+        "help": "Token dengan izin mendorong image. Disimpan terenkripsi dan tidak pernah ditampilkan lagi."
+      },
+      "registry_url": {
+        "label": "Registry eksternal",
+        "help": "Tempat image hasil build didorong. Kosongkan untuk memakai registry di dalam cluster, yang paling sederhana."
+      },
+      "registry_username": {
+        "label": "Nama pengguna registry",
+        "help": "Hanya diperlukan untuk registry eksternal. Registry di dalam cluster tidak perlu kredensial."
+      },
+      "signin_oidc_allowed_domains": {
+        "label": "Domain email yang diizinkan",
+        "help": "Dipisah koma. Hanya orang dengan email terverifikasi di salah satu domain ini yang boleh masuk. Kosongkan untuk menerima siapa pun yang dijamin penyedia, yang hanya aman jika penyedianya milik Anda."
+      },
+      "signin_oidc_auto_create": {
+        "label": "Buat akun saat pertama masuk",
+        "help": "Jika dimatikan, orang yang dikenal penyedia tetapi tidak dikenal panel ini akan ditolak, sehingga akun dibuat lewat undangan, bukan oleh siapa pun yang punya alamat perusahaan."
+      },
+      "signin_oidc_button_label": {
+        "label": "Teks tombol masuk",
+        "help": "Tulisan pada tombol di halaman masuk. Kosongkan untuk label umum."
+      },
+      "signin_oidc_client_id": {
+        "label": "Client ID",
+        "help": "Dari aplikasi yang Anda daftarkan di penyedia. Redirect URI-nya adalah alamat panel ini diikuti /api/auth/sso/callback."
+      },
+      "signin_oidc_client_secret": {
+        "label": "Client secret",
+        "help": "Disimpan terenkripsi dan tidak pernah ditampilkan lagi."
+      },
+      "signin_oidc_issuer": {
+        "label": "Issuer single sign-on",
+        "help": "URL issuer OpenID Connect dari penyedia identitas Anda — Okta, Entra, Authentik, Keycloak, Zitadel, Google. Skifity membaca konfigurasinya dari /.well-known/openid-configuration di bawah alamat ini. Kosongkan untuk masuk dengan kata sandi saja."
+      },
+      "storage_s3_access_key": {
+        "label": "Access key S3",
+        "help": "Gunakan kunci yang hanya bisa menulis ke bucket ini."
+      },
+      "storage_s3_bucket": {
+        "label": "Bucket S3",
+        "help": "Bucket tempat cadangan ditulis. Skifity tidak membuatkannya untuk Anda."
+      },
+      "storage_s3_endpoint": {
+        "label": "Endpoint S3",
+        "help": "Layanan apa pun yang kompatibel S3 bisa dipakai: AWS, Backblaze B2, Cloudflare R2, Wasabi, atau server MinIO yang Anda jalankan sendiri."
+      },
+      "storage_s3_path_style": {
+        "label": "Pakai URL gaya path",
+        "help": "Nyalakan untuk MinIO dan kebanyakan layanan S3 yang dipasang sendiri."
+      },
+      "storage_s3_region": {
+        "label": "Region S3",
+        "help": "Sebagian penyedia mengabaikannya; AWS tidak."
+      },
+      "storage_s3_secret_key": {
+        "label": "Secret key S3",
+        "help": "Disimpan terenkripsi dan tidak pernah ditampilkan lagi."
+      }
+    }
   },
   "errors": {
     "whatHappened": "Apa yang terjadi",

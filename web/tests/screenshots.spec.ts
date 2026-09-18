@@ -208,6 +208,20 @@ test("capture", async ({ page, request }) => {
   await page.getByRole("menuitem", { name: /light/i }).click()
   await expect(page.locator("html")).not.toHaveClass(/dark/)
 
+  // Settings in another language, because this is the densest page of words in
+  // the panel and the one where anything still English is obvious.
+  await page.goto("/settings")
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible({
+    timeout: 30_000,
+  })
+  await page.locator('[data-slot="language-switcher"]').click()
+  await page.getByRole("menuitem", { name: "Bahasa Indonesia" }).click()
+  await page.waitForTimeout(600)
+  await shoot(page, "settings-indonesian")
+  await page.locator('[data-slot="language-switcher"]').click()
+  await page.getByRole("menuitem", { name: "English" }).click()
+  await page.waitForTimeout(400)
+
   await go("/projects", "Projects")
   await shoot(page, "projects")
 

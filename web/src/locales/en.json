@@ -7,6 +7,8 @@
     "delete": "Delete",
     "remove": "Remove",
     "close": "Close",
+    "navigation": "Navigation",
+    "navigationHelp": "The panel’s navigation, as a drawer on a small screen.",
     "create": "Create",
     "edit": "Edit",
     "add": "Add",
@@ -353,6 +355,7 @@
     "restarts": "Restarts",
     "node": "Server",
     "noInstances": "No instances are running.",
+    "noInstancesHelp": "A deployment builds the app and starts the first one.",
     "phase": {
       "running": "Running",
       "starting": "Starting",
@@ -721,7 +724,181 @@
     "pluginStoreVerified": "Signed by the key set here",
     "pluginStoreCount_one": "{{count}} plugin in the catalogue",
     "pluginStoreCount_other": "{{count}} plugins in the catalogue",
-    "pluginStoreGoToPlugins": "Go to Plugins to install one"
+    "pluginStoreGoToPlugins": "Go to Plugins to install one",
+    "field": {
+      "cluster_flannel_backend": {
+        "label": "How servers talk to each other",
+        "help": "WireGuard encrypts traffic between your servers, which matters when they are with different providers. It needs the wireguard kernel module on every server. vxlan works everywhere and is not encrypted. Every server in a cluster has to use the same one, so change this before adding servers, not after."
+      },
+      "cluster_k3s_version": {
+        "label": "Kubernetes version",
+        "help": "The k3s version a server added from here is installed with. Leave empty to follow the stable channel, which is what a new cluster gets. Pin it to keep a server you add next month on the same version as the ones you have."
+      },
+      "cluster_preview_ttl_days": {
+        "label": "Remove preview environments after",
+        "help": "Days with no deployment before a pull request's preview environment is removed. A preview that is still being pushed to survives however long the pull request stays open. Set to 0 to keep them until their pull request closes, which is how previews are normally removed — but a webhook that never arrives then leaves one running forever."
+      },
+      "dns_api_token": {
+        "label": "DNS API token",
+        "help": "A token scoped to edit records in one zone. Do not use a global account key."
+      },
+      "dns_provider": {
+        "label": "DNS provider",
+        "help": "Lets Skifity create DNS records for you when you add a domain. Leave empty to create them yourself."
+      },
+      "dns_zone": {
+        "label": "DNS zone",
+        "help": "The zone records are created in."
+      },
+      "domains_acme_email": {
+        "label": "Let's Encrypt email",
+        "help": "Where Let's Encrypt sends certificate expiry warnings. Required before HTTPS certificates can be issued."
+      },
+      "domains_acme_server": {
+        "label": "ACME directory URL",
+        "help": "Leave empty for Let's Encrypt production. Point it at the staging directory while you are testing, so you do not hit the rate limit."
+      },
+      "domains_cloudflare_tunnel_token": {
+        "label": "Cloudflare tunnel token",
+        "help": "Lets your apps answer on the internet without a public IP, a port open, or a fixed address for DNS to point at. Create a tunnel in the Cloudflare dashboard under Zero Trust, Networks, Tunnels; choose the Cloudflared connector and copy the token it shows. Then add one public hostname on that tunnel — a wildcard such as *.apps.example.com covers every app at once — with the service set to HTTP and the address traefik.kube-system.svc.cluster.local:80. Install Cloudflare tunnel under Components once the token is saved."
+      },
+      "domains_cluster_ip": {
+        "label": "Cluster public IP",
+        "help": "The address your domains should point at. Detected automatically; override it if your cluster sits behind a load balancer."
+      },
+      "domains_geo_asn_url": {
+        "label": "Network database",
+        "help": "The same, for the network a visitor's address belongs to, which is what an AS number rule tests."
+      },
+      "domains_geo_country_url": {
+        "label": "Country database",
+        "help": "Where the firewall's country data comes from, in MaxMind's .mmdb format. Leave empty for DB-IP's free monthly file, which needs no account. A %s in the address is replaced with the month. Point it at your own copy, or at a MaxMind download, if you would rather."
+      },
+      "domains_geo_enabled": {
+        "label": "Look up a visitor's country and network",
+        "help": "On by default. The firewall downloads DB-IP's free monthly databases, which need no account, so that a rule can name a country or a network. Turn it off on a cluster with no way out to the internet, or if you would rather nothing was downloaded — a rule about a country cannot then be saved, which is better than one that is quietly skipped."
+      },
+      "domains_trusted_proxies": {
+        "label": "Trusted proxies",
+        "help": "Address ranges in front of this cluster that may say who a visitor is. The pod and service networks are trusted already; add a load balancer's range here if you have one. Get this wrong in the other direction and a visitor can choose the address your firewall rules judge them by, so add only ranges you control."
+      },
+      "domains_wildcard": {
+        "label": "Wildcard domain",
+        "help": "A domain with a wildcard DNS record pointing at this cluster. Every app gets a free subdomain under it. Leave empty to use sslip.io addresses instead."
+      },
+      "email_smtp_from": {
+        "label": "Send email from",
+        "help": "The address notifications appear to come from. It usually has to be one your mail server is allowed to send as, or the mail is rejected."
+      },
+      "email_smtp_host": {
+        "label": "SMTP host",
+        "help": "Needed for email notifications and for password reset emails."
+      },
+      "email_smtp_password": {
+        "label": "SMTP password",
+        "help": "Stored encrypted. Most providers want an app password here rather than your account password."
+      },
+      "email_smtp_port": {
+        "label": "SMTP port",
+        "help": "587 for STARTTLS, which is what almost everything uses now. 465 is implicit TLS; 25 is unencrypted and usually blocked by hosting providers."
+      },
+      "email_smtp_tls": {
+        "label": "Use STARTTLS",
+        "help": "Leave on unless your mail server only accepts plain connections."
+      },
+      "email_smtp_user": {
+        "label": "SMTP username",
+        "help": "Leave empty if your mail server accepts mail from this cluster without signing in."
+      },
+      "general_default_builder": {
+        "label": "Default builder",
+        "help": "Which builder to use when a repository has no Dockerfile. Railpack produces smaller images; Nixpacks is older and more widely tested."
+      },
+      "general_panel_url": {
+        "label": "Panel URL",
+        "help": "The address people use to reach this panel. Used in links inside notifications and in webhook URLs."
+      },
+      "general_telemetry_disabled": {
+        "label": "Disable usage reporting",
+        "help": "Skifity sends nothing anywhere by default. This setting exists so that the absence of telemetry is visible rather than assumed."
+      },
+      "maintenance_audit_history_days": {
+        "label": "Keep the activity log for",
+        "help": "Days. The activity log is kept far longer than anything else here, because a log that forgets is most of the way to not having one. Shorten it only if you have a reason to."
+      },
+      "maintenance_deployment_history": {
+        "label": "Deployment records to keep, per app",
+        "help": "How many past deployments an app keeps, with their build logs. Older ones are removed so the panel's database does not grow without end. Only the ten most recent can be rolled back to, because that is how many images the registry keeps and how many revisions Kubernetes itself remembers."
+      },
+      "plugins_store_public_key": {
+        "label": "Plugin store signing key",
+        "help": "The store's Ed25519 public key, base64. With one set, an index that is not signed by it is refused. With none, the catalogue is still readable and every entry is shown as vouched for by nobody. Generate a pair with: skifity admin plugin-key"
+      },
+      "plugins_store_url": {
+        "label": "Plugin store",
+        "help": "Where the panel looks for plugins. Leave empty for the Skifity store. Point it at your own index to run a store of your own, or clear the public key below to browse one that is not signed — a plugin can always be installed from a manifest address or by pasting one, which is what a cluster with no way out to the internet uses."
+      },
+      "registry_password": {
+        "label": "Registry password",
+        "help": "A token with permission to push. Stored encrypted and never shown again."
+      },
+      "registry_url": {
+        "label": "External registry",
+        "help": "Where built images are pushed. Leave empty to use the registry inside the cluster, which is the simplest option."
+      },
+      "registry_username": {
+        "label": "Registry username",
+        "help": "Needed only for an external registry. The registry inside the cluster needs no credentials."
+      },
+      "signin_oidc_allowed_domains": {
+        "label": "Allowed email domains",
+        "help": "Comma-separated. Only people whose verified email is in one of these domains may sign in. Leave empty to accept anybody the provider vouches for, which is only safe when the provider is yours."
+      },
+      "signin_oidc_auto_create": {
+        "label": "Create an account on first sign-in",
+        "help": "With this off, somebody the provider knows and this panel does not is refused, so accounts are created by invitation rather than by anyone with a company address."
+      },
+      "signin_oidc_button_label": {
+        "label": "Sign-in button text",
+        "help": "What the button on the sign-in page says. Leave empty for a generic label."
+      },
+      "signin_oidc_client_id": {
+        "label": "Client ID",
+        "help": "From the application you registered with the provider. Its redirect URI is this panel's address followed by /api/auth/sso/callback."
+      },
+      "signin_oidc_client_secret": {
+        "label": "Client secret",
+        "help": "Stored encrypted and never shown again."
+      },
+      "signin_oidc_issuer": {
+        "label": "Single sign-on issuer",
+        "help": "The OpenID Connect issuer URL of your identity provider — Okta, Entra, Authentik, Keycloak, Zitadel, Google. Skifity reads its configuration from /.well-known/openid-configuration under this address. Leave empty to sign in with a password only."
+      },
+      "storage_s3_access_key": {
+        "label": "S3 access key",
+        "help": "Use a key that can only write to this bucket."
+      },
+      "storage_s3_bucket": {
+        "label": "S3 bucket",
+        "help": "The bucket backups are written to. Skifity does not create it for you."
+      },
+      "storage_s3_endpoint": {
+        "label": "S3 endpoint",
+        "help": "Any S3-compatible service works: AWS, Backblaze B2, Cloudflare R2, Wasabi, or a MinIO server you run yourself."
+      },
+      "storage_s3_path_style": {
+        "label": "Use path-style URLs",
+        "help": "Turn this on for MinIO and most self-hosted S3 services."
+      },
+      "storage_s3_region": {
+        "label": "S3 region",
+        "help": "Some providers ignore this; AWS does not."
+      },
+      "storage_s3_secret_key": {
+        "label": "S3 secret key",
+        "help": "Stored encrypted and never shown again."
+      }
+    }
   },
   "errors": {
     "whatHappened": "What happened",

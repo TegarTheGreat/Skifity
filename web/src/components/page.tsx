@@ -55,7 +55,9 @@ export function PageHeader({
   loading,
 }: {
   title?: string
-  description?: string
+  /** A node rather than a string: a page whose subtitle is where it lives —
+      "Storefront · production" — needs a link inside it. */
+  description?: React.ReactNode
   icon?: LucideIcon
   actions?: React.ReactNode
   /** A status or count that belongs next to the title rather than below it. */

@@ -929,7 +929,13 @@ function AuditPanel() {
                     {formatDateTime(event.at)}
                   </TableCell>
                   <TableCell>
-                    <div className="font-mono text-xs">{event.action}</div>
+                    {/* The same phrase the Activity page shows, so one thing
+                        is not called two names in one product. The code stays
+                        on the hover, because this is the tab somebody reads
+                        with a log open beside it. */}
+                    <div className="text-xs" title={event.action}>
+                      {t(`activity.action.${event.action}`, { defaultValue: event.action })}
+                    </div>
                     <div className="text-xs text-muted-foreground">{event.actor_label}</div>
                   </TableCell>
                   <TableCell className="hidden text-xs sm:table-cell">

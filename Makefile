@@ -24,7 +24,7 @@ export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
 .PHONY: help build frontend backend dev dev-api test test-go test-race lint lint-go \
-	lint-web fmt check i18n smoke e2e screenshots image audit clean deps tidy release install-hooks
+	lint-web fmt check i18n smoke e2e screenshots image audit clean deps tidy release install-hooks ui
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*##" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -33,6 +33,13 @@ build: frontend backend ## Build the frontend and the single binary
 
 frontend: ## Build the user interface into web/dist
 	npm --prefix web ci --no-audit --no-fund
+	npm --prefix web run build
+
+# The interface, without reinstalling node_modules. `frontend` runs npm ci,
+# which is right for a clean build and wrong for the loop where somebody changes
+# a page and runs the interface test: that test embeds web/dist, so without this
+# it happily tests the build from an hour ago. It did.
+ui: ## Rebuild web/dist from the current source
 	npm --prefix web run build
 
 backend: ## Build the binary against whatever is in web/dist
@@ -106,10 +113,10 @@ verify: ## Install on THIS machine and crosscheck the whole checklist on a real 
 	@echo "SKIFITY_PHASES=\"1 2 3 4 5\" picks which phases run; docs/checklist.md says what each covers."
 	sudo -E bash test/cluster/verify.sh
 
-e2e: backend ## Run the Playwright user interface test against the real binary
+e2e: ui backend ## Run the Playwright user interface test against the real binary
 	npm --prefix web run test:e2e
 
-screenshots: backend ## Recapture the screenshots in the README
+screenshots: ui backend ## Recapture the screenshots in the README
 	# `run`, not `exec`: an npm script runs with the package directory as its
 	# working directory and `npm exec` does not, so this used to start Playwright
 	# in the repository root, where there is no config — no browser path, no

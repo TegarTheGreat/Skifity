@@ -44,7 +44,10 @@ export function ActivityPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title={t("nav.activity")} description={t("settings.auditLogHelp")} />
+      {/* Its own sentence: this page borrowed the audit tab's, which promises
+          "and from where" — the address, which is the one thing this page
+          deliberately does not show. */}
+      <PageHeader title={t("nav.activity")} description={t("activity.subtitle")} />
 
       {events.isLoading ? (
         <Skeleton className="h-64" />
@@ -53,8 +56,8 @@ export function ActivityPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={ActivityIcon}
-          title={t("dashboard.nothingYet")}
-          description={t("settings.auditLogHelp")}
+          title={t("activity.empty")}
+          description={t("activity.emptyHelp")}
         />
       ) : (
         <Card>
@@ -64,8 +67,15 @@ export function ActivityPage() {
                 key={event.id}
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3"
               >
-                <span className="font-mono text-xs text-muted-foreground">{event.action}</span>
-                <span className="min-w-0 flex-1 truncate text-sm">
+                {/* "app.scaling_changed" is what the database stores, not what
+                    a person came here to read. The code is kept as the title
+                    attribute for whoever is matching a row against a log. A
+                    code with no phrase yet falls back to itself, which is what
+                    every row used to be. */}
+                <span className="text-sm" title={event.action}>
+                  {t(`activity.action.${event.action}`, { defaultValue: event.action })}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
                   {event.target_label || event.target_type}
                 </span>
                 <span className="text-xs text-muted-foreground">{event.actor_label}</span>

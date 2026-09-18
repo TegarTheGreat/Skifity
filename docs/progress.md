@@ -1649,6 +1649,72 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 54 — a page of snake_case, an app with no address, and a trail to nowhere
+
+The project page, the app page and Activity, read the way somebody meets them.
+
+### Activity was a column of machine codes
+
+The page that answers "what happened" printed `app.scaling_changed`,
+`variable.set`, `setup.completed` — the strings the database stores. On a panel
+whose whole premise is that Kubernetes stays out of sight, the human page was
+showing identifiers.
+
+All seventy-two audit actions have words now, in five languages: "Scaling
+changed", "Variable set", "Panel set up". The code stays on the hover, because
+this is also the page somebody reads with a log open beside them, and a code
+with no phrase falls back to itself — which is what every row used to be. The
+audit tab in Settings shows the same phrases, so one thing is not called two
+names in one product.
+
+`TestEveryAuditActionHasWordsForIt` reads the actions out of this package's own
+source and checks each one against the locale. Adding an action without a phrase
+fails with the file it is in and the key to add.
+
+The page also borrowed the audit tab's sentence — "Who did what, when, and from
+where" — while deliberately not showing the address, and then repeated that same
+sentence in its empty state.
+
+### An app page that could not say where it was
+
+The breadcrumb read "Overview › Apps", the title was the app's name, and nothing
+anywhere named the project or the environment it belongs to. The only way back
+to its project was the browser's back button.
+
+It says "Storefront · Production" under the name now, with the project as a
+link. Both queries are keyed so they come from the cache when anything else has
+already asked.
+
+Two more on the same page: the stat card was labelled "Instances" above a card
+titled "Instances", and read "0 / 0" without saying which number was which — it
+is "Instances ready" now. And "The panel is not connected to a cluster" was a
+grey sentence floating between cards, while the same condition is an Alert on
+the Overview page; it is an Alert here too, with a tone that follows the phase,
+so a cluster that cannot be reached reads as a problem and "waiting for the new
+instances" does not.
+
+### A trail that pointed at the not-found page
+
+The breadcrumb drops the ids — `/apps/app_06gb…` is noise — and rebuilds the
+path from what is left. On the new-app page, `/environments/env_x/apps/new`,
+that produced links to `/environments` and `/environments/apps`. Neither is a
+page. Both were links.
+
+A crumb is a link only when the path it would point at is one of the panel's
+pages now, and a Playwright test walks every breadcrumb on every seeded page and
+follows it, failing if it lands on the not-found page.
+
+### The test that was testing an older build
+
+`make e2e` depended on `backend`, which builds the binary against whatever is in
+`web/dist`. Change a page, run the interface test, and it tests the build from
+an hour ago — which is exactly what happened here: a tap target that was too
+small kept failing after it had been fixed. There is a `ui` target now, and both
+`e2e` and `screenshots` depend on it.
+
+**Verified by looking:** the screenshots are recaptured, and the one that made
+this pass worth doing is Activity — eight rows that used to be code.
+
 ## Phase 53 — the braces on the page, cron in a text box, and four sentences said twice
 
 An interface pass, looking for what a person meets rather than what a test

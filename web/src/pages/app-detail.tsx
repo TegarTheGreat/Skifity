@@ -1,7 +1,7 @@
-import { useSearchParams, useParams } from "react-router-dom"
+import { Link, useSearchParams, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { BoxIcon, ExternalLinkIcon, RefreshCwIcon, RocketIcon } from "lucide-react"
+import { BoxIcon, ExternalLinkIcon, InfoIcon, RefreshCwIcon, RocketIcon } from "lucide-react"
 
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
@@ -17,6 +17,7 @@ import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { StatusBadge } from "@/components/status-badge"
 import { VariablesEditor } from "@/components/variables-editor"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -34,7 +35,7 @@ import { useSession } from "@/hooks/use-session"
 import { api } from "@/lib/api"
 import { formatCPU, formatMemory, formatRelative } from "@/lib/format"
 import { queryClient } from "@/lib/query"
-import type { App, AppStatus } from "@/lib/types"
+import type { App, AppStatus, Environment, Project } from "@/lib/types"
 
 export function AppDetailPage() {
   const { t } = useTranslation()
@@ -55,6 +56,21 @@ export function AppDetailPage() {
     // A rollout changes what is running from one second to the next, and the
     // event stream only carries deployment state, not instance state.
     refetchInterval: 10_000,
+  })
+
+  // Where this app lives. An app page used to be an island: the breadcrumb said
+  // "Apps", the sidebar could not say which project this belonged to, and the
+  // only way back was the browser's own button. Both queries are keyed so they
+  // come from the cache when anything else has already asked.
+  const environment = useQuery({
+    queryKey: ["environment", app.data?.environment_id],
+    queryFn: () => api.get<Environment>(`/api/environments/${app.data!.environment_id}`),
+    enabled: Boolean(app.data?.environment_id),
+  })
+  const project = useQuery({
+    queryKey: ["project", environment.data?.project_id],
+    queryFn: () => api.get<Project>(`/api/projects/${environment.data!.project_id}`),
+    enabled: Boolean(environment.data?.project_id),
   })
 
   useEvents(
@@ -83,6 +99,26 @@ export function AppDetailPage() {
       <PageHeader
         icon={BoxIcon}
         title={current.name}
+        description={
+          project.data && (
+            <span className="inline-flex flex-wrap items-center gap-1.5">
+              {/* min-h-6: a link in a subtitle is still a tap target, and the
+                  layout test counts anything under 24px as a failure. */}
+              <Link
+                to={`/projects/${project.data.id}`}
+                className="inline-flex min-h-6 items-center underline-offset-4 hover:underline"
+              >
+                {project.data.name}
+              </Link>
+              {environment.data && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>{environment.data.name}</span>
+                </>
+              )}
+            </span>
+          )
+        }
         badge={
           <StatusBadge
             status={status.data?.phase ?? current.status}
@@ -191,6 +227,20 @@ export function AppDetailPage() {
   )
 }
 
+/** detailTone maps an app's phase onto how loudly its status line should read. */
+function detailTone(phase?: string): "destructive" | "warning" | "default" {
+  switch (phase) {
+    case "failed":
+    case "unreachable":
+      return "destructive"
+    case "degraded":
+    case "unknown":
+      return "warning"
+    default:
+      return "default"
+  }
+}
+
 function Overview({ app, status, loading }: { app: App; status?: AppStatus; loading: boolean }) {
   const { t } = useTranslation()
 
@@ -204,7 +254,10 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground">
-              {t("apps.instances")}
+              {/* "Instances" was the label here and the title of the card
+                  below, and "0 / 0" said nothing about which number was
+                  which. */}
+              {t("apps.instancesReady")}
             </CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
@@ -234,7 +287,16 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
         </Card>
       </div>
 
-      {status?.detail && <p className="text-sm text-muted-foreground">{status.detail}</p>}
+      {/* The same condition is an Alert on the Overview page and was a grey
+          sentence floating between cards here. Its tone follows the phase it
+          belongs to, so a cluster that cannot be reached reads as a problem and
+          "waiting for the new instances" does not. */}
+      {status?.detail && (
+        <Alert variant={detailTone(status.phase)}>
+          <InfoIcon />
+          <AlertDescription>{status.detail}</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>

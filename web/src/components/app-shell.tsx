@@ -341,7 +341,23 @@ function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
  *
  * Only the segments that name something are shown: an id in the middle of a
  * path is noise, and the page itself already says what it is looking at.
+ *
+ * A crumb is a link only when the path it would point at is a page. Dropping
+ * the ids means the trail has to be rebuilt from what is left, and that used to
+ * produce addresses nothing serves: on the new-app page —
+ * /environments/env_x/apps/new — "Environments" linked to /environments and
+ * "Apps" to /environments/apps, both of which are the not-found page.
  */
+const PAGES = new Set([
+  "/projects",
+  "/databases",
+  "/servers",
+  "/templates",
+  "/plugins",
+  "/activity",
+  "/settings",
+  "/account",
+])
 function Crumbs() {
   const { t } = useTranslation()
   const location = useLocation()
@@ -372,15 +388,16 @@ function Crumbs() {
         {named.map((segment, index) => {
           const last = index === named.length - 1
           const label = t(`nav.${segment}`, { defaultValue: humanise(segment) })
+          const path = "/" + named.slice(0, index + 1).join("/")
           return (
             <Fragment key={segment + index}>
               <BreadcrumbSeparator className="hidden sm:block" />
               <BreadcrumbItem className="min-w-0">
-                {last ? (
+                {last || !PAGES.has(path) ? (
                   <BreadcrumbPage className="truncate">{label}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink asChild>
-                    <Link to={"/" + named.slice(0, index + 1).join("/")}>{label}</Link>
+                    <Link to={path}>{label}</Link>
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>

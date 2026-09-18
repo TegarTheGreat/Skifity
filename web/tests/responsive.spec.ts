@@ -51,7 +51,10 @@ async function seed(page: Page, request: APIRequestContext) {
   }
   const post = async (path: string, body: unknown) => {
     const response = await request.post(path, { headers, data: body })
-    expect(response.ok(), `POST ${path}: ${response.status()} ${await response.text()}`).toBeTruthy()
+    expect(
+      response.ok(),
+      `POST ${path}: ${response.status()} ${await response.text()}`,
+    ).toBeTruthy()
     return response.json()
   }
   const get = async (path: string) => (await request.get(path, { headers })).json()
@@ -164,8 +167,10 @@ test.describe("layout", () => {
         await page.waitForTimeout(400)
 
         const over = await overflow(page)
-        expect(over, `${name} at ${width}px: ${over}px of horizontal scroll. ${await widest(page)}`)
-          .toBeLessThanOrEqual(1)
+        expect(
+          over,
+          `${name} at ${width}px: ${over}px of horizontal scroll. ${await widest(page)}`,
+        ).toBeLessThanOrEqual(1)
       }
     })
   }
@@ -184,7 +189,10 @@ test.describe("layout", () => {
       .locator('[data-slot="sidebar-menu-button"]')
       .and(page.getByRole("link", { name: "Projects", exact: true }))
     await expect(projects).toBeHidden()
-    await page.getByRole("button", { name: /show or hide the sidebar/i }).first().click()
+    await page
+      .getByRole("button", { name: /show or hide the sidebar/i })
+      .first()
+      .click()
     await expect(projects).toBeVisible()
 
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -292,3 +300,30 @@ async function signIn(page: Page) {
   }
   await expect(accountMenu).toBeVisible()
 }
+
+// A breadcrumb that links to the not-found page is worse than one that does not
+// link at all. The ids are dropped from the trail, so the path has to be rebuilt
+// from what is left, and /environments/env_x/apps/new used to rebuild into
+// /environments and /environments/apps — neither of which is a page.
+test("no breadcrumb points at a page that does not exist", async ({ page, request }) => {
+  await signIn(page)
+  await seed(page, request)
+
+  for (const [path] of seeded) {
+    await page.goto(path)
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
+
+    const hrefs = await page
+      .locator('nav[aria-label="breadcrumb"] a')
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""))
+
+    for (const href of hrefs) {
+      if (!href || href === "/") continue
+      await page.goto(href)
+      await expect(
+        page.getByRole("heading", { level: 1 }),
+        `${path} has a breadcrumb pointing at ${href}`,
+      ).not.toHaveText(/not found/i)
+    }
+  }
+})

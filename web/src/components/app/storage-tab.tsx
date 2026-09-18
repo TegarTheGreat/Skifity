@@ -60,13 +60,23 @@ export function StorageTab({ app }: { app: App }) {
   // project, a database or a server. This was one click on a bin icon, and it
   // is the one that destroys data nothing can get back: an app can be deployed
   // again from the same commit, a disk cannot.
+  //
+  // The consequence names the safety net, or says there is none. Adobe lists
+  // what will be gone for good, Laravel Cloud says it will take a final backup
+  // first, Render says to move the services out if you want to keep them — the
+  // dialog is where somebody finds out whether they can afford to press it, and
+  // this screen already knows when the disk was last copied.
   const confirmDelete = useDeleteConfirm()
-  const askThenRemove = (volume: Volume) => {
-    void confirmDelete(volume.name, t("apps.deleteVolumeConfirm", { path: volume.mount_path }), t("apps.deleteVolumeConsequence")).then(
-      (yes) => {
-        if (yes) remove.mutate(volume.id)
-      },
-    )
+  const askThenRemove = (volume: Volume, lastBackup?: string) => {
+    void confirmDelete(
+      volume.name,
+      t("apps.deleteVolumeConfirm", { path: volume.mount_path }),
+      lastBackup
+        ? t("apps.deleteVolumeLastBackup", { when: formatRelative(lastBackup) })
+        : t("apps.deleteVolumeNeverBackedUp"),
+    ).then((yes) => {
+      if (yes) remove.mutate(volume.id)
+    })
   }
 
   if (volumes.isLoading) return <Skeleton className="h-40" />
@@ -173,28 +183,13 @@ export function StorageTab({ app }: { app: App }) {
                   </TableHeader>
                   <TableBody>
                     {items.map((volume) => (
-                      <TableRow key={volume.id}>
-                        <TableCell className="font-mono text-xs font-medium">
-                          {volume.name}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{volume.mount_path}</TableCell>
-                        <TableCell className="tabular-nums">{volume.size_gb} GB</TableCell>
-                        <LastBackup appID={app.id} volumeID={volume.id} />
-                        <TableCell>
-                          <div className="flex justify-end gap-1">
-                            <BackUpNow appID={app.id} volumeID={volume.id} />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("common.delete")}
-                              disabled={remove.isPending}
-                              onClick={() => askThenRemove(volume)}
-                            >
-                              <Trash2Icon className="size-4 text-muted-foreground" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <VolumeRow
+                        key={volume.id}
+                        appID={app.id}
+                        volume={volume}
+                        deleting={remove.isPending}
+                        onDelete={askThenRemove}
+                      />
                     ))}
                   </TableBody>
                 </Table>
@@ -210,33 +205,67 @@ export function StorageTab({ app }: { app: App }) {
 }
 
 /**
- * When this volume was last copied to storage.
+ * One disk, and when it was last copied somewhere safe.
  *
- * A volume with no backup says so rather than showing an empty cell: "never"
- * is the thing somebody needs to see, and a blank column reads as a column
- * that has not loaded.
+ * The backup query lives here rather than in the cell, because two things need
+ * the answer: the column, and the dialog that asks whether to destroy the disk.
+ * A volume with no backup says so rather than showing an empty cell — "never"
+ * is the thing somebody needs to see, and a blank column reads as a column that
+ * has not loaded.
  */
-function LastBackup({ appID, volumeID }: { appID: string; volumeID: string }) {
+function VolumeRow({
+  appID,
+  volume,
+  deleting,
+  onDelete,
+}: {
+  appID: string
+  volume: Volume
+  deleting: boolean
+  onDelete: (volume: Volume, lastBackup?: string) => void
+}) {
   const { t } = useTranslation()
   const backups = useQuery({
-    queryKey: ["volume-backups", volumeID],
-    queryFn: () => api.get<List<Backup>>(`/api/apps/${appID}/volumes/${volumeID}/backups?limit=1`),
+    queryKey: ["volume-backups", volume.id],
+    queryFn: () => api.get<List<Backup>>(`/api/apps/${appID}/volumes/${volume.id}/backups?limit=1`),
   })
 
   const latest = backups.data?.items?.[0]
+  // Only a backup that worked is a backup.
+  const safe = latest && latest.status !== "failed" ? latest.created_at : undefined
+
   return (
-    <TableCell className="text-xs text-muted-foreground">
-      {backups.isLoading ? (
-        <Skeleton className="h-4 w-20" />
-      ) : latest ? (
-        <span title={latest.status}>
-          {formatRelative(latest.created_at)}
-          {latest.status === "failed" && ` · ${t("databases.status.failed", { defaultValue: "failed" })}`}
-        </span>
-      ) : (
-        t("common.never")
-      )}
-    </TableCell>
+    <TableRow>
+      <TableCell className="font-mono text-xs font-medium">{volume.name}</TableCell>
+      <TableCell className="font-mono text-xs">{volume.mount_path}</TableCell>
+      <TableCell className="tabular-nums">{volume.size_gb} GB</TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        {backups.isLoading ? (
+          <Skeleton className="h-4 w-20" />
+        ) : latest ? (
+          <span>
+            {formatRelative(latest.created_at)}
+            {latest.status === "failed" && ` · ${t("databases.status.failed")}`}
+          </span>
+        ) : (
+          t("common.never")
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex justify-end gap-1">
+          <BackUpNow appID={appID} volumeID={volume.id} />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("common.delete")}
+            disabled={deleting}
+            onClick={() => onDelete(volume, safe)}
+          >
+            <Trash2Icon className="size-4 text-muted-foreground" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
   )
 }
 

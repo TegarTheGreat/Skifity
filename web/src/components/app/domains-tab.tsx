@@ -1,7 +1,15 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ExternalLinkIcon, GlobeIcon, LockIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import {
+  BookOpenIcon,
+  ExternalLinkIcon,
+  GlobeIcon,
+  LockIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+} from "lucide-react"
 
 import { useConfirm } from "@/components/confirm-dialog"
 import { CopyButton } from "@/components/copy-button"
@@ -14,6 +22,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Spinner } from "@/components/ui/spinner"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
@@ -160,7 +176,11 @@ export function DomainsTab({ app }: { app: App }) {
               </div>
 
               {domain.status === "pending" && !domain.auto && (
-                <DNSInstructions domain={domain} />
+                <DNSInstructions
+                  domain={domain}
+                  rechecking={domains.isFetching}
+                  onRecheck={() => void domains.refetch()}
+                />
               )}
 
               {/* A certificate that stopped trying says why, and cert-manager's
@@ -184,40 +204,89 @@ export function DomainsTab({ app }: { app: App }) {
 }
 
 /**
- * The record to create, with the address actually in it.
+ * The record to create, as a record.
  *
- * This used to read "Create an A record for blog.example.com pointing to
- * Unknown." — the panel has known the address since there were settings, and
- * the one screen that asks somebody to create a DNS record never said it. The
- * quick start told people the panel would show the record.
+ * Written as a sentence first — "Create an A record for blog.example.com
+ * pointing to 203.0.113.10" — which is how somebody who already knows DNS
+ * would say it, and not how anybody types it in. Every registrar's form has
+ * three boxes: type, name, value. Tally, Okta, Klaviyo, AutoSend and Loops all
+ * lay this out as those three columns with a copy control on each cell, and
+ * that is the shape somebody is copying into, so that is the shape here.
  *
  * An address that is a name rather than a number is a CNAME, which is what an
- * install behind a load balancer has, so the sentence follows the value.
+ * install behind a load balancer has, so the type follows the value.
  */
-function DNSInstructions({ domain }: { domain: Domain }) {
+function DNSInstructions({ domain, onRecheck, rechecking }: {
+  domain: Domain
+  onRecheck: () => void
+  rechecking: boolean
+}) {
   const { t } = useTranslation()
   const target = domain.dns_target ?? ""
-  const isIP = /^[\d.]+$|:/.test(target)
+
+  if (target === "") {
+    return (
+      <Alert>
+        <AlertTitle>{t("domains.dnsInstructions")}</AlertTitle>
+        <AlertDescription>{t("domains.dnsUnknown")}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  // A colon is IPv6, digits and dots are IPv4; anything else is a name.
+  const type = /^[\d.]+$|:/.test(target) ? "A" : "CNAME"
 
   return (
     <Alert>
       <AlertTitle>{t("domains.dnsInstructions")}</AlertTitle>
-      <AlertDescription className="space-y-2">
-        {target === "" ? (
-          <p>{t("domains.dnsUnknown")}</p>
-        ) : (
-          <>
-            <p>
-              {isIP
-                ? t("domains.dnsRecord", { hostname: domain.hostname, ip: target })
-                : t("domains.dnsRecordCname", { hostname: domain.hostname, target })}
-            </p>
-            <div className="flex items-center gap-1">
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{target}</code>
-              <CopyButton value={target} label={t("domains.dnsTarget")} />
-            </div>
-          </>
-        )}
+      <AlertDescription className="space-y-3">
+        <p>{t("domains.dnsIntro")}</p>
+
+        <div className="overflow-hidden rounded-md border bg-background">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="h-8 text-xs">{t("domains.recordType")}</TableHead>
+                <TableHead className="h-8 text-xs">{t("domains.recordName")}</TableHead>
+                <TableHead className="h-8 text-xs">{t("domains.recordValue")}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="py-2 font-mono text-xs font-medium">{type}</TableCell>
+                <DNSCell value={domain.hostname} label={t("domains.recordName")} />
+                <DNSCell value={target} label={t("domains.recordValue")} />
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Okta says "the host format may vary by registrar" on this screen,
+            and it is the mistake people actually make: half the registrars want
+            the whole hostname in the Name box and half want only the label in
+            front of the domain. The panel cannot tell which, because working
+            out where a hostname's zone ends needs the public suffix list and
+            gets .co.uk wrong. So it says so. */}
+        <p className="text-xs text-muted-foreground">{t("domains.dnsNameVaries")}</p>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Waiting is the normal case and reads as a failure without this.
+              Every product that asks for a DNS record says it on the same
+              screen, because the alternative is somebody deciding after two
+              minutes that the panel is broken. */}
+          <p className="text-xs text-muted-foreground">{t("domains.dnsPropagation")}</p>
+          <Button variant="outline" size="sm" disabled={rechecking} onClick={onRecheck}>
+            {rechecking ? <Spinner /> : <RefreshCwIcon className="size-3.5" />}
+            {t("domains.checkAgain")}
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/docs/quick-start#4-add-your-own-domain" target="_blank" rel="noreferrer">
+              <BookOpenIcon className="size-3.5" />
+              {t("nav.documentation")}
+            </a>
+          </Button>
+        </div>
+
         {/* cert-manager's own reason, when there is one: it is the only thing
             that explains a certificate that is still waiting. */}
         {domain.status_detail && (
@@ -225,6 +294,18 @@ function DNSInstructions({ domain }: { domain: Domain }) {
         )}
       </AlertDescription>
     </Alert>
+  )
+}
+
+/** One cell of the record, with the copy control the registrar's form wants. */
+function DNSCell({ value, label }: { value: string; label: string }) {
+  return (
+    <TableCell className="py-2">
+      <span className="flex items-center gap-1">
+        <code className="truncate font-mono text-xs">{value}</code>
+        <CopyButton value={value} label={label} className="size-7 shrink-0" />
+      </span>
+    </TableCell>
   )
 }
 

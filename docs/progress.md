@@ -1649,6 +1649,96 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 58 — what the reference screens actually show, read at full size
+
+Phase 56 and 57 were written from Mobbin's inline previews, which are low
+resolution and meant for reading titles. Downloading the full-size images and
+reading them changed two decisions and added three details, one of which
+reverses something shipped hours earlier.
+
+### The DNS instruction was a sentence. Nobody types a sentence.
+
+"Create an A record for blog.example.com pointing to 203.0.113.10" is how
+somebody who already knows DNS would say it out loud. It is not the shape of
+what they are copying into: every registrar's form has three boxes — type,
+name, value.
+
+[Okta](https://mobbin.com/screens/4330008e-3784-48d2-b750-dd5109549b80),
+[Tally](https://mobbin.com/screens/8d7bf746-7f7b-4ac8-a3ee-4ee4cbb3fcfe),
+[Klaviyo](https://mobbin.com/screens/f6dcd542-ad3a-4101-abff-404742f1d19b),
+[AutoSend](https://mobbin.com/screens/bb3e5124-d099-46c2-881a-2e0037cef8ac) and
+[Loops](https://mobbin.com/screens/455556f9-d2d3-4058-8b2d-3cc2315bdd1d) all lay
+it out as those three columns with a copy control on **each cell**, not only on
+the value. So does this now.
+
+Read at full size, Okta's page carries three sentences the preview could not
+resolve, and each of them is a thing this panel was not saying:
+
+* **"The host format may vary by registrar."** That is the mistake people
+  actually make. Half the registrars want the whole hostname in the Name box
+  and half want only the label in front of the domain. The panel cannot work
+  out which part is the zone without the public suffix list — `.co.uk` breaks
+  the naive split — so it says so instead of guessing.
+* **"It may take a few minutes for the DNS changes to be available globally."**
+  Waiting is the normal case and reads as a failure without a line saying so.
+* **"After the DNS records are updated, return here to verify them."** There is
+  a **Check again** button now, next to a link to the panel's own quick start.
+
+### Masking the database password: the reversal
+
+Phase 57 deleted a `secret` prop from the credentials row on the grounds that
+it chose between `type="text"` and `type="text"` and had never masked anything,
+and that the card is already behind a **Show credentials** gate — so why hide
+twice?
+
+Because that is not what the gate is for. Every product in the reference set
+keeps the mask *after* the gate:
+[Cloudflare](https://mobbin.com/screens/31f33e60-deaa-4d06-9a91-b70ab9ceb153)
+and [Retool](https://mobbin.com/screens/fac20c45-0981-40f5-b6f6-a6ed3c589146)
+put an eye toggle on the field,
+[Laravel Cloud](https://mobbin.com/screens/35bdc533-361d-45c3-b23c-d8feb58ccac7)
+masks the whole block behind one, and
+[PlanetScale](https://mobbin.com/screens/cfddc224-b1bd-498d-a548-ad145a60c20f)
+does not show the password again **at all** — "Cannot be displayed after
+creation", with an offer to make a new one.
+
+The gate is consent to fetch the secret. The mask is so that fetching the
+*host* does not leave the password on a screen somebody is sharing. The prop is
+real now: `type="password"` with a per-field eye, on the password and on the
+connection string that carries it inside. The copy button hands over the value
+without putting it on screen.
+
+PlanetScale's version is stronger still and is not available here: this panel
+can decrypt the password, so "cannot be displayed" would be a lie.
+
+### A delete dialog says what the safety net is
+
+[Adobe](https://mobbin.com/screens/0e4a6af0-e652-41bf-8602-ffdf96e0bec4) lists
+the items that will be "gone for good",
+[Render](https://mobbin.com/screens/e62178b2-645c-4dc2-befe-196618fa3dee) says
+to move the services out first if you want to keep them, and
+[Laravel Cloud](https://mobbin.com/screens/7a7a42b5-04a3-4a56-9410-7a8c9484c5a5)
+says it will take a final backup before archiving. The dialog is where somebody
+finds out whether they can afford to press the button.
+
+The volume row already knew when the disk was last copied — it is a column on
+that table. The backup query moved up into the row so the dialog can use it
+too, and it now reads either "The last working backup of this disk was three
+days ago. Anything written since then goes with it." or, in the case that
+matters, **"This disk has never been backed up. Everything on it is gone for
+good."** A failed backup does not count as one.
+
+### The gate for the link
+
+Three `/docs/` links are written straight into `.tsx` files — the sidebar, the
+dashboard and now the Domains tab. The catalogue's `WithDocs` links have been
+checked page-and-anchor since Phase 16; these were checked by nothing, and a
+page renamed in `docs/` would have broken all three in silence. A test in
+`internal/docsite` now reads every `href="/docs/…"` in the frontend and serves
+it, anchor included. Proven by breaking the anchor.
+
+954 keys, five languages. `make check` green, 14 interface tests pass.
+
 ## Phase 57 — the DNS record that said "Unknown", and the disk one click could destroy
 
 A walk of every journey, start to finish, asking one question at each screen:

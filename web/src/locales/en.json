@@ -74,7 +74,9 @@
     "breadcrumb": "Breadcrumb",
     "dismiss": "Dismiss",
     "copyFailed": "The clipboard is not available here.",
-    "copyValue": "Copy {{name}}"
+    "copyValue": "Copy {{name}}",
+    "show": "Show",
+    "hide": "Hide"
   },
   "nav": {
     "overview": "Overview",
@@ -418,7 +420,9 @@
     "noVolumesHelp": "An app writes to a disk when its files have to outlive a deployment — uploads, a database it runs itself, a cache worth keeping.",
     "addVolume": "Add a disk",
     "deleteVolumeConfirm": "This deletes the disk mounted at {{path}} and everything on it.",
-    "deleteVolumeConsequence": "The files cannot be recovered afterwards. Take a backup first if you might need them."
+    "deleteVolumeConsequence": "The files cannot be recovered afterwards. Take a backup first if you might need them.",
+    "deleteVolumeLastBackup": "The last working backup of this disk was {{when}}. Anything written since then goes with it.",
+    "deleteVolumeNeverBackedUp": "This disk has never been backed up. Everything on it is gone for good."
   },
   "deploy": {
     "title": "Deployments",
@@ -487,7 +491,6 @@
     "hostnamePlaceholder": "app.example.com",
     "https": "HTTPS",
     "dnsInstructions": "Point this domain here",
-    "dnsRecord": "Create an A record for {{hostname}} pointing to {{ip}}.",
     "checking": "Checking DNS...",
     "statusPending": "Waiting for DNS",
     "statusActive": "Active",
@@ -497,10 +500,15 @@
     "certificateIssuing": "Getting a certificate...",
     "removeDomain": "Remove domain",
     "cannotRemoveAutomatic": "The automatic domain cannot be removed. It keeps the app reachable while you set up your own.",
-    "dnsRecordCname": "Create a CNAME record for {{hostname}} pointing to {{target}}.",
     "dnsUnknown": "Nobody has told this panel which public address its apps answer on. An administrator can set it under Settings, Domains.",
-    "dnsTarget": "the address to point at",
-    "removeDomainConfirm": "{{hostname}} stops reaching this app. Visitors get an error until you add it back or point it somewhere else."
+    "removeDomainConfirm": "{{hostname}} stops reaching this app. Visitors get an error until you add it back or point it somewhere else.",
+    "dnsIntro": "Add this record at whoever manages your domain's DNS — your registrar, or Cloudflare if you use it.",
+    "recordType": "Type",
+    "recordName": "Name",
+    "recordValue": "Value",
+    "dnsPropagation": "A new record usually works within a few minutes, and can take a few hours.",
+    "checkAgain": "Check again",
+    "dnsNameVaries": "Some registrars want the whole name here; others want only the part in front of your domain."
   },
   "scaling": {
     "title": "Scaling",

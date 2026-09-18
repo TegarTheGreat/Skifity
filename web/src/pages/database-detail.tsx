@@ -8,6 +8,7 @@ import {
   DatabaseBackupIcon,
   DatabaseIcon,
   EyeIcon,
+  EyeOffIcon,
   LinkIcon,
   Trash2Icon,
   UnlinkIcon,
@@ -211,23 +212,49 @@ function ConnectionPanel({ databaseId }: { databaseId: string }) {
           <CredentialRow label={t("databases.databaseName")} value={data.database} />
           <CredentialRow label={t("databases.user")} value={data.username} />
         </div>
-        <CredentialRow label={t("auth.password")} value={data.password} />
-        <CredentialRow label={t("databases.connectionString")} value={data.url} />
+        <CredentialRow label={t("auth.password")} value={data.password} secret />
+        {/* The connection string carries the password inside it. */}
+        <CredentialRow label={t("databases.connectionString")} value={data.url} secret />
         <p className="text-xs text-muted-foreground">{t("databases.credentialsWarning")}</p>
       </CardContent>
     </Card>
   )
 }
 
-function CredentialRow({ label, value }: { label: string; value: string }) {
+function CredentialRow({ label, value, secret }: { label: string; value: string; secret?: boolean }) {
+  const { t } = useTranslation()
+  const [shown, setShown] = useState(false)
+
   return (
     <Field>
       <FieldLabel className="text-xs text-muted-foreground">{label}</FieldLabel>
       <div className="flex items-center gap-2">
-        <Input readOnly value={value} className="font-mono text-xs" />
-        {/* The whole card is behind "Show credentials", so nothing here is
-            hidden a second time. The prop that used to say so chose between
-            "text" and "text" and had never masked anything. */}
+        {/* Masked even here, and the eye is per field.
+            This row carried a `secret` prop that chose between type="text" and
+            type="text" — it had never masked anything. The first fix was to
+            delete the prop: the card is already behind "Show credentials", so
+            why hide twice? Because that is not what the gate is for. PlanetScale
+            will not show a password again at all, Cloudflare and Retool keep an
+            eye toggle on the field, Laravel Cloud masks the whole block behind
+            one. The gate is consent to fetch the secret; the mask is so that
+            fetching the host does not put the password on a screen somebody is
+            sharing. The copy button hands over the value without showing it. */}
+        <Input
+          readOnly
+          value={value}
+          type={secret && !shown ? "password" : "text"}
+          className="font-mono text-xs"
+        />
+        {secret && (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label={shown ? t("common.hide") : t("common.show")}
+            onClick={() => setShown(!shown)}
+          >
+            {shown ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          </Button>
+        )}
         <CopyButton value={value} label={label} variant="outline" />
       </div>
     </Field>

@@ -67,7 +67,9 @@
     "breadcrumb": "导航路径",
     "dismiss": "关闭",
     "copyFailed": "此处无法使用剪贴板。",
-    "copyValue": "复制{{name}}"
+    "copyValue": "复制{{name}}",
+    "show": "显示",
+    "hide": "隐藏"
   },
   "nav": {
     "overview": "总览",
@@ -410,7 +412,9 @@
     "noVolumesHelp": "当应用的文件需要在部署之后继续存在时就需要磁盘——上传的文件、自己运行的数据库、值得保留的缓存。",
     "addVolume": "添加磁盘",
     "deleteVolumeConfirm": "这会删除挂载在 {{path}} 的磁盘，以及上面的全部内容。",
-    "deleteVolumeConsequence": "之后文件无法找回。如果还可能用到，请先做一次备份。"
+    "deleteVolumeConsequence": "之后文件无法找回。如果还可能用到，请先做一次备份。",
+    "deleteVolumeLastBackup": "这块磁盘最近一次成功备份是{{when}}。那之后写入的内容会一并消失。",
+    "deleteVolumeNeverBackedUp": "这块磁盘从未备份过。上面的所有内容将永久消失。"
   },
   "deploy": {
     "title": "部署记录",
@@ -479,7 +483,6 @@
     "hostnamePlaceholder": "app.example.com",
     "https": "HTTPS",
     "dnsInstructions": "把这个域名指向这里",
-    "dnsRecord": "为 {{hostname}} 创建一条指向 {{ip}} 的 A 记录。",
     "checking": "正在检查 DNS…",
     "statusPending": "等待 DNS 生效",
     "statusActive": "已生效",
@@ -489,10 +492,15 @@
     "certificateIssuing": "正在申请证书…",
     "removeDomain": "移除域名",
     "cannotRemoveAutomatic": "自动域名不能移除。在你配置自己的域名期间，它保证应用可访问。",
-    "dnsRecordCname": "为 {{hostname}} 创建一条指向 {{target}} 的 CNAME 记录。",
     "dnsUnknown": "还没有人告诉这个面板它的应用对外使用哪个地址。管理员可以在设置、域名中填写。",
-    "dnsTarget": "要指向的地址",
-    "removeDomainConfirm": "{{hostname}} 将不再指向这个应用。在你重新添加或改指到别处之前，访问者会看到错误。"
+    "removeDomainConfirm": "{{hostname}} 将不再指向这个应用。在你重新添加或改指到别处之前，访问者会看到错误。",
+    "dnsIntro": "在管理你域名 DNS 的地方添加这条记录——你的注册商，或者你用的 Cloudflare。",
+    "recordType": "类型",
+    "recordName": "名称",
+    "recordValue": "值",
+    "dnsPropagation": "新记录通常几分钟内生效，也可能要等上几个小时。",
+    "checkAgain": "重新检查",
+    "dnsNameVaries": "有些注册商要在这里填完整名称，有些只要域名前面的那一段。"
   },
   "scaling": {
     "title": "伸缩",

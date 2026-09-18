@@ -67,7 +67,9 @@
     "breadcrumb": "Jejak navigasi",
     "dismiss": "Tutup",
     "copyFailed": "Papan klip tidak tersedia di sini.",
-    "copyValue": "Salin {{name}}"
+    "copyValue": "Salin {{name}}",
+    "show": "Tampilkan",
+    "hide": "Sembunyikan"
   },
   "nav": {
     "overview": "Ringkasan",
@@ -410,7 +412,9 @@
     "noVolumesHelp": "Aplikasi memakai disk kalau filenya harus bertahan melewati deployment — unggahan, database yang dijalankan sendiri, cache yang sayang dibuang.",
     "addVolume": "Tambah disk",
     "deleteVolumeConfirm": "Ini menghapus disk yang di-mount di {{path}} beserta seluruh isinya.",
-    "deleteVolumeConsequence": "Filenya tidak bisa dikembalikan setelah ini. Ambil cadangan dulu kalau masih mungkin dibutuhkan."
+    "deleteVolumeConsequence": "Filenya tidak bisa dikembalikan setelah ini. Ambil cadangan dulu kalau masih mungkin dibutuhkan.",
+    "deleteVolumeLastBackup": "Cadangan terakhir disk ini yang berhasil adalah {{when}}. Semua yang ditulis setelah itu ikut hilang.",
+    "deleteVolumeNeverBackedUp": "Disk ini belum pernah dicadangkan. Seluruh isinya hilang selamanya."
   },
   "deploy": {
     "title": "Deployment",
@@ -479,7 +483,6 @@
     "hostnamePlaceholder": "app.example.com",
     "https": "HTTPS",
     "dnsInstructions": "Arahkan domain ini ke sini",
-    "dnsRecord": "Buat record A untuk {{hostname}} yang mengarah ke {{ip}}.",
     "checking": "Memeriksa DNS...",
     "statusPending": "Menunggu DNS",
     "statusActive": "Aktif",
@@ -489,10 +492,15 @@
     "certificateIssuing": "Menerbitkan sertifikat...",
     "removeDomain": "Hapus domain",
     "cannotRemoveAutomatic": "Domain otomatis tidak bisa dihapus. Domain ini menjaga aplikasi tetap bisa diakses selama Anda menyiapkan domain sendiri.",
-    "dnsRecordCname": "Buat record CNAME untuk {{hostname}} yang mengarah ke {{target}}.",
     "dnsUnknown": "Belum ada yang memberi tahu panel ini alamat publik tempat aplikasinya menjawab. Administrator bisa mengaturnya di Pengaturan, Domain.",
-    "dnsTarget": "alamat tujuan",
-    "removeDomainConfirm": "{{hostname}} berhenti mengarah ke aplikasi ini. Pengunjung akan melihat error sampai kamu menambahkannya lagi atau mengarahkannya ke tempat lain."
+    "removeDomainConfirm": "{{hostname}} berhenti mengarah ke aplikasi ini. Pengunjung akan melihat error sampai kamu menambahkannya lagi atau mengarahkannya ke tempat lain.",
+    "dnsIntro": "Tambahkan record ini di tempat DNS domainmu dikelola — registrar tempat kamu membeli domain, atau Cloudflare kalau kamu memakainya.",
+    "recordType": "Tipe",
+    "recordName": "Nama",
+    "recordValue": "Nilai",
+    "dnsPropagation": "Record baru biasanya berfungsi dalam beberapa menit, dan bisa memakan waktu beberapa jam.",
+    "checkAgain": "Periksa lagi",
+    "dnsNameVaries": "Sebagian registrar meminta nama lengkapnya di sini; sebagian lagi hanya bagian di depan domainmu."
   },
   "scaling": {
     "title": "Penskalaan",

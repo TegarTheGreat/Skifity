@@ -157,7 +157,7 @@ export function AddServerPage() {
                   id="name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder={host || "Frankfurt 1"}
+                  placeholder={host || t("servers.serverNameExample")}
                 />
               </Field>
             </div>

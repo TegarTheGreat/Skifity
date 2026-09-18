@@ -410,7 +410,15 @@
       "sleeping": "This app is asleep because nobody is using it. The next request starts it again.",
       "stopped": "This app is scaled to zero instances.",
       "not_deployed": "This app has not been deployed yet."
-    }
+    },
+    "mountPath": "Mount path",
+    "sizeGB": "Size (GB)",
+    "volumeHelp": "A disk that survives a deployment. Files the app writes outside it are lost when an instance restarts. It can be made bigger later, but not smaller.",
+    "noVolumes": "No disks yet",
+    "noVolumesHelp": "An app writes to a disk when its files have to outlive a deployment — uploads, a database it runs itself, a cache worth keeping.",
+    "addVolume": "Add a disk",
+    "deleteVolumeConfirm": "This deletes the disk mounted at {{path}} and everything on it.",
+    "deleteVolumeConsequence": "The files cannot be recovered afterwards. Take a backup first if you might need them."
   },
   "deploy": {
     "title": "Deployments",
@@ -465,7 +473,9 @@
     "bulkEdit": "Edit as text",
     "bulkEditHelp": "One KEY=value per line. Paste a .env file here.",
     "invalidKey": "A name can only contain letters, digits and underscores, and cannot start with a digit.",
-    "rebuildQueued": "Saved. This value is baked into the image, so the app is being rebuilt."
+    "rebuildQueued": "Saved. This value is baked into the image, so the app is being rebuilt.",
+    "deleteConfirm": "The app is rolled out again without it.",
+    "deleteSecretConsequence": "This value is sealed and cannot be read back, so you will have to enter it again from wherever it came from."
   },
   "domains": {
     "title": "Domains",
@@ -486,7 +496,11 @@
     "certificateFailedHelp": "Check that the domain's DNS record points at this cluster, then remove the domain and add it again.",
     "certificateIssuing": "Getting a certificate...",
     "removeDomain": "Remove domain",
-    "cannotRemoveAutomatic": "The automatic domain cannot be removed. It keeps the app reachable while you set up your own."
+    "cannotRemoveAutomatic": "The automatic domain cannot be removed. It keeps the app reachable while you set up your own.",
+    "dnsRecordCname": "Create a CNAME record for {{hostname}} pointing to {{target}}.",
+    "dnsUnknown": "Nobody has told this panel which public address its apps answer on. An administrator can set it under Settings, Domains.",
+    "dnsTarget": "the address to point at",
+    "removeDomainConfirm": "{{hostname}} stops reaching this app. Visitors get an error until you add it back or point it somewhere else."
   },
   "scaling": {
     "title": "Scaling",
@@ -589,7 +603,8 @@
     "adopted": "Skifity did not install this server",
     "adoptedHelp": "It was already a node of the cluster when Skifity was installed — usually the machine the panel itself runs on. It is shown here so you can see what the cluster has, and it cannot be removed or promoted from the panel, because there is no key to it. Run the uninstaller on the machine itself to take it out.",
     "architecture": "Architecture",
-    "locationExample": "Frankfurt"
+    "locationExample": "Frankfurt",
+    "serverNameExample": "Frankfurt 1"
   },
   "databases": {
     "title": "Databases",

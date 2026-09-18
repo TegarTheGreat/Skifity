@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { EyeOffIcon, HammerIcon, KeyRoundIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+import { useConfirm } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay } from "@/components/error-display"
 import { Badge } from "@/components/ui/badge"
@@ -87,6 +88,23 @@ export function VariablesEditor({
     mutationFn: (key: string) => api.delete(`${base}/variables/${encodeURIComponent(key)}`),
     onSuccess: invalidate,
   })
+
+  // A secret's value is sealed and never shown again, so deleting one is not
+  // something a stray click should be able to do: there is nowhere to read it
+  // back from. A plain variable asks too, because the row it sits in is one
+  // pixel from its neighbour's.
+  const confirm = useConfirm()
+  const askThenRemove = (variable: EditableVariable) => {
+    void confirm({
+      title: t("common.deleteNamed", { name: variable.key }),
+      description: t("variables.deleteConfirm"),
+      consequence: variable.is_secret ? t("variables.deleteSecretConsequence") : undefined,
+      confirmLabel: t("common.delete"),
+      destructive: true,
+    }).then((yes) => {
+      if (yes) remove.mutate(variable.key)
+    })
+  }
 
   const saveBulk = useMutation({
     mutationFn: async (text: string) => {
@@ -224,7 +242,7 @@ export function VariablesEditor({
                         size="icon"
                         aria-label={t("common.delete")}
                         disabled={remove.isPending}
-                        onClick={() => remove.mutate(variable.key)}
+                        onClick={() => askThenRemove(variable)}
                       >
                         <Trash2Icon className="size-4 text-muted-foreground" />
                       </Button>

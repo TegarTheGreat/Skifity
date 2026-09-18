@@ -1649,6 +1649,72 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 57 — the DNS record that said "Unknown", and the disk one click could destroy
+
+A walk of every journey, start to finish, asking one question at each screen:
+can somebody who has never seen this finish what they came to do? Three screens
+said no.
+
+### "Create an A record for blog.example.com pointing to Unknown."
+
+That is what the Domains tab said. Literally: it interpolated
+`t("common.unknown")` where the address goes, on the one screen in the panel
+whose entire job is to answer where to point a domain. `docs/quick-start.md`
+step 4 says "The panel shows the DNS record to create."
+
+The address was never missing. `domains.cluster_ip` has been a setting since
+there were settings, its own help reads "The address your domains should point
+at", and `Cluster.clusterAddress` resolves it — setting first, then a
+control-plane server's external address — every time it hands an app its
+automatic subdomain. The Domains tab simply never asked.
+
+It asks now. `PublicAddress` is on the Cluster port, `handleListDomains` fills
+a `dns_target` per domain, and the instruction carries the real value with a
+copy button beside it. An address that is a name rather than a number is a
+CNAME, so the sentence follows the value; an install where nobody has set it
+and the panel cannot see one says so, and says where an administrator sets it,
+rather than printing a word where an address belongs.
+
+### Storage was the roughest tab in the panel
+
+Four things on one screen:
+
+* The column showing `/data` was headed **Storage**, and so was the form field
+  where you type it. Both now say **Mount path**.
+* The empty state's description was `scaling.spreadHelp` — the sentence from
+  the scaling tab about spreading instances across servers, on a screen about
+  disks. It now describes what a disk is for.
+* The size field said **Size**, in a number box with no unit, over the help
+  text for a *database's* disk. It says **Size (GB)** over a sentence about a
+  disk that outlives a deployment.
+* **The bin icon deleted the disk immediately.** The panel makes you type the
+  name before it deletes an app, a project, a database or a server — and none
+  of those destroy anything a redeploy cannot bring back. This one does. It
+  asks now, with the name typed out and the consequence spelled out.
+
+Two more actions that took effect on one click and should not have: removing a
+domain, which takes a live address off the internet, and deleting a variable,
+whose value is sealed and cannot be read back.
+
+### The gate caught one more of its own
+
+`placeholder={host || "Frankfurt 1"}` — the example server name, in English for
+everybody, written as a fallback rather than a value, which is how it slipped
+past the literal check added in Phase 56. The check now reads the brace form
+too, for prose only: a code sample, a product name and an interpolation
+argument are written the same way and are not translatable.
+
+946 keys, five languages. `make check` green, 14 interface tests pass.
+
+### The conclusion, and what it rests on
+
+The interface is done. What is left is the half of the panel that is written in
+Go: **90 `errdoc` problems, 14 scaling findings, 40 provisioning steps** and a
+scattering of status details reach the screen as English sentences the locale
+never sees. They are the panel's best writing and none of it is translated. It
+is one mechanism — the one `internal/settings` already uses — applied to more
+places, and it is the largest piece of work left in the interface.
+
 ## Phase 56 — a live version nobody could point at, and an app asleep that read as down
 
 Four screens from Mobbin — Vercel, Render, Railway, Laravel Cloud, Cloudflare —

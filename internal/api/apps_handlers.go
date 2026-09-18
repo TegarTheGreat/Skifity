@@ -649,6 +649,25 @@ func (s *Server) handleListDomains(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	// Where to point a domain of your own. The panel has known this since
+	// there were settings — it is the same address it gives an app's automatic
+	// subdomain — and the one screen that asks somebody to create a DNS record
+	// never said it, so the record read "pointing to Unknown".
+	if s.cluster != nil {
+		env, err := s.db.GetEnvironment(r.Context(), app.EnvironmentID)
+		if err == nil {
+			if teamID, err := s.db.TeamIDForEnvironment(r.Context(), env.ID); err == nil {
+				if target := s.cluster.PublicAddress(r.Context(), teamID); target != "" {
+					for i := range domains {
+						// An automatic subdomain already points here.
+						if !domains[i].Auto {
+							domains[i].DNSTarget = target
+						}
+					}
+				}
+			}
+		}
+	}
 	writeList(w, domains)
 }
 

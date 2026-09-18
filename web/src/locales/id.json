@@ -402,7 +402,15 @@
       "sleeping": "Aplikasi ini tidur karena tidak ada yang memakainya. Permintaan berikutnya menyalakannya lagi.",
       "stopped": "Aplikasi ini diskalakan ke nol instance.",
       "not_deployed": "Aplikasi ini belum pernah di-deploy."
-    }
+    },
+    "mountPath": "Lokasi mount",
+    "sizeGB": "Ukuran (GB)",
+    "volumeHelp": "Disk yang bertahan melewati deployment. File yang ditulis aplikasi di luar disk ini hilang saat instance dimulai ulang. Ukurannya bisa diperbesar nanti, tapi tidak bisa diperkecil.",
+    "noVolumes": "Belum ada disk",
+    "noVolumesHelp": "Aplikasi memakai disk kalau filenya harus bertahan melewati deployment — unggahan, database yang dijalankan sendiri, cache yang sayang dibuang.",
+    "addVolume": "Tambah disk",
+    "deleteVolumeConfirm": "Ini menghapus disk yang di-mount di {{path}} beserta seluruh isinya.",
+    "deleteVolumeConsequence": "Filenya tidak bisa dikembalikan setelah ini. Ambil cadangan dulu kalau masih mungkin dibutuhkan."
   },
   "deploy": {
     "title": "Deployment",
@@ -457,7 +465,9 @@
     "bulkEdit": "Ubah sebagai teks",
     "bulkEditHelp": "Satu KEY=value per baris. Anda bisa menempelkan isi file .env di sini.",
     "invalidKey": "Nama hanya boleh berisi huruf, angka, dan garis bawah, serta tidak boleh diawali angka.",
-    "rebuildQueued": "Disimpan. Nilai ini ikut tertanam di image, jadi aplikasi sedang dibangun ulang."
+    "rebuildQueued": "Disimpan. Nilai ini ikut tertanam di image, jadi aplikasi sedang dibangun ulang.",
+    "deleteConfirm": "Aplikasi akan di-rollout ulang tanpa variabel ini.",
+    "deleteSecretConsequence": "Nilai ini tersegel dan tidak bisa dibaca lagi, jadi kamu harus memasukkannya ulang dari sumber aslinya."
   },
   "domains": {
     "title": "Domain",
@@ -478,7 +488,11 @@
     "certificateFailedHelp": "Pastikan data DNS domain mengarah ke klaster ini, lalu hapus domain dan tambahkan lagi.",
     "certificateIssuing": "Menerbitkan sertifikat...",
     "removeDomain": "Hapus domain",
-    "cannotRemoveAutomatic": "Domain otomatis tidak bisa dihapus. Domain ini menjaga aplikasi tetap bisa diakses selama Anda menyiapkan domain sendiri."
+    "cannotRemoveAutomatic": "Domain otomatis tidak bisa dihapus. Domain ini menjaga aplikasi tetap bisa diakses selama Anda menyiapkan domain sendiri.",
+    "dnsRecordCname": "Buat record CNAME untuk {{hostname}} yang mengarah ke {{target}}.",
+    "dnsUnknown": "Belum ada yang memberi tahu panel ini alamat publik tempat aplikasinya menjawab. Administrator bisa mengaturnya di Pengaturan, Domain.",
+    "dnsTarget": "alamat tujuan",
+    "removeDomainConfirm": "{{hostname}} berhenti mengarah ke aplikasi ini. Pengunjung akan melihat error sampai kamu menambahkannya lagi atau mengarahkannya ke tempat lain."
   },
   "scaling": {
     "title": "Penskalaan",
@@ -580,7 +594,8 @@
     "adopted": "Skifity tidak memasang server ini",
     "adoptedHelp": "Server ini sudah menjadi node cluster saat Skifity dipasang — biasanya mesin tempat panel ini sendiri berjalan. Ditampilkan di sini supaya Anda melihat isi cluster, dan tidak bisa dihapus atau dipromosikan dari panel karena tidak ada kunci ke sana. Jalankan uninstaller di mesin itu untuk mengeluarkannya.",
     "architecture": "Arsitektur",
-    "locationExample": "Jakarta"
+    "locationExample": "Jakarta",
+    "serverNameExample": "Jakarta 1"
   },
   "databases": {
     "title": "Database",

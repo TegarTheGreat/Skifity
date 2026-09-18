@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { DownloadIcon, HardDriveIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
+import { useDeleteConfirm } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay, toProblem } from "@/components/error-display"
 import { Button } from "@/components/ui/button"
@@ -55,6 +56,19 @@ export function StorageTab({ app }: { app: App }) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["volumes", app.id] }),
   })
 
+  // The panel makes somebody type the name before it deletes an app, a
+  // project, a database or a server. This was one click on a bin icon, and it
+  // is the one that destroys data nothing can get back: an app can be deployed
+  // again from the same commit, a disk cannot.
+  const confirmDelete = useDeleteConfirm()
+  const askThenRemove = (volume: Volume) => {
+    void confirmDelete(volume.name, t("apps.deleteVolumeConfirm", { path: volume.mount_path }), t("apps.deleteVolumeConsequence")).then(
+      (yes) => {
+        if (yes) remove.mutate(volume.id)
+      },
+    )
+  }
+
   if (volumes.isLoading) return <Skeleton className="h-40" />
   if (volumes.error)
     return <ErrorDisplay error={volumes.error} onRetry={() => void volumes.refetch()} />
@@ -85,7 +99,7 @@ export function StorageTab({ app }: { app: App }) {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="volume-path">{t("apps.storage")}</FieldLabel>
+                  <FieldLabel htmlFor="volume-path">{t("apps.mountPath")}</FieldLabel>
                   <Input
                     id="volume-path"
                     value={mountPath}
@@ -96,7 +110,7 @@ export function StorageTab({ app }: { app: App }) {
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="volume-size">{t("common.size")}</FieldLabel>
+                  <FieldLabel htmlFor="volume-size">{t("apps.sizeGB")}</FieldLabel>
                   <Input
                     id="volume-size"
                     type="number"
@@ -106,7 +120,7 @@ export function StorageTab({ app }: { app: App }) {
                   />
                 </Field>
               </div>
-              <p className="text-xs text-muted-foreground">{t("databases.storageHelp")}</p>
+              <p className="text-xs text-muted-foreground">{t("apps.volumeHelp")}</p>
               {add.error != null && <ErrorDisplay error={add.error} compact />}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={() => setAdding(false)}>
@@ -125,12 +139,14 @@ export function StorageTab({ app }: { app: App }) {
       {items.length === 0 && !adding ? (
         <EmptyState
           icon={HardDriveIcon}
-          title={t("apps.storage")}
-          description={t("scaling.spreadHelp")}
+          title={t("apps.noVolumes")}
+          // It used to borrow the scaling tab's sentence about spreading
+          // instances across servers, which is about something else entirely.
+          description={t("apps.noVolumesHelp")}
           action={
             <Button onClick={() => setAdding(true)}>
               <PlusIcon className="size-4" />
-              {t("common.add")}
+              {t("apps.addVolume")}
             </Button>
           }
         />
@@ -139,7 +155,7 @@ export function StorageTab({ app }: { app: App }) {
           <div className="flex justify-end">
             <Button size="sm" onClick={() => setAdding(true)}>
               <PlusIcon className="size-4" />
-              {t("common.add")}
+              {t("apps.addVolume")}
             </Button>
           </div>
           {items.length > 0 && (
@@ -149,7 +165,7 @@ export function StorageTab({ app }: { app: App }) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t("common.name")}</TableHead>
-                      <TableHead>{t("apps.storage")}</TableHead>
+                      <TableHead>{t("apps.mountPath")}</TableHead>
                       <TableHead>{t("common.size")}</TableHead>
                       <TableHead>{t("apps.lastBackup")}</TableHead>
                       <TableHead className="w-24" />
@@ -172,7 +188,7 @@ export function StorageTab({ app }: { app: App }) {
                               size="icon"
                               aria-label={t("common.delete")}
                               disabled={remove.isPending}
-                              onClick={() => remove.mutate(volume.id)}
+                              onClick={() => askThenRemove(volume)}
                             >
                               <Trash2Icon className="size-4 text-muted-foreground" />
                             </Button>

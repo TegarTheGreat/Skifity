@@ -402,7 +402,15 @@
       "sleeping": "没有人在使用，所以这个应用正在休眠。下一个请求会让它重新启动。",
       "stopped": "这个应用已缩容到零个实例。",
       "not_deployed": "这个应用还没有部署过。"
-    }
+    },
+    "mountPath": "挂载路径",
+    "sizeGB": "大小（GB）",
+    "volumeHelp": "一块能在部署之后继续存在的磁盘。应用写在它之外的文件会在实例重启时消失。以后可以扩大，但不能缩小。",
+    "noVolumes": "还没有磁盘",
+    "noVolumesHelp": "当应用的文件需要在部署之后继续存在时就需要磁盘——上传的文件、自己运行的数据库、值得保留的缓存。",
+    "addVolume": "添加磁盘",
+    "deleteVolumeConfirm": "这会删除挂载在 {{path}} 的磁盘，以及上面的全部内容。",
+    "deleteVolumeConsequence": "之后文件无法找回。如果还可能用到，请先做一次备份。"
   },
   "deploy": {
     "title": "部署记录",
@@ -457,7 +465,9 @@
     "bulkEdit": "以文本方式编辑",
     "bulkEditHelp": "每行一个 KEY=value，可以直接粘贴 .env 文件。",
     "invalidKey": "名称只能包含字母、数字和下划线，且不能以数字开头。",
-    "rebuildQueued": "已保存。该值会写入镜像，因此正在重新构建应用。"
+    "rebuildQueued": "已保存。该值会写入镜像，因此正在重新构建应用。",
+    "deleteConfirm": "应用会在没有它的情况下重新上线。",
+    "deleteSecretConsequence": "这个值已被封存，无法再读出来，所以你需要回到它的来源重新填一次。"
   },
   "domains": {
     "title": "域名",
@@ -478,7 +488,11 @@
     "certificateFailedHelp": "请确认该域名的 DNS 记录指向此集群，然后删除该域名并重新添加。",
     "certificateIssuing": "正在申请证书…",
     "removeDomain": "移除域名",
-    "cannotRemoveAutomatic": "自动域名不能移除。在你配置自己的域名期间，它保证应用可访问。"
+    "cannotRemoveAutomatic": "自动域名不能移除。在你配置自己的域名期间，它保证应用可访问。",
+    "dnsRecordCname": "为 {{hostname}} 创建一条指向 {{target}} 的 CNAME 记录。",
+    "dnsUnknown": "还没有人告诉这个面板它的应用对外使用哪个地址。管理员可以在设置、域名中填写。",
+    "dnsTarget": "要指向的地址",
+    "removeDomainConfirm": "{{hostname}} 将不再指向这个应用。在你重新添加或改指到别处之前，访问者会看到错误。"
   },
   "scaling": {
     "title": "伸缩",
@@ -580,7 +594,8 @@
     "adopted": "这台服务器不是 Skifity 装的",
     "adoptedHelp": "安装 Skifity 时它已经是集群的节点了——通常就是面板自己运行的那台机器。这里列出它是为了让你看清集群的全貌；面板无法移除或提升它，因为没有通往它的密钥。要把它移出集群，请在那台机器上运行卸载程序。",
     "architecture": "架构",
-    "locationExample": "法兰克福"
+    "locationExample": "法兰克福",
+    "serverNameExample": "法兰克福 1"
   },
   "databases": {
     "title": "数据库",

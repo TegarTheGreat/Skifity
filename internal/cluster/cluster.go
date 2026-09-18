@@ -340,6 +340,17 @@ func (c *Cluster) freeAutoHostname(ctx context.Context, app store.App, env store
 		WithFix("Rename the app, or add a domain of your own under the app's Domains tab.")
 }
 
+// PublicAddress is where a domain of somebody's own should point.
+//
+// It is the same address the panel gives an app's automatic subdomain, which
+// is the point: an operator reading it off the Domains tab and an app reaching
+// its own URL must not disagree. It reads the panel's own records only, so it
+// answers while the cluster is unreachable — which is exactly when somebody is
+// looking at DNS.
+func (c *Cluster) PublicAddress(ctx context.Context, teamID string) string {
+	return c.clusterAddress(ctx, teamID)
+}
+
 // clusterAddress is the public IP apps are reached on.
 //
 // The setting wins, because an operator behind a load balancer knows something

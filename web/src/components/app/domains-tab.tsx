@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { ExternalLinkIcon, GlobeIcon, LockIcon, PlusIcon, Trash2Icon } from "lucide-react"
 
+import { useConfirm } from "@/components/confirm-dialog"
+import { CopyButton } from "@/components/copy-button"
 import { ErrorDisplay } from "@/components/error-display"
 import { StatusBadge } from "@/components/status-badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -40,6 +42,22 @@ export function DomainsTab({ app }: { app: App }) {
     mutationFn: (domainID: string) => api.delete(`/api/apps/${app.id}/domains/${domainID}`),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["domains", app.id] }),
   })
+
+  // One click on a bin icon used to take a live address off the internet. It
+  // asks now — not with the name typed out, because adding it back is a
+  // minute's work, but the certificate is not free to reissue and a mistake
+  // here is visible to everybody who uses the site.
+  const confirm = useConfirm()
+  const askThenRemove = (domain: Domain) => {
+    void confirm({
+      title: t("domains.removeDomain"),
+      description: t("domains.removeDomainConfirm", { hostname: domain.hostname }),
+      confirmLabel: t("common.remove"),
+      destructive: true,
+    }).then((yes) => {
+      if (yes) remove.mutate(domain.id)
+    })
+  }
 
   if (domains.isLoading) return <Skeleton className="h-48" />
   if (domains.error)
@@ -134,7 +152,7 @@ export function DomainsTab({ app }: { app: App }) {
                     size="icon"
                     aria-label={t("domains.removeDomain")}
                     disabled={remove.isPending}
-                    onClick={() => remove.mutate(domain.id)}
+                    onClick={() => askThenRemove(domain)}
                   >
                     <Trash2Icon className="size-4 text-muted-foreground" />
                   </Button>
@@ -142,16 +160,7 @@ export function DomainsTab({ app }: { app: App }) {
               </div>
 
               {domain.status === "pending" && !domain.auto && (
-                <Alert>
-                  <AlertTitle>{t("domains.dnsInstructions")}</AlertTitle>
-                  <AlertDescription>
-                    {domain.status_detail ||
-                      t("domains.dnsRecord", {
-                        hostname: domain.hostname,
-                        ip: t("common.unknown"),
-                      })}
-                  </AlertDescription>
-                </Alert>
+                <DNSInstructions domain={domain} />
               )}
 
               {/* A certificate that stopped trying says why, and cert-manager's
@@ -171,6 +180,51 @@ export function DomainsTab({ app }: { app: App }) {
 
       {remove.error != null && <ErrorDisplay error={remove.error} compact />}
     </div>
+  )
+}
+
+/**
+ * The record to create, with the address actually in it.
+ *
+ * This used to read "Create an A record for blog.example.com pointing to
+ * Unknown." — the panel has known the address since there were settings, and
+ * the one screen that asks somebody to create a DNS record never said it. The
+ * quick start told people the panel would show the record.
+ *
+ * An address that is a name rather than a number is a CNAME, which is what an
+ * install behind a load balancer has, so the sentence follows the value.
+ */
+function DNSInstructions({ domain }: { domain: Domain }) {
+  const { t } = useTranslation()
+  const target = domain.dns_target ?? ""
+  const isIP = /^[\d.]+$|:/.test(target)
+
+  return (
+    <Alert>
+      <AlertTitle>{t("domains.dnsInstructions")}</AlertTitle>
+      <AlertDescription className="space-y-2">
+        {target === "" ? (
+          <p>{t("domains.dnsUnknown")}</p>
+        ) : (
+          <>
+            <p>
+              {isIP
+                ? t("domains.dnsRecord", { hostname: domain.hostname, ip: target })
+                : t("domains.dnsRecordCname", { hostname: domain.hostname, target })}
+            </p>
+            <div className="flex items-center gap-1">
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{target}</code>
+              <CopyButton value={target} label={t("domains.dnsTarget")} />
+            </div>
+          </>
+        )}
+        {/* cert-manager's own reason, when there is one: it is the only thing
+            that explains a certificate that is still waiting. */}
+        {domain.status_detail && (
+          <p className="text-xs text-muted-foreground">{domain.status_detail}</p>
+        )}
+      </AlertDescription>
+    </Alert>
   )
 }
 

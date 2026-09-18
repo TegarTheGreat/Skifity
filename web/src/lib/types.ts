@@ -217,6 +217,8 @@ export type Domain = {
   auto: boolean
   status: string
   status_detail?: string
+  /** Where this hostname has to point. Worked out per request, not stored. */
+  dns_target?: string
   created_at: string
 }
 

@@ -280,6 +280,16 @@ function checkInterpolations() {
 const LITERAL_PROPS = /\s(label|title|description|confirmLabel|placeholder)="([A-Z][^"]{2,})"/g
 
 /**
+ * The same thing written as an expression: `placeholder={host || "Frankfurt 1"}`.
+ *
+ * The example server name escaped the check above by being a fallback rather
+ * than a value. Only prose is flagged here — a capitalised word or words and
+ * nothing else — because the brace form is also how a code sample, a product
+ * name and an interpolation argument are written.
+ */
+const LITERAL_IN_BRACES = /\s(label|title|description|confirmLabel|placeholder)=\{[^}\n]*"([A-Z][A-Za-z]*(?: [A-Za-z0-9]+)*)"/g
+
+/**
  * A placeholder that is code rather than prose: a variable name, a header, an
  * environment key. SCREAMING_SNAKE_CASE is the shape of all of them, and
  * translating one would be an instruction to type the wrong thing.
@@ -309,7 +319,10 @@ function checkLiteralProps() {
     const relative = file.slice(srcDir.length + 1)
     if (relative.startsWith("components/ui/")) continue
     const contents = readFileSync(file, "utf8")
-    for (const match of contents.matchAll(LITERAL_PROPS)) {
+    for (const match of [
+      ...contents.matchAll(LITERAL_PROPS),
+      ...contents.matchAll(LITERAL_IN_BRACES),
+    ]) {
       if (PROPER_NOUNS.has(match[2])) continue
       if (match[1] === "placeholder" && CODE_TOKEN.test(match[2])) continue
       const line = contents.slice(0, match.index).split("\n").length

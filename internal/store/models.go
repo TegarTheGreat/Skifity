@@ -260,6 +260,11 @@ type Domain struct {
 	Status       string    `json:"status"`
 	StatusDetail string    `json:"status_detail,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
+
+	// DNSTarget is where this hostname has to point, filled in when a list is
+	// built rather than stored: it is a property of the cluster, not of the
+	// domain, and a stored copy would be wrong the day a server is replaced.
+	DNSTarget string `json:"dns_target,omitempty"`
 }
 
 // DeploymentStatus is the state of one deploy attempt.

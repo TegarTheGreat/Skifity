@@ -91,6 +91,9 @@ type Cluster interface {
 	Summary(ctx context.Context) (ClusterSummary, error)
 	// AppStatus describes one app's live state.
 	AppStatus(ctx context.Context, namespace, appSlug string) (AppRuntimeStatus, error)
+	// PublicAddress is where a domain of somebody's own should point. Empty
+	// when the panel cannot work it out and nobody has set it.
+	PublicAddress(ctx context.Context, teamID string) string
 	// AppLogs streams an app's logs.
 	AppLogs(ctx context.Context, namespace, appSlug string, opts LogOptions) (io.ReadCloser, error)
 	// RestartApp triggers a rolling restart without changing anything else.

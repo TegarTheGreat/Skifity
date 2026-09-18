@@ -181,9 +181,27 @@ type OperationStep struct {
 	Key         string     `json:"key"`
 	Status      StepStatus `json:"status"`
 	Message     string     `json:"message"`
-	Detail      string     `json:"detail,omitempty"`
-	StartedAt   time.Time  `json:"started_at,omitzero"`
-	FinishedAt  time.Time  `json:"finished_at,omitzero"`
+	// MessageKey names the sentence in Message so the panel can show it in the
+	// reader's language, and MessageArgs carries the values that went into it.
+	// Both are empty on a step recorded before either existed, and on one whose
+	// sentence the panel never wrote itself.
+	MessageKey  string    `json:"message_key,omitempty"`
+	MessageArgs []string  `json:"message_args,omitempty"`
+	Detail      string    `json:"detail,omitempty"`
+	StartedAt   time.Time `json:"started_at,omitzero"`
+	FinishedAt  time.Time `json:"finished_at,omitzero"`
+}
+
+// StepNote is what a step says when it finishes.
+//
+// Message is the English the panel wrote: the fallback, and what the API and
+// the CLI read. Key names the same sentence in the locale, and Args carries the
+// values that went into it. A note with no Key is shown as its English, which
+// is what a step recorded before this existed has.
+type StepNote struct {
+	Message string
+	Key     string
+	Args    []string
 }
 
 // App is what a user deploys. It becomes a Deployment, Service and Ingress.

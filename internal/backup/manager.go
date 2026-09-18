@@ -256,7 +256,9 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 	fail := func(step string, err error) {
 		problem := errdoc.From(err)
 		m.log.Error("restore failed", "operation", op.ID, "step", step, "error", err)
-		_ = m.db.SetStepStatus(ctx, op.ID, step, store.StepFailed, problem.Title, problem.Text())
+		_ = m.db.SetStepStatus(ctx, op.ID, step, store.StepFailed,
+			store.StepNote{Message: problem.Title, Key: "problem:" + problem.Code, Args: problem.Args.Title},
+			problem.Text())
 		_ = m.db.SetOperationStatus(ctx, op.ID, store.OpFailed, problem.Code, problem.Error())
 		m.hub.Publish(events.OperationTopic(op.ID), "failed", problem)
 	}
@@ -267,7 +269,7 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 
 	_ = m.db.SetOperationStatus(ctx, op.ID, store.OpRunning, "", "")
 
-	_ = m.db.SetStepStatus(ctx, op.ID, "prepare", store.StepRunning, "", "")
+	_ = m.db.SetStepStatus(ctx, op.ID, "prepare", store.StepRunning, store.StepNote{}, "")
 	storage, err := LoadStorage(ctx, m.db, m.keyring)
 	if err != nil {
 		fail("prepare", err)
@@ -288,9 +290,9 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 		fail("prepare", err)
 		return
 	}
-	_ = m.db.SetStepStatus(ctx, op.ID, "prepare", store.StepSucceeded, "Ready to restore", "")
+	_ = m.db.SetStepStatus(ctx, op.ID, "prepare", store.StepSucceeded, store.StepNote{Message: "Ready to restore", Key: "readyToRestore"}, "")
 
-	_ = m.db.SetStepStatus(ctx, op.ID, "restore", store.StepRunning, "", "")
+	_ = m.db.SetStepStatus(ctx, op.ID, "restore", store.StepRunning, store.StepNote{}, "")
 	job, err := BuildJob(JobSpec{
 		Name:              jobName,
 		Namespace:         env.Namespace,
@@ -313,10 +315,12 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 		fail("restore", err)
 		return
 	}
+	restored, restoredArgs := errdoc.Sprintf("Restored from the backup taken on %s",
+		backup.CreatedAt.Format("2 January 2006 at 15:04"))
 	_ = m.db.SetStepStatus(ctx, op.ID, "restore", store.StepSucceeded,
-		fmt.Sprintf("Restored from the backup taken on %s", backup.CreatedAt.Format("2 January 2006 at 15:04")), "")
+		store.StepNote{Message: restored, Key: "restored", Args: restoredArgs}, "")
 
-	_ = m.db.SetStepStatus(ctx, op.ID, "verify", store.StepRunning, "", "")
+	_ = m.db.SetStepStatus(ctx, op.ID, "verify", store.StepRunning, store.StepNote{}, "")
 	// Restarting the apps that use this database clears any connection pool
 	// holding a transaction against the old data.
 	links, err := m.db.ListLinksForDatabase(ctx, record.ID)
@@ -331,8 +335,9 @@ func (m *Manager) runRestore(ctx context.Context, op store.Operation, backup sto
 			}
 		}
 	}
+	restarted, restartedArgs := errdoc.Sprintf("Restarted %d app(s) so they reconnect", len(links))
 	_ = m.db.SetStepStatus(ctx, op.ID, "verify", store.StepSucceeded,
-		fmt.Sprintf("Restarted %d app(s) so they reconnect", len(links)), "")
+		store.StepNote{Message: restarted, Key: "appsRestarted", Args: restartedArgs}, "")
 
 	_ = m.db.SetOperationStatus(ctx, op.ID, store.OpSucceeded, "", "")
 	m.hub.Publish(events.OperationTopic(op.ID), "operation", op)

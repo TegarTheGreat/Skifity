@@ -525,7 +525,69 @@
     "memoryLimit": "内存上限",
     "resourcesHelp": "预留量是每个实例一定能拿到的资源。上限是超过后实例会被重启的最大用量。",
     "spread": "分散到多台服务器",
-    "spreadHelp": "尽可能把实例放在不同服务器上，这样单台服务器故障不会让应用下线。"
+    "spreadHelp": "尽可能把实例放在不同服务器上，这样单台服务器故障不会让应用下线。",
+    "finding": {
+      "file_cache": {
+        "title": "缓存存在本地磁盘上",
+        "detail": "{{0}} 被设成了 {{1}}，于是每个实例各有各的缓存，内容会对不上。",
+        "fix": "改用 Redis 做缓存，或者接受各实例的缓存值不一致。"
+      },
+      "in_memory_sessions": {
+        "title": "会话被存在内存或磁盘上",
+        "detail": "{{0}} 被设成了 {{1}}。每个实例都会保存自己的会话，所以请求落到不同实例时，用户会莫名其妙被登出。",
+        "fix": "在这个环境里建一个 Redis 数据库，把会话存储指过去。Skifity 会自动把它作为变量接进来。"
+      },
+      "in_process_cron": {
+        "title": "定时任务跑在应用里面",
+        "detail": "{{0}} 是开着的。有多个实例时，每个实例都会跑一遍计划，于是每个任务被执行好几次。",
+        "fix": "把调度器拆成单实例的独立应用，或者加锁，让每个任务只由一个实例执行。"
+      },
+      "local_uploads": {
+        "title": "上传的文件被写到本地磁盘",
+        "detail": "{{0}} 指向容器内部的一个目录。一个实例写的文件别的实例看不到，下次部署时还会消失。",
+        "fix": "把上传文件放到 S3 兼容的对象存储里。不想用云服务商的话，MinIO 有一键模板。"
+      },
+      "memory_target_below_idle": {
+        "title": "应用还没干活，内存阈值就到了",
+        "detail": "阈值是这个应用预留量的百分比。它预留 {{0}}Mi，阈值 {{1}}%，所以超过 {{2}}Mi 就会加一个新实例——而 Node 或 JVM 进程一启动就超过了。",
+        "fix": "在应用设置里把预留内存调到它空闲时的用量再加上工作余量。内存一旦占用就不会回落，所以低于空闲值的阈值永远降不回来。"
+      },
+      "no_health_check": {
+        "title": "没有设置健康检查路径",
+        "detail": "没有它，Skifity 只能检查端口是否打开，而端口打开往往早于大多数框架真正能对外服务。",
+        "fix": "加一个像 /healthz 这样的路径，应用就绪后返回 200，然后在应用设置里填上它。"
+      },
+      "no_metrics": {
+        "title": "集群没有上报 CPU 和内存",
+        "detail": "按 CPU 或内存目标自动伸缩要从 metrics-server 读这些数字，而没有任何东西在应答。不管多忙，应用都会停在最少实例数上，而且没人会告诉你。",
+        "fix": "k3s 默认会装 metrics-server。检查它是否在 kube-system 里运行，在此之前先设一个固定的实例数。"
+      },
+      "single_instance": {
+        "title": "这个应用只跑一个实例",
+        "detail": "它所在的服务器一重启，应用就不可用，直到 Kubernetes 在别处把它拉起来。",
+        "fix": "把上面的问题解决之后，把实例数提到两个，或者打开自动伸缩。"
+      },
+      "sqlite": {
+        "title": "这个应用用的是 SQLite",
+        "detail": "{{0}} 指向一个 SQLite 文件。SQLite 就是一块磁盘上的单个文件，不同服务器上的实例没法共用。",
+        "fix": "在这个环境里建一个 PostgreSQL 数据库，把应用指过去。Skifity 会自动注入连接串。"
+      },
+      "target_below_idle": {
+        "title": "应用还没干活，CPU 阈值就到了",
+        "detail": "阈值是这个应用预留量的百分比，不是服务器的。它预留 {{0}}m CPU，阈值 {{1}}%，所以超过 {{2}}m 就会加一个新实例——大约十分之一个核，多数框架空转时就超过了。",
+        "fix": "在应用设置里把预留 CPU 调到它忙起来真正会用的量，百分比才有意义。预留是给应用的保证，不是给它设的上限。"
+      },
+      "volume": {
+        "title": "这个应用写入的磁盘只能由一个实例使用",
+        "detail": "有一个卷挂载在 {{0}}。那种存储同一时刻只能挂到一台服务器上，所以第二个实例要么起不来，要么被排到同一台服务器。",
+        "fix": "把上传文件挪到 S3 或 MinIO 这类对象存储，或者在「设置」里打开跨节点存储让卷可以共享。在那之前，把这个应用保持在一个实例。"
+      },
+      "volume_with_replicas": {
+        "title": "配置了多个实例，而这个应用有卷",
+        "detail": "多出来的实例要么一直挂起，要么被排到同一台服务器上，同时往同一批文件里写。",
+        "fix": "把实例数改回一个，或者启用跨节点存储，或者把数据挪出卷。"
+      }
+    }
   },
   "servers": {
     "title": "服务器",
@@ -603,7 +665,34 @@
     "adoptedHelp": "安装 Skifity 时它已经是集群的节点了——通常就是面板自己运行的那台机器。这里列出它是为了让你看清集群的全貌；面板无法移除或提升它，因为没有通往它的密钥。要把它移出集群，请在那台机器上运行卸载程序。",
     "architecture": "架构",
     "locationExample": "法兰克福",
-    "serverNameExample": "法兰克福 1"
+    "serverNameExample": "法兰克福 1",
+    "stepMessage": {
+      "appsRestarted": "重启了 {{0}} 个应用，让它们重新连上",
+      "cancelled": "已取消",
+      "connected": "已连接到 {{0}}",
+      "connectivityFirstServer": "这是第一台服务器，暂时还没有可连接的对象",
+      "cordoned": "不会再往这里安排新实例",
+      "drained": "已把 {{0}} 个实例迁到其他服务器",
+      "drainedFirst": "先把 {{0}} 个实例从这台服务器挪走了",
+      "firewallFirstServer": "还没有别的服务器，所以只开了 80 和 443 端口",
+      "firewallIptables": "用 iptables 只对其他服务器开放了集群端口",
+      "firewallUfw": "用 ufw 只对其他服务器开放了集群端口",
+      "interrupted": "因面板重启而中断",
+      "joined": "{{0}} 已加入集群并就绪",
+      "k3sRunning": "Kubernetes 已安装并运行中",
+      "k3sUnconfirmed": "已安装，但面板没有连上集群，无法确认",
+      "keyAlreadyThere": "这台服务器上已经有 Skifity 的密钥了",
+      "keyInstalled": "已为这台服务器单独装了一把密钥；密码没有被保存",
+      "leftAsWorker": "以工作节点身份离开了集群",
+      "nodeDeleted": "已从集群中移除",
+      "preflightOk": "{{0}}，{{1}} 核，内存 {{2}} MB，剩余 {{3}} GB",
+      "reached": "已通过 6443 端口连上 {{0}}",
+      "readyToRestore": "可以开始恢复了",
+      "restored": "已从 {{0}} 那次备份恢复",
+      "uninstallFailed": "没能从这台机器上卸载 Kubernetes",
+      "uninstallSkipped": "Kubernetes 被保留在这台机器上",
+      "uninstalled": "已从这台机器上卸载 Kubernetes"
+    }
   },
   "databases": {
     "title": "数据库",
@@ -1429,6 +1518,108 @@
         "cause": "服务器返回 {{0}}。",
         "impact": "什么都没有安装。",
         "fix": "检查一下地址。"
+      },
+      "preflight_arch_unknown": {
+        "title": "这台服务器还不能加入",
+        "cause": "判断不出这台服务器的 CPU 架构。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "检查 `uname -m` 能否通过 SSH 正常执行。"
+      },
+      "preflight_arch_unsupported": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器是 {{0}}，Skifity 不为这种架构构建。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "请用 64 位 x86（amd64）或 ARM（arm64）服务器。"
+      },
+      "preflight_cgroups": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器上的内存 cgroup 控制器被关掉了。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "没有它 kubelet 起不来。在 Raspberry Pi OS 和树莓派版 Ubuntu 上，把 `cgroup_memory=1 cgroup_enable=memory` 加到 /boot/firmware/cmdline.txt 那唯一一行的末尾再重启。其他系统请检查内核命令行里有没有 `cgroup_disable=memory`。"
+      },
+      "preflight_conflict_docker": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器上已经在跑 Docker。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "Docker 和 k3s 可以共存，但它们会争内存，而且都要管 iptables 规则。服务器不大的话，先把 Docker 关掉：systemctl disable --now docker"
+      },
+      "preflight_conflict_other": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器上正在跑 {{0}}。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "确认它没有占用 80、443 或 6443 端口。"
+      },
+      "preflight_conflict_web_server": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器上 {{0}} 正在监听。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "它占着 80 和 443 端口，而集群的 ingress 需要这两个端口。停掉它：systemctl disable --now {{0}}"
+      },
+      "preflight_cpu": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器有 {{0}} 个 CPU 核心；至少需要 {{1}} 个。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "换成核心更多的服务器。"
+      },
+      "preflight_disk": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器有 {{0}} GB 可用磁盘；至少需要 {{1}} GB。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "腾出空间或者把磁盘扩大。光是容器镜像通常就要好几个 GB。"
+      },
+      "preflight_memory_control_plane": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器有 {{0}} MB 内存；一台控制平面服务器至少需要 {{1}} MB。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "把服务器规格调大，或者把它当作工作节点而不是控制平面服务器来添加。"
+      },
+      "preflight_memory_worker": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器有 {{0}} MB 内存；一个工作节点至少需要 {{1}} MB。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "把服务器规格调大，或者把它当作工作节点而不是控制平面服务器来添加。"
+      },
+      "preflight_network": {
+        "title": "这台服务器还不能加入",
+        "cause": "Skifity 判断不出这台服务器的公网地址。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "不同服务商的服务器之间必须靠公网地址互通。确认这台服务器有公网地址，而且出站连接正常。"
+      },
+      "preflight_os_unreadable": {
+        "title": "这台服务器还不能加入",
+        "cause": "Skifity 判断不出这台服务器跑的是哪个发行版。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "检查 /etc/os-release 是否存在且可读。经过测试的是 Ubuntu 24.04 和 Debian 12。"
+      },
+      "preflight_os_unsupported": {
+        "title": "这台服务器还不能加入",
+        "cause": "{{0}} 不是 Skifity 认识的发行版。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "请用 Ubuntu 24.04 或 Debian 12。其他带 systemd 的发行版通常也能跑，但没有测试过。"
+      },
+      "preflight_os_untested": {
+        "title": "这台服务器还不能加入",
+        "cause": "{{0}} {{1}} 不在 Skifity 测试过的发行版之列。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "应该能用，但如果遇到问题，经过测试的是 Ubuntu 24.04 和 Debian 12。"
+      },
+      "preflight_port": {
+        "title": "这台服务器还不能加入",
+        "cause": "已经有东西在监听 {{0}} 端口。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "用 ss -lntup 'sport = :{{0}}' 找出来并停掉，或者换一台该端口空闲的服务器。"
+      },
+      "preflight_systemd": {
+        "title": "这台服务器还不能加入",
+        "cause": "这台服务器看起来没有用 systemd。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "Skifity 把 Kubernetes 装成 systemd 服务，并用 systemctl 管理它。请用带 systemd 的发行版，比如 Ubuntu 24.04 或 Debian 12。Alpine 以及其他用 OpenRC 的系统都不行，没有 init 系统的容器也不行——比如非特权 LXC 或 Docker 容器。"
+      },
+      "preflight_wireguard": {
+        "title": "这台服务器还不能加入",
+        "cause": "这个内核没有 WireGuard 模块，而这个集群用 WireGuard 加密服务器之间的流量。",
+        "impact": "服务器没有被添加。上面没有任何改动。",
+        "fix": "在这台服务器上安装：apt-get install -y wireguard-tools（若模块仍加载不了就重启）。如果内核根本装不了，就在「设置 -> 集群 -> Pod 网络」里把整个集群切到 vxlan，这会让所有服务器都关掉那层加密。"
       },
       "release_failed": {
         "title": "发布命令失败了",

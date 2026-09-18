@@ -1649,6 +1649,82 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 60 — the scaling findings, the preflight report, and the line under every step
+
+The two pieces named at the end of Phase 59, and a third that turned up while
+counting them.
+
+### Three surfaces, one mechanism
+
+`errdoc.Sprintf` is the whole of it: format the sentence, and hand back the
+values that went into it, each rendered by the verb that was going to print it.
+The English stays as it was — the fallback, what the CLI prints, what an
+assistant reads — and the locale writes `{{0}}` where the Go wrote `%s`. The
+same trade as Phase 59, applied three more times:
+
+* **Twelve scaling findings.** The readiness checker is the panel's best
+  advice — the volume only one instance can use, sessions in memory, SQLite, a
+  CPU target that fires while the app is idle — three sentences each, under
+  `scaling.finding.<code>`.
+* **Seventeen preflight problems.** A fatal one becomes an `errdoc` Problem, so
+  these live in the error catalogue as `preflight.<code>` and needed no new
+  frontend code at all. `PreflightFailed` sets `Cause` and `Fix` on the fields
+  rather than through `WithCause`: running an already-rendered sentence back
+  through `"%s"` would make the whole English string the one argument, and the
+  locale entry could then only be `{{0}}` — the English again, in every
+  language.
+* **Twenty-five step messages**, under `servers.stepMessage.<key>`.
+
+### The step names were translated. The line under them was not.
+
+`servers.steps.*` has had all fifteen step names in five languages since the
+panel shipped — "Checking the server", "Installing Kubernetes". The sentence
+underneath each one was whatever Go wrote: *Connected to 203.0.113.10*,
+*Ubuntu 24.04, 4 cores, 8192 MB memory, 40 GB free*, *Moved 3 instance(s) to the
+other servers*. Somebody adding a server in Indonesian read a translated heading
+over an English line, fifteen times in a row.
+
+A step is stored, so this needed migration 0012: `message_key` and
+`message_args` beside the `message` that was already there. The English column
+stays — it is the fallback, and a step recorded before the migration has only
+that. `store.StepNote` carries the three together, which is what the call sites
+now pass; a note with no key is shown as its English, which is exactly what the
+old rows do.
+
+A failed step shows its problem's title, and that is already in the error
+catalogue, so the note's key is `problem:<code>` and the panel looks there
+instead. One prefix, one branch, no second copy of ninety-odd sentences.
+
+### Two codes that were not codes
+
+`provision.Problem` had a `Check`, and it is a grouping, not an identity: three
+problems say `os`, three say `conflict`, three say `udp_port`. Each has a
+`Code` now.
+
+The memory check spliced `"a worker"` or `"a control plane server"` into the
+middle of its sentence. No locale can reassemble that — a noun phrase from
+another language cannot be dropped where its own grammar needs one — so it is
+two codes with two whole sentences.
+
+### Three gates, and one bug found on the way
+
+`internal/deploy` reads every `api.ScalingFinding`'s `Code` out of `scaling.go`;
+`internal/provision` reads every preflight `Code` and every `store.StepNote`'s
+`Key` out of its own package **and out of `internal/backup`**, which writes step
+notes too — the restore flow fills the same list on the same screen. Both refuse
+a locale key nothing can produce. The error catalogue's gate hands the
+`preflight_*` keys to the provision one, because `"preflight." + code` is the
+one code built at run time and cannot be read out of the source where it is
+used.
+
+While counting: **a step's `detail` is only rendered when the step failed.**
+`{step.status === "failed" && step.detail && ...}`. So the preflight warnings,
+the host key and the key fingerprint — all written against steps that
+*succeeded* — are collected, stored, and shown to nobody. That is not fixed
+here and is not a translation problem; it is recorded in Open issues.
+
+1547 keys, five languages. `make check` green, 15 interface tests pass.
+
 ## Phase 59 — the error catalogue, in five languages
 
 The last part of the interface that was English in every language. Ninety-odd
@@ -2849,6 +2925,15 @@ all ten pages the panel serves rather than eight.
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
   start now say so where the one-line command is.
+* **A step's detail is never shown unless the step failed.** The operation
+  progress list renders `detail` only for a failed step, and three things are
+  written against steps that succeed: the preflight warnings — the non-fatal
+  ones, which is most of them — the server's SSH host key, and the fingerprint
+  of the key the panel installed. All three are collected, stored in
+  `operation_steps.detail`, and displayed to nobody. Found while translating the
+  step messages in Phase 60. The fix is a collapsible on a succeeded step, and
+  the preflight warnings would then want structuring the way the fatal ones now
+  are.
 * **No plugin has ever actually run.** The manifest standard, the permission
   model, the rendered Kubernetes objects, the event delivery and the blocking
   verdicts are unit-tested. Whether a real plugin image starts in the namespace

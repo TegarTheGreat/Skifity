@@ -2,10 +2,10 @@
 package provision
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
+	"skifity/internal/errdoc"
 	"skifity/internal/kube"
 	"skifity/internal/settings"
 )
@@ -79,11 +79,26 @@ func ControlPlaneRequirements() Requirements {
 
 // Problem is one reason a server cannot join, with the fix.
 type Problem struct {
+	// Code identifies this exact problem, and is what the panel looks a
+	// translation up by. Check groups several of them — three problems are
+	// about the operating system and three about a UDP port — so it is not
+	// enough on its own.
+	Code   string `json:"code"`
 	Check  string `json:"check"`
 	Detail string `json:"detail"`
 	Fix    string `json:"fix"`
+	// Args are the values interpolated into Detail and Fix, so a translated
+	// sentence carries the same ones. See errdoc.Sprintf.
+	Args ProblemArgs `json:"args,omitzero"`
 	// Fatal problems stop the process; others are warnings.
 	Fatal bool `json:"fatal"`
+}
+
+// ProblemArgs carries one preflight problem's interpolated values, in the
+// order the Go format string used them.
+type ProblemArgs struct {
+	Detail []string `json:"detail,omitempty"`
+	Fix    []string `json:"fix,omitempty"`
 }
 
 // The networks k3s gives pods and services.
@@ -147,6 +162,7 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 
 	if !p.HasSystemd {
 		problems = append(problems, Problem{
+			Code:   "systemd",
 			Check:  "systemd",
 			Detail: "This server does not appear to use systemd.",
 			Fix:    "Skifity installs Kubernetes as a systemd service and manages it with systemctl. Use a distribution with systemd, such as Ubuntu 24.04 or Debian 12. Alpine and anything else on OpenRC will not work, and neither will a container without an init system — an unprivileged LXC or a Docker container, for instance.",
@@ -160,6 +176,7 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	// cgroups, which is not the thing anybody would think to change.
 	if p.MemoryCgroup == "no" {
 		problems = append(problems, Problem{
+			Code:   "cgroups",
 			Check:  "cgroups",
 			Detail: "The memory cgroup controller is switched off on this server.",
 			Fix:    "The kubelet cannot start without it. On Raspberry Pi OS and Ubuntu for the Pi, add `cgroup_memory=1 cgroup_enable=memory` to the end of the single line in /boot/firmware/cmdline.txt and reboot. On other systems, check the kernel command line for `cgroup_disable=memory`.",
@@ -170,22 +187,29 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	switch {
 	case supportedDistros[p.OSID]:
 	case knownWorkingDistros[p.OSID]:
+		detail, args := errdoc.Sprintf("%s %s is not one of the distributions Skifity is tested on.", p.OSName, p.OSVersion)
 		problems = append(problems, Problem{
+			Code:   "os_untested",
 			Check:  "os",
-			Detail: fmt.Sprintf("%s %s is not one of the distributions Skifity is tested on.", p.OSName, p.OSVersion),
+			Detail: detail,
 			Fix:    "It should work, but if you hit trouble, Ubuntu 24.04 and Debian 12 are the tested options.",
+			Args:   ProblemArgs{Detail: args},
 		})
 	case p.OSID == "":
 		problems = append(problems, Problem{
+			Code:   "os_unreadable",
 			Check:  "os",
 			Detail: "Skifity could not work out which distribution this server runs.",
 			Fix:    "Check that /etc/os-release exists and is readable. Ubuntu 24.04 and Debian 12 are the tested options.",
 		})
 	default:
+		detail, args := errdoc.Sprintf("%s is not a distribution Skifity recognises.", p.OSName)
 		problems = append(problems, Problem{
+			Code:   "os_unsupported",
 			Check:  "os",
-			Detail: fmt.Sprintf("%s is not a distribution Skifity recognises.", p.OSName),
+			Detail: detail,
 			Fix:    "Use Ubuntu 24.04 or Debian 12. Other systemd distributions usually work, but are not tested.",
+			Args:   ProblemArgs{Detail: args},
 		})
 	}
 
@@ -193,43 +217,62 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	case "x86_64", "amd64", "aarch64", "arm64":
 	case "":
 		problems = append(problems, Problem{
-			Check: "arch", Detail: "The server's CPU architecture could not be determined.",
-			Fix: "Check that `uname -m` works over SSH.", Fatal: true,
+			Code: "arch_unknown", Check: "arch",
+			Detail: "The server's CPU architecture could not be determined.",
+			Fix:    "Check that `uname -m` works over SSH.", Fatal: true,
 		})
 	default:
+		detail, args := errdoc.Sprintf("This server is %s, which Skifity does not build for.", p.Arch)
 		problems = append(problems, Problem{
+			Code:   "arch_unsupported",
 			Check:  "arch",
-			Detail: fmt.Sprintf("This server is %s, which Skifity does not build for.", p.Arch),
+			Detail: detail,
 			Fix:    "Use a 64-bit x86 (amd64) or ARM (arm64) server.",
+			Args:   ProblemArgs{Detail: args},
 			Fatal:  true,
 		})
 	}
 
 	if p.MemoryMB > 0 && p.MemoryMB < req.MinMemoryMB {
-		role := "a worker"
+		// Two codes rather than one with the role spliced into it. "a worker"
+		// and "a control plane server" were English phrases dropped into the
+		// middle of the sentence, and no locale can put a noun phrase from
+		// another language where its own grammar needs one.
+		code := "memory_worker"
+		format := "This server has %d MB of memory; a worker needs at least %d MB."
 		if controlPlane {
-			role = "a control plane server"
+			code = "memory_control_plane"
+			format = "This server has %d MB of memory; a control plane server needs at least %d MB."
 		}
+		detail, args := errdoc.Sprintf(format, p.MemoryMB, req.MinMemoryMB)
 		problems = append(problems, Problem{
+			Code:   code,
 			Check:  "memory",
-			Detail: fmt.Sprintf("This server has %d MB of memory; %s needs at least %d MB.", p.MemoryMB, role, req.MinMemoryMB),
+			Detail: detail,
 			Fix:    "Resize the server, or add it as a worker rather than a control plane server.",
+			Args:   ProblemArgs{Detail: args},
 			Fatal:  true,
 		})
 	}
 	if p.DiskGB > 0 && p.DiskGB < req.MinDiskGB {
+		detail, args := errdoc.Sprintf("This server has %d GB of free disk; at least %d GB is needed.", p.DiskGB, req.MinDiskGB)
 		problems = append(problems, Problem{
+			Code:   "disk",
 			Check:  "disk",
-			Detail: fmt.Sprintf("This server has %d GB of free disk; at least %d GB is needed.", p.DiskGB, req.MinDiskGB),
+			Detail: detail,
 			Fix:    "Free up space or resize the disk. Container images alone usually need several gigabytes.",
+			Args:   ProblemArgs{Detail: args},
 			Fatal:  true,
 		})
 	}
 	if p.CPUCores > 0 && p.CPUCores < req.MinCPUCores {
+		detail, args := errdoc.Sprintf("This server has %d CPU core(s); at least %d is needed.", p.CPUCores, req.MinCPUCores)
 		problems = append(problems, Problem{
+			Code:   "cpu",
 			Check:  "cpu",
-			Detail: fmt.Sprintf("This server has %d CPU core(s); at least %d is needed.", p.CPUCores, req.MinCPUCores),
+			Detail: detail,
 			Fix:    "Resize the server to one with more cores.",
+			Args:   ProblemArgs{Detail: args},
 			Fatal:  true,
 		})
 	}
@@ -238,33 +281,45 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 		switch conflict {
 		case "docker":
 			problems = append(problems, Problem{
+				Code:   "conflict_docker",
 				Check:  "conflict",
 				Detail: "Docker is already running on this server.",
 				Fix:    "Docker and k3s can coexist, but they compete for memory and both manage iptables rules. On a small server, remove Docker first with: systemctl disable --now docker",
 			})
 		case "nginx", "apache2", "caddy":
+			detail, detailArgs := errdoc.Sprintf("%s is listening on this server.", conflict)
+			fix, fixArgs := errdoc.Sprintf("It is using ports 80 and 443, which the cluster's ingress needs. Stop it with: systemctl disable --now %s", conflict)
 			problems = append(problems, Problem{
+				Code:   "conflict_web_server",
 				Check:  "conflict",
-				Detail: fmt.Sprintf("%s is listening on this server.", conflict),
-				Fix:    fmt.Sprintf("It is using ports 80 and 443, which the cluster's ingress needs. Stop it with: systemctl disable --now %s", conflict),
+				Detail: detail,
+				Fix:    fix,
+				Args:   ProblemArgs{Detail: detailArgs, Fix: fixArgs},
 				Fatal:  true,
 			})
 		case "k3s", "k8s":
 			// Not a problem: this is how re-adding a server works.
 		default:
+			detail, args := errdoc.Sprintf("%s is running on this server.", conflict)
 			problems = append(problems, Problem{
+				Code:   "conflict_other",
 				Check:  "conflict",
-				Detail: fmt.Sprintf("%s is running on this server.", conflict),
+				Detail: detail,
 				Fix:    "Check that it does not use ports 80, 443 or 6443.",
+				Args:   ProblemArgs{Detail: args},
 			})
 		}
 	}
 
 	for _, port := range p.PortsInUse {
+		detail, detailArgs := errdoc.Sprintf("Something is already listening on port %d.", port)
+		fix, fixArgs := errdoc.Sprintf("Find it with: ss -lntup 'sport = :%d' and stop it, or use a server with that port free.", port)
 		problems = append(problems, Problem{
+			Code:   "port",
 			Check:  "port",
-			Detail: fmt.Sprintf("Something is already listening on port %d.", port),
-			Fix:    fmt.Sprintf("Find it with: ss -lntup 'sport = :%d' and stop it, or use a server with that port free.", port),
+			Detail: detail,
+			Fix:    fix,
+			Args:   ProblemArgs{Detail: detailArgs, Fix: fixArgs},
 			Fatal:  port == 80 || port == 443 || port == 6443,
 		})
 	}
@@ -280,25 +335,27 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	for _, port := range p.UDPPortsInUse {
 		wireGuardPort := port == 51820 || port == 51821
 		used := wireGuardPort == wireGuardRequired(req)
-		problem := Problem{
-			Check:  "udp_port",
-			Detail: fmt.Sprintf("Something is already using UDP port %d, which the pod network needs.", port),
-			Fatal:  used,
-		}
+		problem := Problem{Check: "udp_port", Fatal: used}
+		problem.Detail, problem.Args.Detail = errdoc.Sprintf(
+			"Something is already using UDP port %d, which the pod network needs.", port)
 		switch {
 		case wireGuardPort && used:
-			problem.Fix = fmt.Sprintf(
+			problem.Code = "udp_port_wireguard"
+			problem.Fix, problem.Args.Fix = errdoc.Sprintf(
 				"That is almost always a WireGuard VPN of your own. Move it to another port, "+
 					"or set the pod network to %q under Settings, then Cluster — every server in "+
 					"the cluster must then use that one. Find the holder with: ss -lnup 'sport = :%d'",
 				settings.FlannelVXLAN, port)
 		case used:
-			problem.Fix = fmt.Sprintf(
+			problem.Code = "udp_port_needed"
+			problem.Fix, problem.Args.Fix = errdoc.Sprintf(
 				"Find it with: ss -lnup 'sport = :%d' and stop it, or use a server with that port free.", port)
 		default:
-			problem.Detail = fmt.Sprintf(
+			problem.Code = "udp_port_unused"
+			problem.Detail, problem.Args.Detail = errdoc.Sprintf(
 				"Something is using UDP port %d. This cluster's pod network does not use it, so it is only a problem if you ever change that setting.", port)
-			problem.Fix = fmt.Sprintf("Nothing to do now. Find the holder with: ss -lnup 'sport = :%d'", port)
+			problem.Fix, problem.Args.Fix = errdoc.Sprintf(
+				"Nothing to do now. Find the holder with: ss -lnup 'sport = :%d'", port)
 		}
 		problems = append(problems, problem)
 	}
@@ -311,6 +368,7 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 	// being added, and the two fixes are the two that actually work.
 	if !p.HasWireGuard && wireGuardRequired(req) {
 		problems = append(problems, Problem{
+			Code:   "wireguard",
 			Check:  "wireguard",
 			Detail: "This kernel does not have the WireGuard module, and this cluster encrypts traffic between servers with WireGuard.",
 			Fix:    "Install it on this server: apt-get install -y wireguard-tools (then reboot if the module still does not load). If the kernel cannot have it at all, switch the whole cluster to vxlan in Settings -> Cluster -> Pod network, which turns that encryption off for every server.",
@@ -320,6 +378,7 @@ func Evaluate(p Preflight, req Requirements, controlPlane bool) []Problem {
 
 	if p.PublicIP == "" {
 		problems = append(problems, Problem{
+			Code:   "network",
 			Check:  "network",
 			Detail: "Skifity could not determine this server's public address.",
 			Fix:    "Servers at different providers must reach each other by public address. Check that the server has one, and that outbound connections work.",

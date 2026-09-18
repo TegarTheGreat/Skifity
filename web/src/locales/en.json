@@ -533,7 +533,69 @@
     "memoryLimit": "Memory limit",
     "resourcesHelp": "Reserved is what each instance is guaranteed. The limit is the most it may use before it is restarted.",
     "spread": "Spread across servers",
-    "spreadHelp": "Instances are placed on different servers where possible, so losing one server does not take the app down."
+    "spreadHelp": "Instances are placed on different servers where possible, so losing one server does not take the app down.",
+    "finding": {
+      "file_cache": {
+        "title": "The cache is stored on local disk",
+        "detail": "{{0}} is set to {{1}}, so each instance would have its own cache and they would disagree.",
+        "fix": "Use Redis for the cache, or accept that cached values differ between instances."
+      },
+      "in_memory_sessions": {
+        "title": "Sessions are kept in memory or on disk",
+        "detail": "{{0}} is set to {{1}}. Each instance would keep its own sessions, so users would be signed out at random as requests land on different instances.",
+        "fix": "Create a Redis database in this environment and point the session store at it. Skifity links it in as a variable for you."
+      },
+      "in_process_cron": {
+        "title": "Scheduled jobs run inside the app",
+        "detail": "{{0}} is on. With several instances, every instance runs the schedule, so each job runs several times.",
+        "fix": "Run the scheduler as a separate app with one instance, or use a lock so only one instance runs each job."
+      },
+      "local_uploads": {
+        "title": "Uploaded files are written to local disk",
+        "detail": "{{0}} points at a directory inside the container. Files written by one instance would be invisible to the others, and would disappear on the next deploy.",
+        "fix": "Store uploads in S3-compatible object storage. MinIO is available as a one-click template if you would rather not use a cloud provider."
+      },
+      "memory_target_below_idle": {
+        "title": "The memory target is reached before the app does anything",
+        "detail": "The target is a percentage of what this app reserves. It reserves {{0}}Mi and the target is {{1}}%, so a new instance is added above {{2}}Mi — which a Node or JVM process passes at startup.",
+        "fix": "Raise the reserved memory under the app's settings to what the app uses when it is idle, plus room to work. Memory does not fall once it has been claimed, so a target below the idle figure never comes back down."
+      },
+      "no_health_check": {
+        "title": "There is no health check path",
+        "detail": "Without one, Skifity can only check that the port is open, which happens before most frameworks are ready to serve.",
+        "fix": "Add a path such as /healthz that returns 200 once the app is ready, and set it under the app's settings."
+      },
+      "no_metrics": {
+        "title": "The cluster is not reporting CPU and memory",
+        "detail": "Autoscaling on a CPU or memory target reads those numbers from metrics-server, and nothing is answering. The app will stay at its minimum number of instances however busy it gets, and nothing will say so.",
+        "fix": "k3s installs metrics-server by default. Check that it is running in kube-system, or set a fixed number of instances until it is."
+      },
+      "single_instance": {
+        "title": "This app runs as a single instance",
+        "detail": "If the server it is on restarts, the app is unavailable until Kubernetes starts it somewhere else.",
+        "fix": "Raise the number of instances to two, or turn on autoscaling, once the points above are addressed."
+      },
+      "sqlite": {
+        "title": "This app uses SQLite",
+        "detail": "{{0}} points at a SQLite file. SQLite is a single file on one disk, so instances on different servers cannot share it.",
+        "fix": "Create a PostgreSQL database in this environment and point the app at it. Skifity injects the connection string for you."
+      },
+      "target_below_idle": {
+        "title": "The CPU target is reached before the app does anything",
+        "detail": "The target is a percentage of what this app reserves, not of the server. It reserves {{0}}m of CPU and the target is {{1}}%, so a new instance is added above {{2}}m — about a tenth of one core, which most frameworks pass while idle.",
+        "fix": "Raise the reserved CPU under the app's settings to what it actually uses when busy, so the percentage means something. The reservation is what the app is guaranteed, not a limit on it."
+      },
+      "volume": {
+        "title": "This app writes to a disk that only one instance can use",
+        "detail": "A volume is mounted at {{0}}. That storage can be attached to one server at a time, so a second instance would either fail to start or end up on the same server.",
+        "fix": "Move uploads to object storage such as S3 or MinIO, or turn on cross-node storage in Settings so the volume can be shared. Until then, keep this app at one instance."
+      },
+      "volume_with_replicas": {
+        "title": "More than one instance is configured, and this app has a volume",
+        "detail": "The extra instances will stay pending, or will be scheduled onto the same server and write to the same files at once.",
+        "fix": "Set the instance count back to one, or enable cross-node storage, or move the data out of the volume."
+      }
+    }
   },
   "servers": {
     "title": "Servers",
@@ -612,7 +674,34 @@
     "adoptedHelp": "It was already a node of the cluster when Skifity was installed — usually the machine the panel itself runs on. It is shown here so you can see what the cluster has, and it cannot be removed or promoted from the panel, because there is no key to it. Run the uninstaller on the machine itself to take it out.",
     "architecture": "Architecture",
     "locationExample": "Frankfurt",
-    "serverNameExample": "Frankfurt 1"
+    "serverNameExample": "Frankfurt 1",
+    "stepMessage": {
+      "appsRestarted": "Restarted {{0}} app(s) so they reconnect",
+      "cancelled": "Cancelled",
+      "connected": "Connected to {{0}}",
+      "connectivityFirstServer": "This is the first server, so there is nothing to connect to yet",
+      "cordoned": "No new instances will be placed here",
+      "drained": "Moved {{0}} instance(s) to the other servers",
+      "drainedFirst": "Moved {{0}} instance(s) off this server first",
+      "firewallFirstServer": "No other servers yet, so only ports 80 and 443 were opened",
+      "firewallIptables": "Opened the cluster ports to the other servers only, using iptables",
+      "firewallUfw": "Opened the cluster ports to the other servers only, using ufw",
+      "interrupted": "Interrupted by a panel restart",
+      "joined": "{{0}} joined the cluster and is ready",
+      "k3sRunning": "Kubernetes is installed and running",
+      "k3sUnconfirmed": "Installed, but the panel is not connected to the cluster to confirm",
+      "keyAlreadyThere": "This server already has a key from Skifity",
+      "keyInstalled": "Installed a key just for this server; the password was not stored",
+      "leftAsWorker": "Left the cluster as a worker",
+      "nodeDeleted": "Removed from the cluster",
+      "preflightOk": "{{0}}, {{1}} cores, {{2}} MB memory, {{3}} GB free",
+      "reached": "Reached {{0}} on port 6443",
+      "readyToRestore": "Ready to restore",
+      "restored": "Restored from the backup taken on {{0}}",
+      "uninstallFailed": "Kubernetes could not be removed from the machine",
+      "uninstallSkipped": "Kubernetes was left installed on the machine",
+      "uninstalled": "Kubernetes was removed from the machine"
+    }
   },
   "databases": {
     "title": "Databases",
@@ -1441,6 +1530,108 @@
         "cause": "The server answered {{0}}.",
         "impact": "Nothing was installed.",
         "fix": "Check the address."
+      },
+      "preflight_arch_unknown": {
+        "title": "This server is not ready to join",
+        "cause": "The server's CPU architecture could not be determined.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Check that `uname -m` works over SSH."
+      },
+      "preflight_arch_unsupported": {
+        "title": "This server is not ready to join",
+        "cause": "This server is {{0}}, which Skifity does not build for.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Use a 64-bit x86 (amd64) or ARM (arm64) server."
+      },
+      "preflight_cgroups": {
+        "title": "This server is not ready to join",
+        "cause": "The memory cgroup controller is switched off on this server.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "The kubelet cannot start without it. On Raspberry Pi OS and Ubuntu for the Pi, add `cgroup_memory=1 cgroup_enable=memory` to the end of the single line in /boot/firmware/cmdline.txt and reboot. On other systems, check the kernel command line for `cgroup_disable=memory`."
+      },
+      "preflight_conflict_docker": {
+        "title": "This server is not ready to join",
+        "cause": "Docker is already running on this server.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Docker and k3s can coexist, but they compete for memory and both manage iptables rules. On a small server, remove Docker first with: systemctl disable --now docker"
+      },
+      "preflight_conflict_other": {
+        "title": "This server is not ready to join",
+        "cause": "{{0}} is running on this server.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Check that it does not use ports 80, 443 or 6443."
+      },
+      "preflight_conflict_web_server": {
+        "title": "This server is not ready to join",
+        "cause": "{{0}} is listening on this server.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "It is using ports 80 and 443, which the cluster's ingress needs. Stop it with: systemctl disable --now {{0}}"
+      },
+      "preflight_cpu": {
+        "title": "This server is not ready to join",
+        "cause": "This server has {{0}} CPU core(s); at least {{1}} is needed.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Resize the server to one with more cores."
+      },
+      "preflight_disk": {
+        "title": "This server is not ready to join",
+        "cause": "This server has {{0}} GB of free disk; at least {{1}} GB is needed.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Free up space or resize the disk. Container images alone usually need several gigabytes."
+      },
+      "preflight_memory_control_plane": {
+        "title": "This server is not ready to join",
+        "cause": "This server has {{0}} MB of memory; a control plane server needs at least {{1}} MB.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Resize the server, or add it as a worker rather than a control plane server."
+      },
+      "preflight_memory_worker": {
+        "title": "This server is not ready to join",
+        "cause": "This server has {{0}} MB of memory; a worker needs at least {{1}} MB.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Resize the server, or add it as a worker rather than a control plane server."
+      },
+      "preflight_network": {
+        "title": "This server is not ready to join",
+        "cause": "Skifity could not determine this server's public address.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Servers at different providers must reach each other by public address. Check that the server has one, and that outbound connections work."
+      },
+      "preflight_os_unreadable": {
+        "title": "This server is not ready to join",
+        "cause": "Skifity could not work out which distribution this server runs.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Check that /etc/os-release exists and is readable. Ubuntu 24.04 and Debian 12 are the tested options."
+      },
+      "preflight_os_unsupported": {
+        "title": "This server is not ready to join",
+        "cause": "{{0}} is not a distribution Skifity recognises.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Use Ubuntu 24.04 or Debian 12. Other systemd distributions usually work, but are not tested."
+      },
+      "preflight_os_untested": {
+        "title": "This server is not ready to join",
+        "cause": "{{0}} {{1}} is not one of the distributions Skifity is tested on.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "It should work, but if you hit trouble, Ubuntu 24.04 and Debian 12 are the tested options."
+      },
+      "preflight_port": {
+        "title": "This server is not ready to join",
+        "cause": "Something is already listening on port {{0}}.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Find it with: ss -lntup 'sport = :{{0}}' and stop it, or use a server with that port free."
+      },
+      "preflight_systemd": {
+        "title": "This server is not ready to join",
+        "cause": "This server does not appear to use systemd.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Skifity installs Kubernetes as a systemd service and manages it with systemctl. Use a distribution with systemd, such as Ubuntu 24.04 or Debian 12. Alpine and anything else on OpenRC will not work, and neither will a container without an init system — an unprivileged LXC or a Docker container, for instance."
+      },
+      "preflight_wireguard": {
+        "title": "This server is not ready to join",
+        "cause": "This kernel does not have the WireGuard module, and this cluster encrypts traffic between servers with WireGuard.",
+        "impact": "The server was not added. Nothing was changed on it.",
+        "fix": "Install it on this server: apt-get install -y wireguard-tools (then reboot if the module still does not load). If the kernel cannot have it at all, switch the whole cluster to vxlan in Settings -> Cluster -> Pod network, which turns that encryption off for every server."
       },
       "release_failed": {
         "title": "The release command failed",

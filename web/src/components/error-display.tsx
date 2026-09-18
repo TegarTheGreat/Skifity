@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ApiError, type Problem } from "@/lib/api"
+import { translated } from "@/lib/say"
 
 /**
  * Renders a failure the way the product promises: what happened, what it means,
@@ -45,16 +46,13 @@ export function ErrorDisplay({
   // looks them up by the error's own code, falling back to what the server sent.
   // Same mechanism as the settings page, which was English in every language
   // until Phase 55 for exactly this reason.
-  const say = (field: "title" | "cause" | "impact" | "fix") => {
-    const english = problem[field]
-    if (!english) return ""
-    return t(`errors.catalogue.${problem.code.replaceAll(".", "_")}.${field}`, {
-      defaultValue: english,
-      // Positional, matching the order the Go format string used: the locale
-      // writes {{0}} where the English writes %s.
-      ...Object.fromEntries((problem.args?.[field as "cause"] ?? []).map((v, i) => [i, v])),
-    })
-  }
+  const say = (field: "title" | "cause" | "impact" | "fix") =>
+    translated(
+      t,
+      `errors.catalogue.${problem.code.replaceAll(".", "_")}.${field}`,
+      problem[field],
+      problem.args?.[field as "cause"],
+    )
 
   const copyForAI = async () => {
     const markdown = error instanceof ApiError ? error.toMarkdown() : problemToMarkdown(problem)

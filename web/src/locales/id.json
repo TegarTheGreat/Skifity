@@ -525,7 +525,69 @@
     "memoryLimit": "Batas memori",
     "resourcesHelp": "Yang dicadangkan dijamin tersedia untuk setiap instance. Batas adalah pemakaian maksimum sebelum instance dimulai ulang.",
     "spread": "Sebar antar server",
-    "spreadHelp": "Instance ditempatkan di server berbeda bila memungkinkan, sehingga kehilangan satu server tidak mematikan aplikasi."
+    "spreadHelp": "Instance ditempatkan di server berbeda bila memungkinkan, sehingga kehilangan satu server tidak mematikan aplikasi.",
+    "finding": {
+      "file_cache": {
+        "title": "Cache disimpan di disk lokal",
+        "detail": "{{0}} disetel ke {{1}}, jadi tiap instance akan punya cache-nya sendiri dan isinya tidak akan sama.",
+        "fix": "Pakai Redis untuk cache-nya, atau terima saja kalau nilai yang di-cache berbeda antar instance."
+      },
+      "in_memory_sessions": {
+        "title": "Sesi disimpan di memori atau di disk",
+        "detail": "{{0}} disetel ke {{1}}. Tiap instance akan menyimpan sesinya sendiri, jadi pengguna akan keluar sendiri secara acak saat permintaannya jatuh ke instance yang berbeda.",
+        "fix": "Buat database Redis di environment ini lalu arahkan penyimpanan sesi ke sana. Skifity yang menautkannya sebagai variabel untukmu."
+      },
+      "in_process_cron": {
+        "title": "Tugas terjadwal berjalan di dalam aplikasi",
+        "detail": "{{0}} menyala. Dengan beberapa instance, tiap instance menjalankan jadwalnya, jadi tiap tugas berjalan beberapa kali.",
+        "fix": "Jalankan penjadwalnya sebagai aplikasi terpisah dengan satu instance, atau pakai lock supaya hanya satu instance yang menjalankan tiap tugas."
+      },
+      "local_uploads": {
+        "title": "File yang diunggah ditulis ke disk lokal",
+        "detail": "{{0}} menunjuk ke direktori di dalam kontainer. File yang ditulis satu instance tidak akan terlihat oleh yang lain, dan akan hilang pada deploy berikutnya.",
+        "fix": "Simpan unggahan di object storage yang kompatibel dengan S3. MinIO tersedia sebagai template sekali klik kalau kamu tidak mau memakai penyedia cloud."
+      },
+      "memory_target_below_idle": {
+        "title": "Target memori tercapai sebelum aplikasinya melakukan apa pun",
+        "detail": "Targetnya adalah persentase dari yang dipesan aplikasi ini. Dia memesan {{0}}Mi dan targetnya {{1}}%, jadi instance baru ditambahkan di atas {{2}}Mi — yang dilewati proses Node atau JVM saat baru menyala.",
+        "fix": "Naikkan memori yang dipesan di pengaturan aplikasi ke angka yang dipakai saat menganggur, ditambah ruang untuk bekerja. Memori tidak turun lagi setelah diklaim, jadi target di bawah angka menganggur tidak akan pernah turun kembali."
+      },
+      "no_health_check": {
+        "title": "Belum ada jalur health check",
+        "detail": "Tanpa itu, Skifity hanya bisa memeriksa bahwa portnya terbuka — dan itu terjadi sebelum kebanyakan framework siap melayani.",
+        "fix": "Tambahkan jalur seperti /healthz yang mengembalikan 200 begitu aplikasinya siap, lalu isikan di pengaturan aplikasi."
+      },
+      "no_metrics": {
+        "title": "Cluster tidak melaporkan CPU dan memori",
+        "detail": "Autoscaling berdasarkan target CPU atau memori membaca angka-angka itu dari metrics-server, dan tidak ada yang menjawab. Aplikasinya akan bertahan di jumlah instance minimumnya sesibuk apa pun, dan tidak ada yang memberi tahu.",
+        "fix": "k3s memasang metrics-server secara bawaan. Pastikan dia berjalan di kube-system, atau tetapkan jumlah instance yang tetap sampai itu beres."
+      },
+      "single_instance": {
+        "title": "Aplikasi ini berjalan sebagai satu instance",
+        "detail": "Kalau server tempatnya berjalan restart, aplikasinya tidak bisa diakses sampai Kubernetes menyalakannya di tempat lain.",
+        "fix": "Naikkan jumlah instance jadi dua, atau nyalakan autoscaling, setelah poin-poin di atas dibereskan."
+      },
+      "sqlite": {
+        "title": "Aplikasi ini memakai SQLite",
+        "detail": "{{0}} menunjuk ke sebuah file SQLite. SQLite itu satu file di satu disk, jadi instance di server berbeda tidak bisa berbagi.",
+        "fix": "Buat database PostgreSQL di environment ini lalu arahkan aplikasinya ke sana. Skifity yang menyuntikkan connection string-nya untukmu."
+      },
+      "target_below_idle": {
+        "title": "Target CPU tercapai sebelum aplikasinya melakukan apa pun",
+        "detail": "Targetnya adalah persentase dari yang dipesan aplikasi ini, bukan dari servernya. Dia memesan {{0}}m CPU dan targetnya {{1}}%, jadi instance baru ditambahkan di atas {{2}}m — sekitar sepersepuluh inti, yang dilewati kebanyakan framework saat menganggur.",
+        "fix": "Naikkan CPU yang dipesan di pengaturan aplikasi ke angka yang benar-benar dipakai saat sibuk, supaya persentasenya berarti sesuatu. Pesanan itu jaminan untuk aplikasinya, bukan batas atasnya."
+      },
+      "volume": {
+        "title": "Aplikasi ini menulis ke disk yang hanya bisa dipakai satu instance",
+        "detail": "Ada volume yang di-mount di {{0}}. Penyimpanan itu hanya bisa menempel ke satu server pada satu waktu, jadi instance kedua akan gagal start atau berakhir di server yang sama.",
+        "fix": "Pindahkan unggahan ke object storage seperti S3 atau MinIO, atau nyalakan penyimpanan lintas-node di Pengaturan supaya volumenya bisa dibagi. Sampai itu, biarkan aplikasi ini di satu instance."
+      },
+      "volume_with_replicas": {
+        "title": "Instance-nya disetel lebih dari satu, dan aplikasi ini punya volume",
+        "detail": "Instance tambahannya akan menggantung, atau dijadwalkan ke server yang sama dan menulis ke file yang sama bersamaan.",
+        "fix": "Kembalikan jumlah instance ke satu, atau nyalakan penyimpanan lintas-node, atau pindahkan datanya keluar dari volume."
+      }
+    }
   },
   "servers": {
     "title": "Server",
@@ -603,7 +665,34 @@
     "adoptedHelp": "Server ini sudah menjadi node cluster saat Skifity dipasang — biasanya mesin tempat panel ini sendiri berjalan. Ditampilkan di sini supaya Anda melihat isi cluster, dan tidak bisa dihapus atau dipromosikan dari panel karena tidak ada kunci ke sana. Jalankan uninstaller di mesin itu untuk mengeluarkannya.",
     "architecture": "Arsitektur",
     "locationExample": "Jakarta",
-    "serverNameExample": "Jakarta 1"
+    "serverNameExample": "Jakarta 1",
+    "stepMessage": {
+      "appsRestarted": "Memulai ulang {{0}} aplikasi supaya tersambung kembali",
+      "cancelled": "Dibatalkan",
+      "connected": "Tersambung ke {{0}}",
+      "connectivityFirstServer": "Ini server pertama, jadi belum ada yang bisa dihubungi",
+      "cordoned": "Tidak akan ada instance baru yang ditaruh di sini",
+      "drained": "Memindahkan {{0}} instance ke server lain",
+      "drainedFirst": "Memindahkan {{0}} instance keluar dari server ini lebih dulu",
+      "firewallFirstServer": "Belum ada server lain, jadi hanya port 80 dan 443 yang dibuka",
+      "firewallIptables": "Membuka port cluster hanya untuk server lain, memakai iptables",
+      "firewallUfw": "Membuka port cluster hanya untuk server lain, memakai ufw",
+      "interrupted": "Terputus karena panel dimulai ulang",
+      "joined": "{{0}} bergabung ke cluster dan sudah siap",
+      "k3sRunning": "Kubernetes terpasang dan berjalan",
+      "k3sUnconfirmed": "Terpasang, tapi panelnya tidak terhubung ke cluster untuk memastikan",
+      "keyAlreadyThere": "Server ini sudah punya kunci dari Skifity",
+      "keyInstalled": "Memasang kunci khusus untuk server ini; kata sandinya tidak disimpan",
+      "leftAsWorker": "Keluar dari cluster sebagai worker",
+      "nodeDeleted": "Dikeluarkan dari cluster",
+      "preflightOk": "{{0}}, {{1}} inti, memori {{2}} MB, sisa {{3}} GB",
+      "reached": "Berhasil menjangkau {{0}} di port 6443",
+      "readyToRestore": "Siap dipulihkan",
+      "restored": "Dipulihkan dari cadangan yang diambil pada {{0}}",
+      "uninstallFailed": "Kubernetes tidak bisa dihapus dari mesinnya",
+      "uninstallSkipped": "Kubernetes dibiarkan tetap terpasang di mesinnya",
+      "uninstalled": "Kubernetes dihapus dari mesinnya"
+    }
   },
   "databases": {
     "title": "Database",
@@ -1429,6 +1518,108 @@
         "cause": "Servernya menjawab {{0}}.",
         "impact": "Tidak ada yang dipasang.",
         "fix": "Periksa alamatnya."
+      },
+      "preflight_arch_unknown": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Arsitektur CPU server ini tidak bisa ditentukan.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pastikan `uname -m` berfungsi lewat SSH."
+      },
+      "preflight_arch_unsupported": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini {{0}}, dan Skifity tidak membangun untuk arsitektur itu.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pakai server x86 64-bit (amd64) atau ARM (arm64)."
+      },
+      "preflight_cgroups": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Pengendali cgroup memori dimatikan di server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "kubelet tidak bisa mulai tanpa itu. Di Raspberry Pi OS dan Ubuntu untuk Pi, tambahkan `cgroup_memory=1 cgroup_enable=memory` di akhir baris tunggal pada /boot/firmware/cmdline.txt lalu reboot. Di sistem lain, periksa baris perintah kernel untuk `cgroup_disable=memory`."
+      },
+      "preflight_conflict_docker": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Docker sudah berjalan di server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Docker dan k3s bisa hidup berdampingan, tapi mereka berebut memori dan dua-duanya mengatur aturan iptables. Di server kecil, singkirkan Docker dulu dengan: systemctl disable --now docker"
+      },
+      "preflight_conflict_other": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "{{0}} sedang berjalan di server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pastikan dia tidak memakai port 80, 443, atau 6443."
+      },
+      "preflight_conflict_web_server": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "{{0}} sedang mendengarkan di server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Dia memakai port 80 dan 443, yang dibutuhkan ingress cluster. Hentikan dengan: systemctl disable --now {{0}}"
+      },
+      "preflight_cpu": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini punya {{0}} inti CPU; setidaknya butuh {{1}}.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Ganti ke server dengan inti yang lebih banyak."
+      },
+      "preflight_disk": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini punya {{0}} GB disk kosong; setidaknya butuh {{1}} GB.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Kosongkan ruang atau perbesar disknya. Image kontainer saja biasanya butuh beberapa gigabyte."
+      },
+      "preflight_memory_control_plane": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini punya {{0}} MB memori; sebuah server control plane butuh setidaknya {{1}} MB.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Perbesar servernya, atau tambahkan sebagai worker alih-alih server control plane."
+      },
+      "preflight_memory_worker": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini punya {{0}} MB memori; sebuah worker butuh setidaknya {{1}} MB.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Perbesar servernya, atau tambahkan sebagai worker alih-alih server control plane."
+      },
+      "preflight_network": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Skifity tidak bisa menentukan alamat publik server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Server di penyedia yang berbeda harus bisa saling menjangkau lewat alamat publik. Pastikan servernya punya satu, dan koneksi keluarnya berfungsi."
+      },
+      "preflight_os_unreadable": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Skifity tidak bisa menentukan distribusi apa yang dijalankan server ini.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pastikan /etc/os-release ada dan bisa dibaca. Ubuntu 24.04 dan Debian 12 adalah pilihan yang sudah diuji."
+      },
+      "preflight_os_unsupported": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "{{0}} bukan distribusi yang Skifity kenali.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pakai Ubuntu 24.04 atau Debian 12. Distribusi lain yang memakai systemd biasanya jalan, tapi belum diuji."
+      },
+      "preflight_os_untested": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "{{0}} {{1}} bukan salah satu distribusi yang diuji dengan Skifity.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Seharusnya jalan, tapi kalau kamu kena masalah, Ubuntu 24.04 dan Debian 12 adalah pilihan yang sudah diuji."
+      },
+      "preflight_port": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Ada yang sudah mendengarkan di port {{0}}.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Cari dengan: ss -lntup 'sport = :{{0}}' lalu hentikan, atau pakai server yang portnya masih kosong."
+      },
+      "preflight_systemd": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Server ini sepertinya tidak memakai systemd.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Skifity memasang Kubernetes sebagai layanan systemd dan mengelolanya dengan systemctl. Pakai distribusi yang punya systemd, seperti Ubuntu 24.04 atau Debian 12. Alpine dan apa pun yang memakai OpenRC tidak akan jalan, begitu juga kontainer tanpa sistem init — misalnya LXC tanpa hak penuh atau kontainer Docker."
+      },
+      "preflight_wireguard": {
+        "title": "Server ini belum siap bergabung",
+        "cause": "Kernel ini tidak punya modul WireGuard, sementara cluster ini mengenkripsi lalu lintas antar server dengan WireGuard.",
+        "impact": "Server tidak jadi ditambahkan. Tidak ada yang diubah di sana.",
+        "fix": "Pasang di server ini: apt-get install -y wireguard-tools (lalu reboot kalau modulnya masih tidak mau termuat). Kalau kernelnya memang tidak bisa sama sekali, ganti seluruh cluster ke vxlan di Pengaturan -> Klaster -> Jaringan pod, yang mematikan enkripsi itu untuk semua server."
       },
       "release_failed": {
         "title": "Perintah rilis gagal",

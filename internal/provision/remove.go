@@ -52,46 +52,48 @@ func (p *Provisioner) runRemoveServer(ctx context.Context, op store.Operation, s
 	p.publishOperation(ctx, op.ID)
 
 	// Cordon: stop anything new being scheduled here.
-	p.setStep(ctx, op, "cordon", store.StepRunning, "", "")
+	p.setStep(ctx, op, "cordon", store.StepRunning, store.StepNote{}, "")
 	if err := p.cordon(ctx, server, true); err != nil {
 		p.failStep(ctx, op, server.ID, "cordon", err)
 		return
 	}
-	p.setStep(ctx, op, "cordon", store.StepSucceeded, "No new instances will be placed here", "")
+	p.setStep(ctx, op, "cordon", store.StepSucceeded, store.StepNote{Message: "No new instances will be placed here", Key: "cordoned"}, "")
 
 	// Drain: move what is running to the other servers.
-	p.setStep(ctx, op, "drain", store.StepRunning, "", "")
+	p.setStep(ctx, op, "drain", store.StepRunning, store.StepNote{}, "")
 	moved, err := p.drain(ctx, server)
 	if err != nil {
 		p.failStep(ctx, op, server.ID, "drain", err)
 		return
 	}
+	moveMessage, moveArgs := errdoc.Sprintf("Moved %d instance(s) to the other servers", moved)
 	p.setStep(ctx, op, "drain", store.StepSucceeded,
-		fmt.Sprintf("Moved %d instance(s) to the other servers", moved), "")
+		store.StepNote{Message: moveMessage, Key: "drained", Args: moveArgs}, "")
 
 	// Delete the node object.
-	p.setStep(ctx, op, "delete-node", store.StepRunning, "", "")
+	p.setStep(ctx, op, "delete-node", store.StepRunning, store.StepNote{}, "")
 	if err := p.deleteNode(ctx, server); err != nil {
 		p.failStep(ctx, op, server.ID, "delete-node", err)
 		return
 	}
-	p.setStep(ctx, op, "delete-node", store.StepSucceeded, "Removed from the cluster", "")
+	p.setStep(ctx, op, "delete-node", store.StepSucceeded, store.StepNote{Message: "Removed from the cluster", Key: "nodeDeleted"}, "")
 
 	// Clean the machine, so it can be reused.
-	p.setStep(ctx, op, "uninstall", store.StepRunning, "", "")
+	p.setStep(ctx, op, "uninstall", store.StepRunning, store.StepNote{}, "")
 	if wipe {
 		if err := p.uninstall(ctx, server); err != nil {
 			// A machine that cannot be reached is not a reason to keep a dead
 			// node in the cluster; report it and finish.
 			p.setStep(ctx, op, "uninstall", store.StepFailed,
-				"Kubernetes could not be removed from the machine", errdoc.From(err).Text())
+				store.StepNote{Message: "Kubernetes could not be removed from the machine", Key: "uninstallFailed"},
+				errdoc.From(err).Text())
 			p.log.Warn("could not clean the removed server", "server", server.ID, "error", err)
 		} else {
-			p.setStep(ctx, op, "uninstall", store.StepSucceeded, "Kubernetes was removed from the machine", "")
+			p.setStep(ctx, op, "uninstall", store.StepSucceeded, store.StepNote{Message: "Kubernetes was removed from the machine", Key: "uninstalled"}, "")
 		}
 	} else {
 		p.setStep(ctx, op, "uninstall", store.StepSkipped,
-			"Kubernetes was left installed on the machine", "")
+			store.StepNote{Message: "Kubernetes was left installed on the machine", Key: "uninstallSkipped"}, "")
 	}
 
 	if err := p.db.DeleteServer(ctx, server.ID); err != nil {
@@ -291,7 +293,7 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 	}
 	check.request.ControlPlane = true
 
-	p.setStep(ctx, op, StepPreflight, store.StepRunning, "", "")
+	p.setStep(ctx, op, StepPreflight, store.StepRunning, store.StepNote{}, "")
 	if err := p.stepConnect(ctx, check); err != nil {
 		p.failStep(ctx, op, server.ID, StepPreflight, err)
 		return
@@ -302,9 +304,9 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		return
 	}
 	check.client.Close()
-	p.setStep(ctx, op, StepPreflight, store.StepSucceeded, check.lastMessage, check.lastDetail)
+	p.setStep(ctx, op, StepPreflight, store.StepSucceeded, check.lastNote, check.lastDetail)
 
-	p.setStep(ctx, op, "drain", store.StepRunning, "", "")
+	p.setStep(ctx, op, "drain", store.StepRunning, store.StepNote{}, "")
 	if err := p.cordon(ctx, server, true); err != nil {
 		p.failStep(ctx, op, server.ID, "drain", err)
 		return
@@ -314,10 +316,11 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		p.failStep(ctx, op, server.ID, "drain", err)
 		return
 	}
+	movedMessage, movedArgs := errdoc.Sprintf("Moved %d instance(s) off this server first", moved)
 	p.setStep(ctx, op, "drain", store.StepSucceeded,
-		fmt.Sprintf("Moved %d instance(s) off this server first", moved), "")
+		store.StepNote{Message: movedMessage, Key: "drainedFirst", Args: movedArgs}, "")
 
-	p.setStep(ctx, op, "leave", store.StepRunning, "", "")
+	p.setStep(ctx, op, "leave", store.StepRunning, store.StepNote{}, "")
 	if err := p.deleteNode(ctx, server); err != nil {
 		p.failStep(ctx, op, server.ID, "leave", err)
 		return
@@ -326,7 +329,7 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		p.failStep(ctx, op, server.ID, "leave", err)
 		return
 	}
-	p.setStep(ctx, op, "leave", store.StepSucceeded, "Left the cluster as a worker", "")
+	p.setStep(ctx, op, "leave", store.StepSucceeded, store.StepNote{Message: "Left the cluster as a worker", Key: "leftAsWorker"}, "")
 
 	// Rejoin as a control plane member.
 	server.Role = "control-plane"
@@ -341,7 +344,7 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		serverID:    server.ID,
 		request:     requestFromServer(server),
 	}
-	p.setStep(ctx, op, StepInstallK3s, store.StepRunning, "", "")
+	p.setStep(ctx, op, StepInstallK3s, store.StepRunning, store.StepNote{}, "")
 	if err := p.stepConnect(ctx, state); err != nil {
 		p.failStep(ctx, op, server.ID, StepInstallK3s, err)
 		return
@@ -352,14 +355,14 @@ func (p *Provisioner) runPromote(ctx context.Context, op store.Operation, server
 		p.failStep(ctx, op, server.ID, StepInstallK3s, err)
 		return
 	}
-	p.setStep(ctx, op, StepInstallK3s, store.StepSucceeded, state.lastMessage, "")
+	p.setStep(ctx, op, StepInstallK3s, store.StepSucceeded, state.lastNote, "")
 
-	p.setStep(ctx, op, StepWaitReady, store.StepRunning, "", "")
+	p.setStep(ctx, op, StepWaitReady, store.StepRunning, store.StepNote{}, "")
 	if err := p.stepWaitReady(ctx, state); err != nil {
 		p.failStep(ctx, op, server.ID, StepWaitReady, err)
 		return
 	}
-	p.setStep(ctx, op, StepWaitReady, store.StepSucceeded, state.lastMessage, "")
+	p.setStep(ctx, op, StepWaitReady, store.StepSucceeded, state.lastNote, "")
 
 	if err := p.cordon(ctx, server, false); err != nil {
 		p.log.Warn("could not uncordon after promotion", "server", server.ID, "error", err)

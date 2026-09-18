@@ -1,7 +1,9 @@
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { CheckIcon, CircleIcon, Loader2Icon, MinusIcon, XIcon } from "lucide-react"
 import { cn } from "cn"
 
+import { translated } from "@/lib/say"
 import type { Operation, OperationStep } from "@/lib/types"
 
 /**
@@ -54,7 +56,7 @@ export function OperationProgress({
                     step.status === "failed" ? "text-destructive" : "text-muted-foreground",
                   )}
                 >
-                  {step.message}
+                  {sayStep(t, step)}
                 </p>
               )}
               {step.status === "failed" && step.detail && (
@@ -73,6 +75,25 @@ export function OperationProgress({
       ))}
     </ol>
   )
+}
+
+/**
+ * The line under a step's name, in the reader's language.
+ *
+ * The name has been translated since the panel shipped, from servers.steps.*;
+ * the sentence under it was the English the Go code wrote, so somebody adding a
+ * server in Indonesian read a translated heading over "Connected to
+ * 203.0.113.10". A step that failed shows its problem's title, which the error
+ * catalogue already translates — the "problem:" prefix says to look there.
+ */
+function sayStep(t: TFunction, step: OperationStep): string {
+  const key = step.message_key
+  if (!key) return step.message
+  if (key.startsWith("problem:")) {
+    const code = key.slice("problem:".length).replaceAll(".", "_")
+    return translated(t, `errors.catalogue.${code}.title`, step.message, step.message_args)
+  }
+  return translated(t, `servers.stepMessage.${key}`, step.message, step.message_args)
 }
 
 function StepIcon({ status }: { status: OperationStep["status"] }) {

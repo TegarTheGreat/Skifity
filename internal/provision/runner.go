@@ -93,8 +93,8 @@ func (p *Provisioner) Cancel(ctx context.Context, operationID string) error {
 }
 
 // setStep records a step's state and tells the UI.
-func (p *Provisioner) setStep(ctx context.Context, op store.Operation, key string, status store.StepStatus, message, detail string) {
-	if err := p.db.SetStepStatus(ctx, op.ID, key, status, message, detail); err != nil {
+func (p *Provisioner) setStep(ctx context.Context, op store.Operation, key string, status store.StepStatus, note store.StepNote, detail string) {
+	if err := p.db.SetStepStatus(ctx, op.ID, key, status, note, detail); err != nil {
 		p.log.Warn("could not record a step's state", "operation", op.ID, "step", key, "error", err)
 	}
 	p.publishOperation(ctx, op.ID)
@@ -106,7 +106,7 @@ func (p *Provisioner) failStep(ctx context.Context, op store.Operation, serverID
 
 	// A cancelled operation is not a failure to report as one.
 	if errors.Is(err, context.Canceled) {
-		p.setStep(ctx, op, key, store.StepFailed, "Cancelled", "")
+		p.setStep(ctx, op, key, store.StepFailed, store.StepNote{Message: "Cancelled", Key: "cancelled"}, "")
 		_ = p.db.SetOperationStatus(ctx, op.ID, store.OpCancelled, "cancelled", "Cancelled by a user.")
 		_ = p.db.SetServerStatus(ctx, serverID, store.ServerFailed, "Cancelled")
 		p.publishOperation(ctx, op.ID)
@@ -123,7 +123,12 @@ func (p *Provisioner) failStep(ctx context.Context, op store.Operation, serverID
 	p.log.Error("provisioning step failed",
 		"operation", op.ID, "step", key, "code", problem.Code, "error", err)
 
-	p.setStep(ctx, op, key, store.StepFailed, problem.Title, problem.Text())
+	// A failed step's line is the problem's own title, which the error
+	// catalogue already translates. "problem:" tells the panel to look there
+	// rather than under the step messages.
+	p.setStep(ctx, op, key, store.StepFailed,
+		store.StepNote{Message: problem.Title, Key: "problem:" + problem.Code, Args: problem.Args.Title},
+		problem.Text())
 	_ = p.db.SetOperationStatus(ctx, op.ID, store.OpFailed, problem.Code, problem.Error())
 	_ = p.db.SetServerStatus(ctx, serverID, store.ServerFailed, problem.Title)
 
@@ -196,7 +201,7 @@ func (p *Provisioner) ResumeInterrupted(ctx context.Context) error {
 		for _, step := range op.Steps {
 			if step.Status == store.StepRunning {
 				_ = p.db.SetStepStatus(ctx, op.ID, step.Key, store.StepFailed,
-					"Interrupted by a panel restart", "")
+					store.StepNote{Message: "Interrupted by a panel restart", Key: "interrupted"}, "")
 			}
 		}
 		if op.TargetType == "server" {

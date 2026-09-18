@@ -231,6 +231,18 @@ type ScalingFinding struct {
 	Title    string `json:"title"`
 	Detail   string `json:"detail"`
 	Fix      string `json:"fix"`
+	// Args are the values interpolated into the three sentences above, so the
+	// panel can show the same values in a sentence from its own locale. The
+	// English stays: it is the fallback, and what the CLI and an assistant read.
+	Args ScalingArgs `json:"args,omitzero"`
+}
+
+// ScalingArgs carries one finding's interpolated values, in the order the Go
+// format string used them. The locale writes {{0}} where the English writes %s.
+type ScalingArgs struct {
+	Title  []string `json:"title,omitempty"`
+	Detail []string `json:"detail,omitempty"`
+	Fix    []string `json:"fix,omitempty"`
 }
 
 // DatabaseManager provisions managed data stores.

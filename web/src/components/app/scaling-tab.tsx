@@ -1,9 +1,11 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { CheckCircle2Icon } from "lucide-react"
 
 import { ErrorDisplay } from "@/components/error-display"
+import { translated } from "@/lib/say"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -88,10 +90,10 @@ export function ScalingTab({ app }: { app: App }) {
                 key={finding.code}
                 variant={finding.severity === "error" ? "destructive" : "default"}
               >
-                <AlertTitle>{finding.title}</AlertTitle>
+                <AlertTitle>{say(t, finding, "title")}</AlertTitle>
                 <AlertDescription>
-                  <p>{finding.detail}</p>
-                  <p className="mt-1 font-medium">{finding.fix}</p>
+                  <p>{say(t, finding, "detail")}</p>
+                  <p className="mt-1 font-medium">{say(t, finding, "fix")}</p>
                 </AlertDescription>
               </Alert>
             ))
@@ -330,4 +332,16 @@ function TextField({
       </div>
     </Field>
   )
+}
+
+/**
+ * One sentence of a scaling finding, in the reader's language.
+ *
+ * The checker writes its findings in English — the API, the CLI and an
+ * assistant all read them — and the panel looks each one up by the finding's
+ * own code. Eleven findings, three sentences each, and every one of them was
+ * English on a Russian page until the catalogue existed.
+ */
+function say(t: TFunction, finding: ScalingFinding, field: "title" | "detail" | "fix"): string {
+  return translated(t, `scaling.finding.${finding.code}.${field}`, finding[field], finding.args?.[field])
 }

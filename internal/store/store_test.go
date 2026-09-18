@@ -268,10 +268,10 @@ func TestOperationStepsDriveProgress(t *testing.T) {
 		}
 	}
 
-	if err := db.SetStepStatus(ctx, op.ID, "connect", StepSucceeded, "Connected", ""); err != nil {
+	if err := db.SetStepStatus(ctx, op.ID, "connect", StepSucceeded, StepNote{Message: "Connected", Key: "connected"}, ""); err != nil {
 		t.Fatalf("SetStepStatus: %v", err)
 	}
-	if err := db.SetStepStatus(ctx, op.ID, "preflight", StepFailed, "Port 6443 is blocked", "ufw allow 6443"); err != nil {
+	if err := db.SetStepStatus(ctx, op.ID, "preflight", StepFailed, StepNote{Message: "Port 6443 is blocked"}, "ufw allow 6443"); err != nil {
 		t.Fatalf("SetStepStatus: %v", err)
 	}
 
@@ -1040,4 +1040,70 @@ func columnsOf(t *testing.T, db *DB, table string) ([]string, bool) {
 		t.Fatal(err)
 	}
 	return names, encrypted
+}
+
+// A step's note survives the round trip, key and values included.
+//
+// The step's own name has been translated since the panel shipped; the sentence
+// under it was the English the Go code wrote. It carries a key now, and the
+// values that went into it, and both have to come back out of SQLite — a key
+// that is written and not read is a translation nobody sees.
+func TestAStepRemembersHowToSayItselfAgain(t *testing.T) {
+	db := testDB(t)
+	ctx := t.Context()
+
+	team := Team{Name: "Acme", Slug: "acme"}
+	if err := db.CreateTeam(ctx, &team); err != nil {
+		t.Fatalf("CreateTeam: %v", err)
+	}
+	op := Operation{TeamID: team.ID, Kind: "add_server", TargetType: "server", TargetID: "srv_1"}
+	if err := db.CreateOperation(ctx, &op, []string{"connect", "preflight"}); err != nil {
+		t.Fatalf("CreateOperation: %v", err)
+	}
+
+	note := StepNote{
+		Message: "Ubuntu 24.04, 4 cores, 8192 MB memory, 40 GB free",
+		Key:     "preflightOk",
+		Args:    []string{"Ubuntu 24.04", "4", "8192", "40"},
+	}
+	if err := db.SetStepStatus(ctx, op.ID, "preflight", StepSucceeded, note, ""); err != nil {
+		t.Fatalf("SetStepStatus: %v", err)
+	}
+
+	steps, err := db.ListOperationSteps(ctx, op.ID)
+	if err != nil {
+		t.Fatalf("ListOperationSteps: %v", err)
+	}
+	var got OperationStep
+	for _, step := range steps {
+		if step.Key == "preflight" {
+			got = step
+		}
+	}
+	if got.Message != note.Message {
+		t.Errorf("the English came back as %q", got.Message)
+	}
+	if got.MessageKey != note.Key {
+		t.Errorf("the key came back as %q, want %q", got.MessageKey, note.Key)
+	}
+	if len(got.MessageArgs) != len(note.Args) {
+		t.Fatalf("the values came back as %q, want %q", got.MessageArgs, note.Args)
+	}
+	for i := range note.Args {
+		if got.MessageArgs[i] != note.Args[i] {
+			t.Errorf("value %d came back as %q, want %q", i, got.MessageArgs[i], note.Args[i])
+		}
+	}
+
+	// Retry clears the sentence, so a step that ran again does not show what it
+	// said the time before.
+	if err := db.ResetStepsFrom(ctx, op.ID, "preflight"); err != nil {
+		t.Fatalf("ResetStepsFrom: %v", err)
+	}
+	steps, _ = db.ListOperationSteps(ctx, op.ID)
+	for _, step := range steps {
+		if step.Key == "preflight" && (step.MessageKey != "" || len(step.MessageArgs) != 0) {
+			t.Errorf("a reset step still says %q %q", step.MessageKey, step.MessageArgs)
+		}
+	}
 }

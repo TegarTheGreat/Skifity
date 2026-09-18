@@ -75,7 +75,16 @@ func TestEveryErrorHasItsWordsInTheInterface(t *testing.T) {
 
 		// A key nobody can reach is dead weight, and usually a code that was
 		// renamed in Go and not here.
+		//
+		// PreflightFailed is the one code built at run time — "preflight." plus
+		// the preflight problem's own code — so it cannot be read out of the
+		// source here. TestEveryPreflightProblemAndStepMessageHasItsWords, in
+		// internal/provision, enumerates those from where they are declared and
+		// checks the same locales.
 		for key := range locale.Errors.Catalogue {
+			if strings.HasPrefix(key, "preflight_") {
+				continue
+			}
 			if _, ok := problems[strings.ReplaceAll(key, "_", ".")]; !ok {
 				if !reachable(problems, key) {
 					t.Errorf("%s: errors.catalogue.%s is not an error any code can raise", language, key)

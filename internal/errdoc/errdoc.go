@@ -145,6 +145,17 @@ func (p *Problem) WithFix(format string, args ...any) *Problem {
 	return p
 }
 
+// Sprintf formats a sentence and hands back the values that went into it.
+//
+// The same trade as a Problem's own sentences, for the three other places the
+// server writes English a person reads: the scaling findings, the preflight
+// report and the messages under each step of adding a server. The English is
+// the fallback and what the CLI prints; the values let the panel fill the same
+// sentence in another language.
+func Sprintf(format string, args ...any) (string, []string) {
+	return fmt.Sprintf(format, args...), renderArgs(format, args)
+}
+
 // renderArgs formats each argument on its own, with the verb that was going to
 // print it.
 //

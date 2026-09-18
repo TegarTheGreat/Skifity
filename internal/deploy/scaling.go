@@ -2,10 +2,10 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"skifity/internal/api"
+	"skifity/internal/errdoc"
 	"skifity/internal/store"
 )
 
@@ -36,14 +36,16 @@ func (d *Deployer) ScalingReadiness(ctx context.Context, appID string) ([]api.Sc
 		for _, v := range volumes {
 			paths = append(paths, v.MountPath)
 		}
+		detail, args := errdoc.Sprintf(
+			"A volume is mounted at %s. That storage can be attached to one server at a time, so a second instance would either fail to start or end up on the same server.",
+			strings.Join(paths, ", "))
 		findings = append(findings, api.ScalingFinding{
 			Code:     "volume",
 			Severity: "error",
 			Title:    "This app writes to a disk that only one instance can use",
-			Detail: fmt.Sprintf(
-				"A volume is mounted at %s. That storage can be attached to one server at a time, so a second instance would either fail to start or end up on the same server.",
-				strings.Join(paths, ", ")),
-			Fix: "Move uploads to object storage such as S3 or MinIO, or turn on cross-node storage in Settings so the volume can be shared. Until then, keep this app at one instance.",
+			Detail:   detail,
+			Fix:      "Move uploads to object storage such as S3 or MinIO, or turn on cross-node storage in Settings so the volume can be shared. Until then, keep this app at one instance.",
+			Args:     api.ScalingArgs{Detail: args},
 		})
 	}
 
@@ -111,25 +113,29 @@ func (d *Deployer) ScalingReadiness(ctx context.Context, appID string) ([]api.Sc
 	// it has served a single request.
 	if app.Autoscale {
 		if trip, ok := firstTripwire(app.CPUTarget, app.CPURequestM, 100); ok {
+			detail, args := errdoc.Sprintf(
+				"The target is a percentage of what this app reserves, not of the server. It reserves %dm of CPU and the target is %d%%, so a new instance is added above %dm — about a tenth of one core, which most frameworks pass while idle.",
+				app.CPURequestM, app.CPUTarget, trip)
 			findings = append(findings, api.ScalingFinding{
 				Code:     "target_below_idle",
 				Severity: "warning",
 				Title:    "The CPU target is reached before the app does anything",
-				Detail: fmt.Sprintf(
-					"The target is a percentage of what this app reserves, not of the server. It reserves %dm of CPU and the target is %d%%, so a new instance is added above %dm — about a tenth of one core, which most frameworks pass while idle.",
-					app.CPURequestM, app.CPUTarget, trip),
-				Fix: "Raise the reserved CPU under the app's settings to what it actually uses when busy, so the percentage means something. The reservation is what the app is guaranteed, not a limit on it.",
+				Detail:   detail,
+				Fix:      "Raise the reserved CPU under the app's settings to what it actually uses when busy, so the percentage means something. The reservation is what the app is guaranteed, not a limit on it.",
+				Args:     api.ScalingArgs{Detail: args},
 			})
 		}
 		if trip, ok := firstTripwire(app.MemoryTarget, app.MemRequestMB, 256); ok {
+			detail, args := errdoc.Sprintf(
+				"The target is a percentage of what this app reserves. It reserves %dMi and the target is %d%%, so a new instance is added above %dMi — which a Node or JVM process passes at startup.",
+				app.MemRequestMB, app.MemoryTarget, trip)
 			findings = append(findings, api.ScalingFinding{
 				Code:     "memory_target_below_idle",
 				Severity: "warning",
 				Title:    "The memory target is reached before the app does anything",
-				Detail: fmt.Sprintf(
-					"The target is a percentage of what this app reserves. It reserves %dMi and the target is %d%%, so a new instance is added above %dMi — which a Node or JVM process passes at startup.",
-					app.MemRequestMB, app.MemoryTarget, trip),
-				Fix: "Raise the reserved memory under the app's settings to what the app uses when it is idle, plus room to work. Memory does not fall once it has been claimed, so a target below the idle figure never comes back down.",
+				Detail:   detail,
+				Fix:      "Raise the reserved memory under the app's settings to what the app uses when it is idle, plus room to work. Memory does not fall once it has been claimed, so a target below the idle figure never comes back down.",
+				Args:     api.ScalingArgs{Detail: args},
 			})
 		}
 	}
@@ -184,48 +190,58 @@ func inspectVariable(key string, isSecret bool, readValue func() string) (api.Sc
 
 	switch {
 	case strings.Contains(upper, "SESSION") && (strings.Contains(value, "memory") || value == "file" || strings.Contains(value, "filesystem")):
+		detail, args := errdoc.Sprintf("%s is set to %q. Each instance would keep its own sessions, so users would be signed out at random as requests land on different instances.", key, readValue())
 		return api.ScalingFinding{
 			Code:     "in_memory_sessions",
 			Severity: "error",
 			Title:    "Sessions are kept in memory or on disk",
-			Detail:   fmt.Sprintf("%s is set to %q. Each instance would keep its own sessions, so users would be signed out at random as requests land on different instances.", key, readValue()),
+			Detail:   detail,
 			Fix:      "Create a Redis database in this environment and point the session store at it. Skifity links it in as a variable for you.",
+			Args:     api.ScalingArgs{Detail: args},
 		}, true
 
 	case strings.Contains(upper, "CACHE") && (value == "file" || strings.Contains(value, "filesystem")):
+		detail, args := errdoc.Sprintf("%s is set to %q, so each instance would have its own cache and they would disagree.", key, readValue())
 		return api.ScalingFinding{
 			Code:     "file_cache",
 			Severity: "warning",
 			Title:    "The cache is stored on local disk",
-			Detail:   fmt.Sprintf("%s is set to %q, so each instance would have its own cache and they would disagree.", key, readValue()),
+			Detail:   detail,
 			Fix:      "Use Redis for the cache, or accept that cached values differ between instances.",
+			Args:     api.ScalingArgs{Detail: args},
 		}, true
 
 	case strings.Contains(value, "sqlite") || strings.HasSuffix(value, ".db") || strings.HasSuffix(value, ".sqlite3"):
+		detail, args := errdoc.Sprintf("%s points at a SQLite file. SQLite is a single file on one disk, so instances on different servers cannot share it.", key)
 		return api.ScalingFinding{
 			Code:     "sqlite",
 			Severity: "error",
 			Title:    "This app uses SQLite",
-			Detail:   fmt.Sprintf("%s points at a SQLite file. SQLite is a single file on one disk, so instances on different servers cannot share it.", key),
+			Detail:   detail,
 			Fix:      "Create a PostgreSQL database in this environment and point the app at it. Skifity injects the connection string for you.",
+			Args:     api.ScalingArgs{Detail: args},
 		}, true
 
 	case upper == "UPLOAD_DIR" || upper == "UPLOADS_PATH" || strings.Contains(upper, "STORAGE_PATH"):
+		detail, args := errdoc.Sprintf("%s points at a directory inside the container. Files written by one instance would be invisible to the others, and would disappear on the next deploy.", key)
 		return api.ScalingFinding{
 			Code:     "local_uploads",
 			Severity: "error",
 			Title:    "Uploaded files are written to local disk",
-			Detail:   fmt.Sprintf("%s points at a directory inside the container. Files written by one instance would be invisible to the others, and would disappear on the next deploy.", key),
+			Detail:   detail,
 			Fix:      "Store uploads in S3-compatible object storage. MinIO is available as a one-click template if you would rather not use a cloud provider.",
+			Args:     api.ScalingArgs{Detail: args},
 		}, true
 
 	case strings.Contains(upper, "CRON") && value == "true":
+		detail, args := errdoc.Sprintf("%s is on. With several instances, every instance runs the schedule, so each job runs several times.", key)
 		return api.ScalingFinding{
 			Code:     "in_process_cron",
 			Severity: "warning",
 			Title:    "Scheduled jobs run inside the app",
-			Detail:   fmt.Sprintf("%s is on. With several instances, every instance runs the schedule, so each job runs several times.", key),
+			Detail:   detail,
 			Fix:      "Run the scheduler as a separate app with one instance, or use a lock so only one instance runs each job.",
+			Args:     api.ScalingArgs{Detail: args},
 		}, true
 	}
 	return api.ScalingFinding{}, false

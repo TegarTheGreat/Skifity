@@ -89,6 +89,11 @@ export type OperationStep = {
   key: string
   status: StepStatus
   message: string
+  /** Names the sentence in `message` so the panel can show it in its own
+   *  language, with `message_args` filling the values. Empty for a step from
+   *  before either existed. */
+  message_key?: string
+  message_args?: string[]
   detail?: string
   started_at?: string
   finished_at?: string
@@ -315,6 +320,8 @@ export type ScalingFinding = {
   title: string
   detail: string
   fix: string
+  /** The values interpolated into the three sentences above, in order. */
+  args?: { title?: string[]; detail?: string[]; fix?: string[] }
 }
 
 export type Scaling = {

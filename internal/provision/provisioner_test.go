@@ -490,7 +490,7 @@ func TestInterruptedOperationsAreMarkedFailed(t *testing.T) {
 	if err := db.CreateOperation(t.Context(), &op, addServerSteps); err != nil {
 		t.Fatalf("CreateOperation: %v", err)
 	}
-	if err := db.SetStepStatus(t.Context(), op.ID, StepInstallK3s, store.StepRunning, "", ""); err != nil {
+	if err := db.SetStepStatus(t.Context(), op.ID, StepInstallK3s, store.StepRunning, store.StepNote{}, ""); err != nil {
 		t.Fatalf("SetStepStatus: %v", err)
 	}
 	if err := db.SetOperationStatus(t.Context(), op.ID, store.OpRunning, "", ""); err != nil {

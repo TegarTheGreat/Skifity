@@ -114,6 +114,31 @@ func catalogueEntries(t *testing.T) map[string]entry {
 			}
 			return true
 		})
+		// A sentence set on the field rather than formatted through the
+		// builder still counts. PreflightFailed assigns Cause and Fix directly,
+		// because the preflight report has already rendered them and kept the
+		// values that went into them.
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			assign, ok := node.(*ast.AssignStmt)
+			if !ok {
+				return true
+			}
+			for _, target := range assign.Lhs {
+				sel, ok := target.(*ast.SelectorExpr)
+				if !ok {
+					continue
+				}
+				switch sel.Sel.Name {
+				case "Cause":
+					found.calls["WithCause"] = true
+				case "Impact":
+					found.calls["WithImpact"] = true
+				case "Fix":
+					found.calls["WithFix"] = true
+				}
+			}
+			return true
+		})
 		// A helper such as itoa builds no Problem and is not an entry.
 		if found.code == "" && len(found.calls) == 0 {
 			continue

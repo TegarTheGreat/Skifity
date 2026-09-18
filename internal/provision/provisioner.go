@@ -242,13 +242,13 @@ func (p *Provisioner) runAddServer(ctx context.Context, op store.Operation, serv
 			}
 			continue
 		}
-		p.setStep(ctx, op, step.key, store.StepRunning, "", "")
+		p.setStep(ctx, op, step.key, store.StepRunning, store.StepNote{}, "")
 		if err := step.run(ctx, state); err != nil {
 			p.failStep(ctx, op, serverID, step.key, err)
 			return
 		}
-		p.setStep(ctx, op, step.key, store.StepSucceeded, state.lastMessage, state.lastDetail)
-		state.lastMessage, state.lastDetail = "", ""
+		p.setStep(ctx, op, step.key, store.StepSucceeded, state.lastNote, state.lastDetail)
+		state.lastNote, state.lastDetail = store.StepNote{}, ""
 	}
 
 	if state.client != nil {
@@ -283,9 +283,11 @@ type addState struct {
 	// joinToken and serverURL come from the existing cluster.
 	joinToken string
 	serverURL string
-	// lastMessage and lastDetail are shown against the step that just finished.
-	lastMessage string
-	lastDetail  string
+	// lastNote and lastDetail are shown against the step that just finished.
+	// The note carries the English, the key the panel translates it by, and the
+	// values that went into the sentence.
+	lastNote   store.StepNote
+	lastDetail string
 }
 
 func (p *Provisioner) stepConnect(ctx context.Context, state *addState) error {
@@ -339,7 +341,7 @@ func (p *Provisioner) stepConnect(ctx context.Context, state *addState) error {
 			return err
 		}
 	}
-	state.lastMessage = "Connected to " + server.Host
+	state.lastNote = store.StepNote{Message: "Connected to " + server.Host, Key: "connected", Args: []string{server.Host}}
 	state.lastDetail = "Host key " + client.HostKey
 	return nil
 }
@@ -377,7 +379,8 @@ func (p *Provisioner) stepPreflight(ctx context.Context, state *addState) error 
 	if Fatal(problems) {
 		for _, problem := range problems {
 			if problem.Fatal {
-				return errdoc.PreflightFailed(problem.Check, problem.Detail, problem.Fix).
+				return errdoc.PreflightFailed(problem.Code, problem.Detail, problem.Fix,
+					problem.Args.Detail, problem.Args.Fix).
 					With("os", server.OSInfo).
 					With("memory_mb", fmt.Sprint(report.MemoryMB)).
 					With("disk_gb", fmt.Sprint(report.DiskGB))
@@ -385,8 +388,9 @@ func (p *Provisioner) stepPreflight(ctx context.Context, state *addState) error 
 		}
 	}
 
-	state.lastMessage = fmt.Sprintf("%s, %d cores, %d MB memory, %d GB free",
+	message, args := errdoc.Sprintf("%s, %d cores, %d MB memory, %d GB free",
 		server.OSInfo, report.CPUCores, report.MemoryMB, report.DiskGB)
+	state.lastNote = store.StepNote{Message: message, Key: "preflightOk", Args: args}
 	if len(problems) > 0 {
 		var notes []string
 		for _, problem := range problems {
@@ -408,7 +412,7 @@ func (p *Provisioner) stepInstallKey(ctx context.Context, state *addState) error
 		return err
 	}
 	if server.SSHKeyEnc != "" {
-		state.lastMessage = "This server already has a key from Skifity"
+		state.lastNote = store.StepNote{Message: "This server already has a key from Skifity", Key: "keyAlreadyThere"}
 		return nil
 	}
 
@@ -456,7 +460,7 @@ func (p *Provisioner) stepInstallKey(ctx context.Context, state *addState) error
 
 	// The password is now out of scope and was never written anywhere.
 	state.request.Password = ""
-	state.lastMessage = "Installed a key just for this server; the password was not stored"
+	state.lastNote = store.StepNote{Message: "Installed a key just for this server; the password was not stored", Key: "keyInstalled"}
 	state.lastDetail = pair.Fingerprint
 	return nil
 }
@@ -467,7 +471,7 @@ func (p *Provisioner) stepFirewall(ctx context.Context, state *addState) error {
 		return err
 	}
 	if len(members) == 0 {
-		state.lastMessage = "No other servers yet, so only ports 80 and 443 were opened"
+		state.lastNote = store.StepNote{Message: "No other servers yet, so only ports 80 and 443 were opened", Key: "firewallFirstServer"}
 	}
 
 	result, err := state.client.Run(ctx, FirewallScript(members, state.request.ControlPlane))
@@ -482,9 +486,9 @@ func (p *Provisioner) stepFirewall(ctx context.Context, state *addState) error {
 			Retry()
 	}
 	if strings.Contains(result.Stdout, "firewall_configured=yes") {
-		state.lastMessage = "Opened the cluster ports to the other servers only, using ufw"
+		state.lastNote = store.StepNote{Message: "Opened the cluster ports to the other servers only, using ufw", Key: "firewallUfw"}
 	} else {
-		state.lastMessage = "Opened the cluster ports to the other servers only, using iptables"
+		state.lastNote = store.StepNote{Message: "Opened the cluster ports to the other servers only, using iptables", Key: "firewallIptables"}
 	}
 	return nil
 }
@@ -498,7 +502,7 @@ func (p *Provisioner) stepConnectivity(ctx context.Context, state *addState) err
 	primary, err := p.primaryServer(ctx, state.serverID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			state.lastMessage = "This is the first server, so there is nothing to connect to yet"
+			state.lastNote = store.StepNote{Message: "This is the first server, so there is nothing to connect to yet", Key: "connectivityFirstServer"}
 			return nil
 		}
 		return err
@@ -518,7 +522,8 @@ func (p *Provisioner) stepConnectivity(ctx context.Context, state *addState) err
 			With("to", target).
 			With("hint", "This is usually a firewall in your provider's control panel rather than on the server itself. Skifity can configure ufw and iptables over SSH, but it cannot reach a firewall that sits in front of the machine.")
 	}
-	state.lastMessage = fmt.Sprintf("Reached %s on port 6443", target)
+	message, args := errdoc.Sprintf("Reached %s on port 6443", target)
+	state.lastNote = store.StepNote{Message: message, Key: "reached", Args: args}
 	return nil
 }
 
@@ -592,7 +597,7 @@ func (p *Provisioner) stepInstallK3s(ctx context.Context, state *addState) error
 		return errdoc.K3sInstallFailed(server.Host, result.ExitCode, result.Combined())
 	}
 
-	state.lastMessage = "Kubernetes is installed and running"
+	state.lastNote = store.StepNote{Message: "Kubernetes is installed and running", Key: "k3sRunning"}
 	return nil
 }
 
@@ -602,7 +607,7 @@ func (p *Provisioner) stepWaitReady(ctx context.Context, state *addState) error 
 		return err
 	}
 	if p.cluster == nil {
-		state.lastMessage = "Installed, but the panel is not connected to the cluster to confirm"
+		state.lastNote = store.StepNote{Message: "Installed, but the panel is not connected to the cluster to confirm", Key: "k3sUnconfirmed"}
 		return nil
 	}
 
@@ -628,7 +633,8 @@ func (p *Provisioner) stepWaitReady(ctx context.Context, state *addState) error 
 				if err := p.applyNodeLabels(ctx, server); err != nil {
 					p.log.Warn("could not label the node", "node", node.Name, "error", err)
 				}
-				state.lastMessage = fmt.Sprintf("%s joined the cluster and is ready", node.Name)
+				message, args := errdoc.Sprintf("%s joined the cluster and is ready", node.Name)
+				state.lastNote = store.StepNote{Message: message, Key: "joined", Args: args}
 				return nil
 			}
 		}

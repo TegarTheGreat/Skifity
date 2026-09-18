@@ -157,15 +157,21 @@ func SSHHostKeyChanged(host, expected, got string) *Problem {
 }
 
 // PreflightFailed reports a server that does not meet requirements.
-func PreflightFailed(check, detail, fix string) *Problem {
-	return New("preflight."+check, "This server is not ready to join").
-		WithCause("%s", detail).
+func PreflightFailed(code, detail, fix string, detailArgs, fixArgs []string) *Problem {
+	p := New("preflight."+code, "This server is not ready to join").
 		WithImpact("The server was not added. Nothing was changed on it.").
-		WithFix("%s", fix).
 		WithDocs("/docs/quick-start#what-you-need").
 		WithStatus(http.StatusBadRequest).
 		Retry().
-		With("check", check)
+		With("check", code)
+	// Set rather than formatted through WithCause. The preflight report has
+	// already rendered these two sentences and kept the values that went into
+	// them; running them back through "%s" would make the whole English
+	// sentence the one argument, and the locale entry could then only be
+	// "{{0}}" — which is the English again, in every language.
+	p.Cause, p.Args.Cause = detail, detailArgs
+	p.Fix, p.Args.Fix = fix, fixArgs
+	return p
 }
 
 // PortBlocked reports a cluster port that could not be reached between nodes.

@@ -922,6 +922,91 @@ func (s *Server) handleCreateVolumeBackup(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusAccepted, backup)
 }
 
+// handleRestoreVolumeBackup puts an archive back into the volume it came from.
+//
+// A backup that cannot be restored is a file somebody is paying to store. The
+// job that does the work has existed since volume backups were added and
+// nothing ever called it.
+func (s *Server) handleRestoreVolumeBackup(w http.ResponseWriter, r *http.Request) {
+	volume, app, err := s.authorizeVolume(r, store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if s.backups == nil {
+		writeError(w, r, errdoc.NotConfigured("Backups", "Settings, then Storage"))
+		return
+	}
+	backupID := chi.URLParam(r, "backupID")
+	backup, err := s.db.GetBackup(r.Context(), backupID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	// A backup id belonging to another volume must not be restorable here.
+	if backup.TargetType != "volume" || backup.TargetID != volume.ID {
+		writeError(w, r, errdoc.NotFound("backup", backupID))
+		return
+	}
+
+	op, err := s.backups.RestoreVolume(r.Context(), backupID, queryBool(r, "overwrite"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "backup.restore_started", "volume", volume.ID, app.Name+" / "+volume.Name)
+	writeJSON(w, http.StatusAccepted, op)
+}
+
+// handleGetVolumeBackupPolicy reads a volume's backup schedule.
+//
+// The scheduler has always been able to run one — it reads a policy's target
+// type and a volume is one of them — and there was no way to create it. So the
+// answer to "back up my uploads every night" was to press a button every night.
+func (s *Server) handleGetVolumeBackupPolicy(w http.ResponseWriter, r *http.Request) {
+	volume, _, err := s.authorizeVolume(r, store.RoleMember)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	policy, err := s.db.GetBackupPolicy(r.Context(), "volume", volume.ID)
+	if err != nil {
+		// No policy is a normal state, not an error: show the defaults.
+		writeJSON(w, http.StatusOK, store.BackupPolicy{
+			TargetType: "volume", TargetID: volume.ID,
+			Schedule: "0 3 * * *", Retention: 7, Destination: "s3", Enabled: false,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, policy)
+}
+
+func (s *Server) handleSetVolumeBackupPolicy(w http.ResponseWriter, r *http.Request) {
+	volume, app, err := s.authorizeVolume(r, store.RoleAdmin)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	var req setBackupPolicyRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	policy, err := s.backupPolicyFrom(r, req, "volume", volume.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := s.db.SetBackupPolicy(r.Context(), &policy); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	teamID, _ := s.db.TeamIDForApp(r.Context(), app.ID)
+	s.audit(r, teamID, "backup.policy_changed", "volume", volume.ID, app.Name+" / "+volume.Name)
+	writeJSON(w, http.StatusOK, policy)
+}
+
 // authorizeVolume resolves a volume through its app, so a volume id from
 // another team cannot be reached by guessing it.
 func (s *Server) authorizeVolume(r *http.Request, required store.Role) (store.Volume, store.App, error) {

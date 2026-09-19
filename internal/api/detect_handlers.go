@@ -81,7 +81,8 @@ func (s *Server) handleDetect(w http.ResponseWriter, r *http.Request) {
 			WithCause("%s", capitalise(err.Error())+".").
 			WithImpact("Nothing was created. You can still fill the form in yourself.").
 			WithFix("Check the address and the branch. A private repository needs a "+
-				"connected Git account with access to it, chosen below."))
+				"connected Git account with access to it, chosen below.").
+			WithStatus(http.StatusBadRequest))
 		return
 	}
 

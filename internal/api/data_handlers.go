@@ -282,6 +282,44 @@ func (s *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, backup)
 }
 
+// backupPolicyFrom validates a schedule request and builds the policy.
+//
+// Shared by databases and volumes so the two cannot drift: the checks below
+// are the difference between a schedule that runs and one that is stored,
+// never matches, and silently never backs anything up.
+func (s *Server) backupPolicyFrom(r *http.Request, req setBackupPolicyRequest, targetType, targetID string) (store.BackupPolicy, error) {
+	if req.Enabled {
+		if s.backups == nil {
+			return store.BackupPolicy{}, errdoc.StorageNotConfigured()
+		}
+		// Fail now, with a clear message, rather than at three in the morning.
+		if err := s.backups.Verify(r.Context()); err != nil {
+			return store.BackupPolicy{}, errdoc.StorageNotConfigured().
+				WithCause("Backup storage is configured but not usable: %s", err.Error())
+		}
+	}
+	if req.Retention < 1 {
+		req.Retention = 7
+	}
+	schedule := defaultString(strings.TrimSpace(req.Schedule), "0 3 * * *")
+	// The same reason storage is verified above: a schedule nothing can parse
+	// is accepted, stored, and then never matches, so the backups simply do not
+	// happen and nothing anywhere says why. The scheduler cannot report it —
+	// by then it is a row that is never due.
+	if _, err := cron.ParseSchedule(schedule); err != nil {
+		return store.BackupPolicy{}, errdoc.New("backup.bad_schedule", "That is not a schedule Skifity understands").
+			WithCause("%s", err).
+			WithImpact("The schedule was not changed.").
+			WithFix("Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC.").
+			WithStatus(http.StatusBadRequest)
+	}
+	return store.BackupPolicy{
+		TargetType: targetType, TargetID: targetID,
+		Schedule: schedule, Retention: req.Retention,
+		Destination: "s3", Enabled: req.Enabled,
+	}, nil
+}
+
 func (s *Server) handleGetBackupPolicy(w http.ResponseWriter, r *http.Request) {
 	record, _, err := s.authorizeDatabase(r, chi.URLParam(r, "databaseID"), store.RoleMember)
 	if err != nil {
@@ -317,37 +355,10 @@ func (s *Server) handleSetBackupPolicy(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	if req.Enabled {
-		if s.backups == nil {
-			writeError(w, r, errdoc.StorageNotConfigured())
-			return
-		}
-		// Fail now, with a clear message, rather than at three in the morning.
-		if err := s.backups.Verify(r.Context()); err != nil {
-			writeError(w, r, errdoc.StorageNotConfigured().
-				WithCause("Backup storage is configured but not usable: %s", err.Error()))
-			return
-		}
-	}
-	if req.Retention < 1 {
-		req.Retention = 7
-	}
-	schedule := defaultString(strings.TrimSpace(req.Schedule), "0 3 * * *")
-	// The same reason storage is verified above: a schedule nothing can parse
-	// is accepted, stored, and then never matches, so the backups simply do not
-	// happen and nothing anywhere says why. The scheduler cannot report it —
-	// by then it is a row that is never due.
-	if _, err := cron.ParseSchedule(schedule); err != nil {
-		writeError(w, r, errdoc.New("backup.bad_schedule", "That is not a schedule Skifity understands").
-			WithCause("%s", err).
-			WithImpact("The schedule was not changed.").
-			WithFix("Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC."))
+	policy, err := s.backupPolicyFrom(r, req, "database", record.ID)
+	if err != nil {
+		writeError(w, r, err)
 		return
-	}
-	policy := store.BackupPolicy{
-		TargetType: "database", TargetID: record.ID,
-		Schedule: schedule, Retention: req.Retention,
-		Destination: "s3", Enabled: req.Enabled,
 	}
 	if err := s.db.SetBackupPolicy(r.Context(), &policy); err != nil {
 		writeError(w, r, err)

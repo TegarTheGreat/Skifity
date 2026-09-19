@@ -1649,6 +1649,62 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 67 — a backup nobody could restore
+
+Maturity rather than coverage: the parts that are built up to the last step and
+then stop. Volumes had two.
+
+### The restore that existed and was never called
+
+`VolumeJobSpec.Restore` inverts the direction, downloads the archive and
+unpacks it into the claim. It has been there since volume backups were added.
+Nothing ever called it: no manager method, no route, no button. So a volume
+backup could be taken, listed, shown with its size and its age, and never put
+back. A backup you cannot restore is a file somebody is paying to store, and
+the checklist row it belongs to is called "Backup and restore, **proven**".
+
+`RestoreVolume` does it properly, which mostly means handling the part the job
+cannot. The volume is ReadWriteOnce and the app is holding it: unpacking a tar
+underneath a process with files open on the same disk turns one bad day into
+two. So the app is scaled to zero, the pods are waited for — scaling returns as
+soon as the API server has the number, not when the pod is gone — the archive
+is unpacked, and the app goes back to exactly the size it was. That last part
+is a `defer`, because the case that matters is the restore that fails: leaving
+the app at zero would be an outage caused by the thing that was meant to end
+one.
+
+It refuses without an explicit confirmation, and says what it will do: replace
+everything on the disk, and stop the app while it does.
+
+### The schedule the scheduler could already run
+
+`RunScheduledAt` reads every enabled policy and calls `Run(policy.TargetType,
+…)`, and `Run` has handled `"volume"` since volume backups existed. There was
+no route to create such a policy, so the answer to "back up my uploads every
+night" was to press a button every night. Three routes, and the validation
+those routes share with the database side rather than a second copy that can
+drift.
+
+### Two things the gates caught on the way
+
+**A bad schedule answered 500.** Typing "every night please" into a database's
+backup schedule produced a correct, well-written problem — cause, impact, fix —
+with no status on it, and an `errdoc.Problem` with no status is a 500. The
+interface renders that as "something went wrong" rather than as the thing the
+person just typed, the access log files it at ERROR where it drowns the real
+ones, and a client deciding whether to retry gets the wrong answer.
+`TestEveryProblemThisPackageAnswersWithSaysItsStatus` walks every `errdoc.New`
+in `internal/api` with go/ast and fails on one that does not say. 48 problems,
+one exemption: the panic handler, which by definition is nobody's input.
+
+**An event nobody was listening for.** The new restore published `"succeeded"`
+on the operation topic; every other finished operation publishes `"operation"`
+with the operation itself, which is what the interface hears. Phase 61's wiring
+gate caught it before it shipped, which is the first time one of these gates
+has caught a defect on the way in rather than on the way out.
+
+`make check` exits 0, `make smoke` exits 0, 15 interface tests pass.
+
 ## Phase 66 — the builder, and the front end it never built
 
 The question was whether the builder is mature and whether it handles every
@@ -3331,10 +3387,7 @@ all ten pages the panel serves rather than eight.
    it waits on is the run above rather than a decision.
 3. Phase 6: give somebody `docs/quick-start.md` and nothing else, and fill in
    `docs/walkthrough.md` while they use it.
-4. A schedule for a volume backup. The scheduler already runs a policy whose
-   target is a volume; there is no route, no handler and no control, and
-   `docs/backups.md` now says so rather than implying otherwise.
-5. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
+4. Publish a plugin store at `plugins.skifity.com`: an `index.json`, its
    signature, and the public key in the documentation. The panel reads one
    already; nothing is there to read.
 

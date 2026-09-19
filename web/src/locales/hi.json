@@ -441,7 +441,12 @@
     "buildCommand": "बिल्ड कमांड",
     "buildCommandHelp": "फ़्रंट एंड के लिए, जो परोसी जाने वाली फ़ाइलें बनाता है। रिपॉज़िटरी में वे पहले से हों तो खाली छोड़ें।",
     "outputDirectory": "आउटपुट डायरेक्ट्री",
-    "outputDirectoryHelp": "वह कमांड उन्हें कहाँ लिखता है: Vite के लिए dist, Create React App के लिए build।"
+    "outputDirectoryHelp": "वह कमांड उन्हें कहाँ लिखता है: Vite के लिए dist, Create React App के लिए build।",
+    "volumeBackups": "{{name}} के बैकअप",
+    "volumeBackupsHelp": "एक शेड्यूल, अब तक ली गई प्रतियाँ, और किसी एक को वापस लाना।",
+    "noVolumeBackups": "इस डिस्क का अभी कोई बैकअप नहीं है।",
+    "volumeRestoreStarted": "पुनर्स्थापना शुरू हो गई। इस दौरान ऐप रुका रहता है और बाद में फिर चालू हो जाता है।",
+    "volumeRestoreWarning": "{{app}} पर मौजूद सब कुछ इस बैकअप की सामग्री से बदल दिया जाएगा, और उस दौरान ऐप रोक दिया जाएगा।"
   },
   "deploy": {
     "title": "तैनातियाँ",
@@ -719,7 +724,10 @@
       "restored": "{{0}} को लिए गए बैकअप से रीस्टोर किया गया",
       "uninstallFailed": "मशीन से Kubernetes हटाया नहीं जा सका",
       "uninstallSkipped": "Kubernetes मशीन पर इंस्टॉल ही छोड़ दिया गया",
-      "uninstalled": "मशीन से Kubernetes हटा दिया गया"
+      "uninstalled": "मशीन से Kubernetes हटा दिया गया",
+      "appStopped": "ऐप रोक दिया गया है",
+      "archiveUnpacked": "संग्रह खोल दिया गया है",
+      "appRunningAgain": "{{0}} फिर चल रहा है"
     },
     "stepNote": {
       "fingerprint": "फ़िंगरप्रिंट {{0}}",

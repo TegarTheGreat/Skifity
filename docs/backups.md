@@ -88,12 +88,23 @@ properly.
 A volume backup is a compressed tar of everything on the volume, taken while the
 app keeps running. Take one from an app's **Storage** tab.
 
-**A volume has no schedule yet.** Databases do; a volume is backed up when
-somebody asks for one. Saying so is better than a settings page that looks like
-it has a nightly copy of your uploads and does not.
+**A schedule and a restore** are both on the same tab, behind the clock icon
+next to each disk: how often a copy is taken, how many to keep, and a button to
+put one back.
 
 The volume is mounted read-only for the copy. A backup that can write to the
 thing it is copying is one bug away from being what destroyed it.
+
+**Restoring stops the app.** A volume is held by one server at a time and the
+app has files open on it, so unpacking an archive underneath a running process
+is how a restore makes things worse. Skifity scales the app to zero, waits for
+the instance to actually be gone, unpacks, and starts it again at the size it
+was — including when the restore fails, because an app left at zero instances
+would be an outage caused by the thing that was meant to end one.
+
+You are asked to confirm first, and told what it means: everything on the disk
+now is replaced by what was in the archive. Take a copy of what is there if you
+might want it.
 
 Two things follow from a volume being ReadWriteOnce, which is what Kubernetes
 calls a disk one server holds at a time:

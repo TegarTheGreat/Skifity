@@ -431,7 +431,12 @@
     "buildCommand": "构建命令",
     "buildCommandHelp": "前端项目中生成待发布文件的命令。仓库里已有这些文件时留空。",
     "outputDirectory": "输出目录",
-    "outputDirectoryHelp": "该命令把文件写到哪里：Vite 是 dist，Create React App 是 build。"
+    "outputDirectoryHelp": "该命令把文件写到哪里：Vite 是 dist，Create React App 是 build。",
+    "volumeBackups": "{{name}} 的备份",
+    "volumeBackupsHelp": "备份计划、已有的副本，以及把某个副本还原回去。",
+    "noVolumeBackups": "这个磁盘还没有备份。",
+    "volumeRestoreStarted": "还原已开始。过程中应用会停止，结束后自动重新启动。",
+    "volumeRestoreWarning": "{{app}} 上的内容会被这个备份的内容全部覆盖，过程中应用会被停止。"
   },
   "deploy": {
     "title": "部署记录",
@@ -708,7 +713,10 @@
       "restored": "已从 {{0}} 那次备份恢复",
       "uninstallFailed": "没能从这台机器上卸载 Kubernetes",
       "uninstallSkipped": "Kubernetes 被保留在这台机器上",
-      "uninstalled": "已从这台机器上卸载 Kubernetes"
+      "uninstalled": "已从这台机器上卸载 Kubernetes",
+      "appStopped": "应用已停止",
+      "archiveUnpacked": "归档已解包",
+      "appRunningAgain": "{{0}} 已重新运行"
     },
     "stepNote": {
       "fingerprint": "指纹 {{0}}",

@@ -431,7 +431,12 @@
     "buildCommand": "Perintah build",
     "buildCommandHelp": "Yang menghasilkan berkas untuk disajikan, untuk sebuah front end. Kosongkan bila repositori sudah memuatnya.",
     "outputDirectory": "Direktori keluaran",
-    "outputDirectoryHelp": "Tempat perintah itu menulisnya: dist untuk Vite, build untuk Create React App."
+    "outputDirectoryHelp": "Tempat perintah itu menulisnya: dist untuk Vite, build untuk Create React App.",
+    "volumeBackups": "Cadangan untuk {{name}}",
+    "volumeBackupsHelp": "Jadwal, salinan yang sudah diambil, dan cara mengembalikannya.",
+    "noVolumeBackups": "Belum ada cadangan untuk disk ini.",
+    "volumeRestoreStarted": "Pemulihan dimulai. Aplikasi berhenti selama proses berjalan dan dijalankan lagi setelahnya.",
+    "volumeRestoreWarning": "Semua isi {{app}} diganti dengan isi cadangan ini, dan aplikasi dihentikan selama proses itu."
   },
   "deploy": {
     "title": "Deployment",
@@ -708,7 +713,10 @@
       "restored": "Dipulihkan dari cadangan yang diambil pada {{0}}",
       "uninstallFailed": "Kubernetes tidak bisa dihapus dari mesinnya",
       "uninstallSkipped": "Kubernetes dibiarkan tetap terpasang di mesinnya",
-      "uninstalled": "Kubernetes dihapus dari mesinnya"
+      "uninstalled": "Kubernetes dihapus dari mesinnya",
+      "appStopped": "Aplikasi dihentikan",
+      "archiveUnpacked": "Arsip sudah diekstrak",
+      "appRunningAgain": "{{0}} berjalan kembali"
     },
     "stepNote": {
       "fingerprint": "Sidik jari {{0}}",

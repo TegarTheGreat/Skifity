@@ -439,7 +439,12 @@
     "buildCommand": "Build command",
     "buildCommandHelp": "What produces the files to serve, for a front end. Leave empty when the repository already holds them.",
     "outputDirectory": "Output directory",
-    "outputDirectoryHelp": "Where that command writes them: dist for Vite, build for Create React App."
+    "outputDirectoryHelp": "Where that command writes them: dist for Vite, build for Create React App.",
+    "volumeBackups": "Backups for {{name}}",
+    "volumeBackupsHelp": "A schedule, the copies taken so far, and putting one back.",
+    "noVolumeBackups": "No backups of this disk yet.",
+    "volumeRestoreStarted": "The restore has started. The app stops while it runs and starts again afterwards.",
+    "volumeRestoreWarning": "Everything on {{app}} is replaced by what was in this backup, and the app is stopped while that happens."
   },
   "deploy": {
     "title": "Deployments",
@@ -717,7 +722,10 @@
       "restored": "Restored from the backup taken on {{0}}",
       "uninstallFailed": "Kubernetes could not be removed from the machine",
       "uninstallSkipped": "Kubernetes was left installed on the machine",
-      "uninstalled": "Kubernetes was removed from the machine"
+      "uninstalled": "Kubernetes was removed from the machine",
+      "appStopped": "The app is stopped",
+      "archiveUnpacked": "The archive is unpacked",
+      "appRunningAgain": "{{0}} is running again"
     },
     "stepNote": {
       "fingerprint": "Fingerprint {{0}}",

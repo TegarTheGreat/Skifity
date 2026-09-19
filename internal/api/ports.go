@@ -285,8 +285,13 @@ type DatabaseCredentials struct {
 type BackupManager interface {
 	// Run takes a backup now.
 	Run(ctx context.Context, targetType, targetID, kind string) (store.Backup, error)
-	// Restore puts a backup back. overwrite must be explicit.
+	// Restore puts a database backup back. overwrite must be explicit.
 	Restore(ctx context.Context, backupID string, overwrite bool) (store.Operation, error)
+	// RestoreVolume puts a volume backup back, stopping the app while it does.
+	// A separate method rather than a branch inside Restore, because the two
+	// share nothing but the word: one runs an engine's own restore tool
+	// against a live database, the other stops a process and unpacks a tar.
+	RestoreVolume(ctx context.Context, backupID string, overwrite bool) (store.Operation, error)
 	// Verify checks that configured storage is reachable and writable.
 	Verify(ctx context.Context) error
 }

@@ -279,6 +279,9 @@ func (s *Server) routes() chi.Router {
 				app.Delete("/volumes/{volumeID}", s.handleDeleteVolume)
 				app.Get("/volumes/{volumeID}/backups", s.handleListVolumeBackups)
 				app.Post("/volumes/{volumeID}/backups", s.handleCreateVolumeBackup)
+				app.Post("/volumes/{volumeID}/restore/{backupID}", s.handleRestoreVolumeBackup)
+				app.Get("/volumes/{volumeID}/backup-policy", s.handleGetVolumeBackupPolicy)
+				app.Put("/volumes/{volumeID}/backup-policy", s.handleSetVolumeBackupPolicy)
 				app.Get("/advanced", s.handleAppAdvanced)
 			})
 

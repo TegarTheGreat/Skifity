@@ -663,6 +663,60 @@ func (c *Client) RestartApp(ctx context.Context, namespace, appSlug string) erro
 	return nil
 }
 
+// ScaleDeployment sets a Deployment's replica count and reports what it was.
+//
+// Used by a volume restore, which has to stop the app first: a ReadWriteOnce
+// volume being unpacked underneath a process that has files open on it is how
+// a restore turns one bad day into two.
+func (c *Client) ScaleDeployment(ctx context.Context, namespace, name string, replicas int32) (was int32, err error) {
+	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return 0, fmt.Errorf("read %s: %w", name, err)
+	}
+	was = 1
+	if deployment.Spec.Replicas != nil {
+		was = *deployment.Spec.Replicas
+	}
+	if was == replicas {
+		return was, nil
+	}
+	patch := fmt.Sprintf(`{"spec":{"replicas":%d}}`, replicas)
+	if _, err := c.clientset.AppsV1().Deployments(namespace).Patch(
+		ctx, name, "application/strategic-merge-patch+json", []byte(patch), metav1.PatchOptions{}); err != nil {
+		return was, fmt.Errorf("scale %s to %d: %w", name, replicas, err)
+	}
+	return was, nil
+}
+
+// WaitForNoPods blocks until a Deployment has no pods left running.
+//
+// Scaling to zero returns as soon as the API server has the new number. The
+// pod is still there, still holding the volume, for as long as it takes to
+// shut down.
+func (c *Client) WaitForNoPods(ctx context.Context, namespace, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("read %s: %w", name, err)
+		}
+		if deployment.Status.Replicas == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s still has %d instance(s) running after %s",
+				name, deployment.Status.Replicas, timeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 // WaitForRollout blocks until a Deployment's new revision is fully available.
 func (c *Client) WaitForRollout(ctx context.Context, namespace, name string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)

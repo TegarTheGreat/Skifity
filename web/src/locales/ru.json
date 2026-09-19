@@ -461,7 +461,12 @@
     "buildCommand": "Команда сборки",
     "buildCommandHelp": "То, что создаёт файлы для отдачи, для фронтенда. Оставьте пустым, если они уже есть в репозитории.",
     "outputDirectory": "Каталог сборки",
-    "outputDirectoryHelp": "Куда эта команда их пишет: dist для Vite, build для Create React App."
+    "outputDirectoryHelp": "Куда эта команда их пишет: dist для Vite, build для Create React App.",
+    "volumeBackups": "Резервные копии {{name}}",
+    "volumeBackupsHelp": "Расписание, уже сделанные копии и восстановление из одной из них.",
+    "noVolumeBackups": "Копий этого диска пока нет.",
+    "volumeRestoreStarted": "Восстановление началось. На это время приложение останавливается и запускается снова после.",
+    "volumeRestoreWarning": "Всё, что сейчас в {{app}}, будет заменено содержимым этой копии, а приложение на это время остановлено."
   },
   "deploy": {
     "title": "Развёртывания",
@@ -741,7 +746,10 @@
       "restored": "Восстановлено из копии от {{0}}",
       "uninstallFailed": "Kubernetes не удалось удалить с машины",
       "uninstallSkipped": "Kubernetes оставлен установленным на машине",
-      "uninstalled": "Kubernetes удалён с машины"
+      "uninstalled": "Kubernetes удалён с машины",
+      "appStopped": "Приложение остановлено",
+      "archiveUnpacked": "Архив распакован",
+      "appRunningAgain": "{{0}} снова работает"
     },
     "stepNote": {
       "fingerprint": "Отпечаток {{0}}",

@@ -189,6 +189,85 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	writeOK(w)
 }
 
+type reauthRequest struct {
+	Password string `json:"password"`
+	TOTPCode string `json:"totp_code,omitempty"`
+}
+
+// handleReauth re-checks the password, and the second factor when the account
+// has one, and stamps the session. It is what the dialog in front of a
+// sensitive action posts to; nothing is issued and nothing is changed.
+func (s *Server) handleReauth(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	session, ok := sessionFrom(r.Context())
+	if !ok {
+		// A bearer token has nobody at the keyboard to ask.
+		writeError(w, r, errdoc.New("auth.needs_person", "This has to be done from the panel").
+			WithCause("Confirming who you are needs a browser session, and this request carried an API token.").
+			WithImpact("Nothing was changed.").
+			WithFix("Sign in to the panel and do it there.").
+			WithStatus(http.StatusForbidden))
+		return
+	}
+	var req reauthRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	err := s.auth.Reauthenticate(r.Context(), user, session.ID,
+		clientIPFrom(r.Context()), req.Password, req.TOTPCode)
+	switch {
+	case err == nil:
+		s.audit(r, "", "auth.reauthenticated", "user", user.ID, user.Email)
+		writeOK(w)
+	case errors.Is(err, auth.ErrTOTPRequired):
+		writeJSON(w, http.StatusOK, map[string]any{"totp_required": true})
+	case errors.Is(err, auth.ErrLockedOut):
+		writeError(w, r, errdoc.RateLimited(s.auth.LockoutWindow().String()))
+	case errors.Is(err, auth.ErrNoSecondProof):
+		writeError(w, r, errdoc.New("auth.no_password", "This account has no password to confirm with").
+			WithCause("It signs in through your identity provider, and two-factor authentication is not turned on here, so there is nothing this panel can ask you for.").
+			WithImpact("Nothing was changed.").
+			WithFix("Turn on two-factor authentication for this account first, or use an account with a password.").
+			WithStatus(http.StatusBadRequest))
+	case errors.Is(err, auth.ErrInvalidCredentials), errors.Is(err, auth.ErrInvalidTOTP):
+		writeError(w, r, errdoc.New("auth.reauth_failed", "That is not the right password").
+			WithCause("The password, or the two-factor code, did not match this account.").
+			WithImpact("Nothing was changed.").
+			WithFix("Type it again. After several wrong attempts this pauses for a while.").
+			WithStatus(http.StatusUnauthorized))
+	default:
+		writeError(w, r, err)
+	}
+}
+
+// handleRevokeOtherSessions signs out every device except this one.
+//
+// One button, because the moment somebody wants this — a laptop left on a
+// train — is not the moment to work through a list deciding which row is which.
+func (s *Server) handleRevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	user, _ := UserFrom(r.Context())
+	current, _ := sessionFrom(r.Context())
+	sessions, err := s.db.ListSessions(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	revoked := 0
+	for _, sess := range sessions {
+		if sess.ID == current.ID {
+			continue
+		}
+		if err := s.db.DeleteSession(r.Context(), sess.ID); err != nil {
+			writeError(w, r, err)
+			return
+		}
+		revoked++
+	}
+	s.audit(r, "", "auth.sessions_revoked", "user", user.ID, user.Email)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "revoked": revoked})
+}
+
 func (s *Server) handleListSessions(w http.ResponseWriter, r *http.Request) {
 	user, _ := UserFrom(r.Context())
 	sessions, err := s.db.ListSessions(r.Context(), user.ID)

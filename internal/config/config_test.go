@@ -212,3 +212,34 @@ func TestEverySettingIsDocumented(t *testing.T) {
 		}
 	}
 }
+
+// TestSecureCookiesFollowsTheAddressNotTheBuild.
+//
+// A Secure cookie is not stored by a browser over plain http, and the default
+// install is plain http: with no domain, the panel answers on an sslip.io
+// address over HTTP on purpose (ADR-0015). Deciding this from DevMode marked
+// those cookies Secure and made signing in impossible, with nothing in the
+// panel able to say why.
+func TestSecureCookiesFollowsTheAddressNotTheBuild(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		config  Config
+		want    bool
+		because string
+	}{
+		{"https", Config{PublicURL: "https://panel.example.com"}, true,
+			"a panel on https must not hand its session cookie to http"},
+		{"plain http", Config{PublicURL: "http://203-0-113-10.sslip.io"}, false,
+			"a Secure cookie over http is never stored, so nobody can sign in"},
+		{"dev mode", Config{DevMode: true, PublicURL: "https://panel.example.com"}, false,
+			"the dev server is http on localhost"},
+		{"address unknown", Config{}, true,
+			"unknown means secure: hard to sign in is recoverable, a cookie in the clear is not"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.config.SecureCookies(); got != tc.want {
+				t.Fatalf("SecureCookies() = %v, want %v: %s", got, tc.want, tc.because)
+			}
+		})
+	}
+}

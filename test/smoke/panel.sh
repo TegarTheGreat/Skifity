@@ -112,6 +112,17 @@ code=$(curl -sS -b "$WORKDIR/cookies" -o /dev/null -w '%{http_code}' -X POST "$B
 [ "$code" = "403" ] || fail "a request without a CSRF token answered $code, want 403"
 pass "cross-site requests are blocked"
 
+# A CSRF token that agrees with its own cookie but is not this session's must
+# be refused. Double-submit compares two things the caller supplies, and this
+# panel hosts applications on subdomains of the domain it answers on, so "a
+# page on another site" can be an app somebody deployed here this morning.
+code=$(curl -sS -b "$WORKDIR/cookies" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/me/tokens" \
+  -H 'Content-Type: application/json' \
+  -H "Cookie: skifity_csrf=forged-by-an-app" -H "X-Skifity-CSRF: forged-by-an-app" \
+  -d '{"name":"x","team_id":"'"$TEAM_ID"'"}')
+[ "$code" = "403" ] || fail "a CSRF token that only agrees with its own cookie answered $code, want 403"
+pass "the CSRF token is checked against the session, not against a cookie"
+
 # Create an API token with the CSRF header.
 TOKEN_RESPONSE=$(curl -fsS -b "$WORKDIR/cookies" -X POST "$BASE/api/me/tokens" \
   -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
@@ -124,6 +135,33 @@ pass "an API token can be created"
 curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/me" | grep -q 'owner@example.test' \
   || fail "the API token does not authenticate"
 pass "the API token authenticates"
+
+# An API token cannot turn two-factor authentication off, or mint another
+# token. There is nobody at the keyboard for it to ask, and a token that could
+# do either would be a way around the thing two-factor protects.
+for route in "DELETE /api/me/totp" "POST /api/me/tokens" "POST /api/me/reauth"; do
+  method=${route%% *}
+  path=${route#* }
+  code=$(curl -sS -H "Authorization: Bearer $API_TOKEN" -o "$WORKDIR/needs-person.json" \
+    -w '%{http_code}' -X "$method" "$BASE$path" \
+    -H 'Content-Type: application/json' -d '{"name":"x"}')
+  [ "$code" = "403" ] || fail "$method $path with a bearer token answered $code, want 403"
+  grep -q 'auth.needs_person' "$WORKDIR/needs-person.json" ||
+    fail "$method $path did not say why an API token cannot do it"
+done
+pass "an API token cannot change two-factor or mint another token"
+
+# Stepping up needs the right password, and asks for it before the three
+# actions that turn a borrowed session into access somebody keeps.
+code=$(curl -sS -b "$WORKDIR/cookies" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/me/reauth" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"password":"not the password"}')
+[ "$code" = "401" ] || fail "stepping up with the wrong password answered $code, want 401"
+code=$(curl -sS -b "$WORKDIR/cookies" -o /dev/null -w '%{http_code}' -X POST "$BASE/api/me/reauth" \
+  -H 'Content-Type: application/json' -H "X-Skifity-CSRF: $CSRF" \
+  -d '{"password":"'"$PASSWORD"'"}')
+[ "$code" = "200" ] || fail "stepping up with the right password answered $code, want 200"
+pass "proving who you are again works, and the wrong password does not"
 
 # A token is issued for one team, and that binding was stored and never read,
 # so a token made for one team worked on every team its owner belonged to.

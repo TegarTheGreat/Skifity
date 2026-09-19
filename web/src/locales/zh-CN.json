@@ -156,7 +156,15 @@
     "teamNameExample": "示例公司",
     "revokeSessionConfirm": "{{device}} 会被登出，需要重新登录。",
     "revokeTokenConfirm": "令牌 {{name}} 会立即失效。",
-    "revokeTokenConsequence": "令牌拿不回来。任何在用它的东西——脚本、部署流水线、助手——在换上新令牌之前都会一直失败。"
+    "revokeTokenConsequence": "令牌拿不回来。任何在用它的东西——脚本、部署流水线、助手——在换上新令牌之前都会一直失败。",
+    "reauth": {
+      "title": "确认是你本人",
+      "description": "此操作需要再次输入密码。保持登录状态并不等于本人就在键盘前。",
+      "confirm": "确认"
+    },
+    "signOutEverywhere": "退出其他所有设备",
+    "signOutEverywhereConfirm": "已登录此账户的其他所有设备都会被退出，当前设备保持登录。",
+    "signedOutEverywhereDone": "其他所有设备都已退出。"
   },
   "dashboard": {
     "title": "总览",
@@ -255,7 +263,9 @@
       "variable.deleted": "已删除变量",
       "variable.set": "已设置变量",
       "volume.created": "已创建存储卷",
-      "volume.deleted": "已删除存储卷"
+      "volume.deleted": "已删除存储卷",
+      "auth.reauthenticated": "再次确认了身份",
+      "auth.sessions_revoked": "退出了其他所有设备"
     }
   },
   "projects": {
@@ -1846,6 +1856,30 @@
         "cause": "请求上的签名和这个连接的 webhook 密钥对不上。",
         "impact": "没有开始任何部署。",
         "fix": "确认你 Git 托管方 webhook 设置里的密钥和 Skifity 里的一致。"
+      },
+      "auth_reauth_required": {
+        "title": "确认是你本人",
+        "cause": "此操作需要再次输入密码：持有已登录的会话，并不等于本人就在键盘前。",
+        "impact": "没有做任何更改。",
+        "fix": "输入密码以继续。"
+      },
+      "auth_reauth_failed": {
+        "title": "密码不正确",
+        "cause": "密码或两步验证码与此账户不符。",
+        "impact": "没有做任何更改。",
+        "fix": "请重新输入。多次输错后会暂停一段时间。"
+      },
+      "auth_no_password": {
+        "title": "此账户没有可用于确认的密码",
+        "cause": "它通过你的身份提供方登录，而这里没有启用两步验证，所以面板无从询问。",
+        "impact": "没有做任何更改。",
+        "fix": "请先为此账户启用两步验证，或改用设有密码的账户。"
+      },
+      "auth_needs_person": {
+        "title": "这必须在面板中完成",
+        "cause": "更改两步验证或创建令牌必须由能够证明身份的人来做，而 API 令牌做不到。",
+        "impact": "没有做任何更改。",
+        "fix": "登录面板并在那里操作。"
       }
     }
   },

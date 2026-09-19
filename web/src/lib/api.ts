@@ -67,10 +67,23 @@ export class ApiError extends Error {
   }
 }
 
-/** Reads the CSRF cookie the panel sets alongside the session. */
+/**
+ * Reads the CSRF cookie the panel sets alongside the session.
+ *
+ * Two names, because the panel sets one of them: on HTTPS it uses the __Host-
+ * prefix, which a browser refuses to store if a Domain is named, so no page on
+ * a sibling subdomain can write it. Over plain http the prefix is not allowed
+ * at all and the bare name is what there is. The prefixed one wins when both
+ * are present.
+ */
 function csrfToken(): string {
-  const match = document.cookie.match(/(?:^|;\s*)skifity_csrf=([^;]*)/)
-  return match ? decodeURIComponent(match[1]) : ""
+  for (const name of ["__Host-skifity_csrf", "skifity_csrf"]) {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|;\\s*)${name.replace("-", "\\-")}=([^;]*)`),
+    )
+    if (match) return decodeURIComponent(match[1])
+  }
+  return ""
 }
 
 let onUnauthenticated: (() => void) | null = null
@@ -80,12 +93,27 @@ export function setUnauthenticatedHandler(handler: () => void) {
   onUnauthenticated = handler
 }
 
+let onReauthRequired: (() => Promise<boolean>) | null = null
+
+/**
+ * Registers what to do when the panel asks the person to prove who they are
+ * again. Resolving true means they did, and the request is sent once more.
+ */
+export function setReauthHandler(handler: () => Promise<boolean>) {
+  onReauthRequired = handler
+}
+
+/** The code the panel answers with when an action needs the password again. */
+const REAUTH_CODE = "auth.reauth_required"
+
 type RequestOptions = {
   method?: string
   body?: unknown
   signal?: AbortSignal
   /** Suppresses the redirect to sign-in, used by the calls that probe auth. */
   allowAnonymous?: boolean
+  /** Set once a step-up has already been asked for, so it is never a loop. */
+  steppedUp?: boolean
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -118,6 +146,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       problem = payload.error ?? fallbackProblem(response)
     } catch {
       problem = fallbackProblem(response)
+    }
+    // Turning two-factor off, reading the recovery codes and minting a token
+    // each need the password again. The panel says so with a code rather than
+    // by failing, so the dialog opens here and the request is repeated — the
+    // caller never learns it happened, and nothing has to remember to ask.
+    if (response.status === 403 && problem.code === REAUTH_CODE && !options.steppedUp) {
+      if (await onReauthRequired?.()) {
+        return request<T>(path, { ...options, steppedUp: true })
+      }
     }
     throw new ApiError(problem, response.status)
   }

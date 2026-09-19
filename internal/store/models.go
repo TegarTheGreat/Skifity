@@ -444,14 +444,21 @@ type GitSource struct {
 
 // Session is a browser login.
 type Session struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	TokenHash  string    `json:"-"`
+	ID        string `json:"id"`
+	UserID    string `json:"user_id"`
+	TokenHash string `json:"-"`
+	// CSRFHash is the hash of this session's CSRF token. The check is against
+	// the session rather than against a second cookie, because a cookie can be
+	// written by a page on a sibling subdomain and this panel hosts those.
+	CSRFHash   string    `json:"-"`
 	IP         string    `json:"ip"`
 	UserAgent  string    `json:"user_agent"`
 	CreatedAt  time.Time `json:"created_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
 	ExpiresAt  time.Time `json:"expires_at"`
+	// ReauthAt is when the person last proved who they are with a password or
+	// a second factor, rather than by holding this cookie. Zero means never.
+	ReauthAt time.Time `json:"-"`
 }
 
 // APIToken authenticates the CLI and the MCP server.

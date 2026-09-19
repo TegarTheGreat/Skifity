@@ -141,10 +141,14 @@ func (db *DB) CreateSession(ctx context.Context, s *Session) error {
 		s.ID = NewID("ses")
 	}
 	now := Now()
+	reauth := ""
+	if !s.ReauthAt.IsZero() {
+		reauth = FormatTime(s.ReauthAt)
+	}
 	_, err := db.Exec(ctx, `INSERT INTO sessions
-		(id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at)
-		VALUES (?,?,?,?,?,?,?,?)`,
-		s.ID, s.UserID, s.TokenHash, s.IP, s.UserAgent, now, now, FormatTime(s.ExpiresAt))
+		(id, user_id, token_hash, csrf_hash, ip, user_agent, created_at, last_seen_at, expires_at, reauth_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		s.ID, s.UserID, s.TokenHash, s.CSRFHash, s.IP, s.UserAgent, now, now, FormatTime(s.ExpiresAt), reauth)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
@@ -156,10 +160,10 @@ func (db *DB) CreateSession(ctx context.Context, s *Session) error {
 // GetSessionByHash finds a live session. Expired sessions are reported as missing.
 func (db *DB) GetSessionByHash(ctx context.Context, hash string) (Session, error) {
 	var s Session
-	var created, lastSeen, expires string
-	err := db.QueryRowContext(ctx, `SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at
+	var created, lastSeen, expires, reauth string
+	err := db.QueryRowContext(ctx, `SELECT id, user_id, token_hash, csrf_hash, ip, user_agent, created_at, last_seen_at, expires_at, reauth_at
 		FROM sessions WHERE token_hash = ?`, hash).
-		Scan(&s.ID, &s.UserID, &s.TokenHash, &s.IP, &s.UserAgent, &created, &lastSeen, &expires)
+		Scan(&s.ID, &s.UserID, &s.TokenHash, &s.CSRFHash, &s.IP, &s.UserAgent, &created, &lastSeen, &expires, &reauth)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return s, ErrNotFound
@@ -169,10 +173,23 @@ func (db *DB) GetSessionByHash(ctx context.Context, hash string) (Session, error
 	s.CreatedAt, _ = ParseTime(created)
 	s.LastSeenAt, _ = ParseTime(lastSeen)
 	s.ExpiresAt, _ = ParseTime(expires)
+	if reauth != "" {
+		s.ReauthAt, _ = ParseTime(reauth)
+	}
 	if time.Now().After(s.ExpiresAt) {
 		return Session{}, ErrNotFound
 	}
 	return s, nil
+}
+
+// MarkSessionReauthenticated records that the person behind this session has
+// just proved who they are again, with a password or a second factor.
+func (db *DB) MarkSessionReauthenticated(ctx context.Context, id string, at time.Time) error {
+	_, err := db.Exec(ctx, `UPDATE sessions SET reauth_at = ? WHERE id = ?`, FormatTime(at), id)
+	if err != nil {
+		return fmt.Errorf("record re-authentication: %w", err)
+	}
+	return nil
 }
 
 // TouchSession extends a session's life on activity.
@@ -188,7 +205,7 @@ func (db *DB) TouchSession(ctx context.Context, id string, expires time.Time) er
 // ListSessions returns a user's live sessions, newest first, so they can see and
 // revoke other devices.
 func (db *DB) ListSessions(ctx context.Context, userID string) ([]Session, error) {
-	rows, err := db.QueryContext(ctx, `SELECT id, user_id, token_hash, ip, user_agent, created_at, last_seen_at, expires_at
+	rows, err := db.QueryContext(ctx, `SELECT id, user_id, token_hash, csrf_hash, ip, user_agent, created_at, last_seen_at, expires_at
 		FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_seen_at DESC`, userID, Now())
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
@@ -198,7 +215,7 @@ func (db *DB) ListSessions(ctx context.Context, userID string) ([]Session, error
 	for rows.Next() {
 		var s Session
 		var created, lastSeen, expires string
-		if err := rows.Scan(&s.ID, &s.UserID, &s.TokenHash, &s.IP, &s.UserAgent, &created, &lastSeen, &expires); err != nil {
+		if err := rows.Scan(&s.ID, &s.UserID, &s.TokenHash, &s.CSRFHash, &s.IP, &s.UserAgent, &created, &lastSeen, &expires); err != nil {
 			return nil, fmt.Errorf("scan session: %w", err)
 		}
 		s.CreatedAt, _ = ParseTime(created)

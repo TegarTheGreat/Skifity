@@ -281,3 +281,25 @@ func parseValue(rest string) (string, error) {
 	}
 	return strings.TrimSpace(rest), nil
 }
+
+// SecureCookies reports whether the panel's cookies may be marked Secure, and
+// therefore whether they can carry the __Host- prefix.
+//
+// It is decided from the address people actually reach the panel on, not from
+// whether this is a development build. A Secure cookie is not stored by a
+// browser over plain http, and the default install is plain http: with no
+// domain, apps and the panel answer on an sslip.io address over HTTP on
+// purpose (ADR-0015). Marking the session cookie Secure there does not make
+// anything safer — it makes signing in silently impossible, and the panel
+// would have had no idea why.
+//
+// Unknown means secure. An operator running the binary by hand without telling
+// it its own address gets the safe answer and a warning at startup, which is
+// the right way round: a panel that is hard to sign in to is recoverable, and
+// a session cookie sent in the clear is not.
+func (c Config) SecureCookies() bool {
+	if c.DevMode {
+		return false
+	}
+	return !strings.HasPrefix(c.PublicURL, "http://")
+}

@@ -98,6 +98,46 @@ Roles: **owner** administers the team and can delete it, **admin** can invite
 and configure, **member** can deploy. Nobody can invite somebody to a role
 above their own.
 
+## Signing in
+
+**Passwords** are hashed with Argon2id, twelve characters minimum, and checked
+against the handful of passwords automated attacks try first. Failed attempts
+pause sign-in: five for one account, twenty from one address, in a
+fifteen-minute window. The two limits are separate so that somebody hammering
+your account cannot lock you out by hammering it, and somebody spraying many
+accounts from one machine is stopped anyway.
+
+**Two-factor authentication** is TOTP, and a code is spent when it is used — the
+window is ninety seconds wide, so a code read over a shoulder or out of a screen
+share would otherwise work again. Eight recovery codes are shown when it is
+turned on; each works once.
+
+**Sessions** last seven days of inactivity by default (`session_ttl`) and thirty
+days however much they are used. The second one is the ceiling: without it a
+session used once a day renews forever, and a cookie stolen in January is still
+good in December. Account → Sessions lists every device and signs out the ones
+that are not this one.
+
+**Three actions ask for your password again**, even though you are signed in:
+turning two-factor off, reading the recovery codes, and creating an API token.
+Each of them turns a session somebody borrowed into access they keep. Signing in
+counts, so in practice this is one dialog a few minutes into a session. An API
+token cannot take these actions at all — there is nobody at the keyboard for it
+to ask.
+
+**Put a domain on the panel.** The panel's cookies carry the `__Host-` prefix,
+which a browser refuses to store if a cookie names a domain — so no page on a
+sibling subdomain can write them. That prefix requires HTTPS. The default
+install is plain HTTP on an sslip.io address (ADR-0015), and on plain HTTP the
+prefix cannot be used at all. This matters more here than on most products,
+because the applications this panel hosts can be on subdomains of the domain the
+panel answers on. Adding a domain in Settings is what closes it.
+
+Whether cookies are marked `Secure` follows `SKIFITY_PUBLIC_URL` rather than the
+build, because a `Secure` cookie is never stored over plain HTTP: marking them
+Secure on an HTTP panel does not make anything safer, it makes signing in
+impossible. Set that variable to the address people actually open.
+
 ## Single sign-on
 
 Skifity speaks **OpenID Connect**: Okta, Entra ID, Authentik, Keycloak, Zitadel,

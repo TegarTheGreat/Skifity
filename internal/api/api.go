@@ -153,13 +153,25 @@ func (s *Server) routes() chi.Router {
 			authed.Patch("/me", s.handleUpdateMe)
 			authed.Post("/me/password", s.handleChangePassword)
 			authed.Get("/me/sessions", s.handleListSessions)
+			authed.Delete("/me/sessions", s.handleRevokeOtherSessions)
 			authed.Delete("/me/sessions/{sessionID}", s.handleRevokeSession)
-			authed.Post("/me/totp", s.handleStartTOTP)
-			authed.Post("/me/totp/confirm", s.handleConfirmTOTP)
-			authed.Delete("/me/totp", s.handleDisableTOTP)
 			authed.Get("/me/tokens", s.handleListTokens)
-			authed.Post("/me/tokens", s.handleCreateToken)
 			authed.Delete("/me/tokens/{tokenID}", s.handleRevokeToken)
+			// Proving who you are again. Not behind requireRecentAuth, for the
+			// obvious reason.
+			authed.Post("/me/reauth", s.handleReauth)
+
+			// The three actions that turn a session somebody borrowed into
+			// access they keep: switching the second factor off, reading the
+			// recovery codes, and minting a token that outlives the session.
+			// Each asks for the password again. See requireRecentAuth.
+			authed.Group(func(sensitive chi.Router) {
+				sensitive.Use(s.requireRecentAuth)
+				sensitive.Post("/me/totp", s.handleStartTOTP)
+				sensitive.Post("/me/totp/confirm", s.handleConfirmTOTP)
+				sensitive.Delete("/me/totp", s.handleDisableTOTP)
+				sensitive.Post("/me/tokens", s.handleCreateToken)
+			})
 
 			authed.Get("/teams", s.handleListTeams)
 			authed.Post("/teams", s.handleCreateTeam)

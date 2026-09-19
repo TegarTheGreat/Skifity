@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 
 import { App } from "@/App"
 import { ConfirmProvider } from "@/components/confirm-dialog"
+import { ReauthProvider } from "@/components/reauth-dialog"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -24,17 +25,19 @@ createRoot(container).render(
         <SessionProvider>
           <TooltipProvider delayDuration={300}>
             <ConfirmProvider>
-              <BrowserRouter>
-                {/*
+              <ReauthProvider>
+                <BrowserRouter>
+                  {/*
                   The outer boundary, for the screens that are not inside the
                   shell: sign-in, first-run setup, and the shell itself. The
                   shell has its own, so an ordinary page that throws does not
                   take the navigation with it.
                 */}
-                <ErrorBoundary>
-                  <App />
-                </ErrorBoundary>
-              </BrowserRouter>
+                  <ErrorBoundary>
+                    <App />
+                  </ErrorBoundary>
+                </BrowserRouter>
+              </ReauthProvider>
             </ConfirmProvider>
             <Toaster />
           </TooltipProvider>

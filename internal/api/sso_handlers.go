@@ -146,12 +146,17 @@ func (s *Server) handleSSOCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/?sso_error="+url.QueryEscape(reason), http.StatusFound)
 	}
 
-	cookie, err := r.Cookie(auth.SSOStateCookieName)
-	if err != nil || cookie.Value == "" {
+	// Under whichever name this panel sets it: on https that is the __Host-
+	// prefixed one, which a page on a sibling subdomain cannot write. Reading
+	// the bare name as well would let an app deployed here hand the browser a
+	// state, a nonce and a verifier of the attacker's choosing, and sign the
+	// victim into the attacker's account.
+	value := s.auth.ReadCookie(r, auth.SSOStateCookieName)
+	if value == "" {
 		fail("expired")
 		return
 	}
-	raw, err := decodeBase64URL(cookie.Value)
+	raw, err := decodeBase64URL(value)
 	if err != nil {
 		fail("expired")
 		return

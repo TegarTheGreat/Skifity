@@ -62,7 +62,16 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	}
 
 	hub := events.NewHub(256)
-	authService := auth.NewService(db, keyring, cfg.SessionTTL, !cfg.DevMode)
+	// Secure cookies are decided from the address people reach the panel on,
+	// not from the build: a Secure cookie is not stored over plain http, and
+	// the default install is plain http on an sslip.io address (ADR-0015).
+	secureCookies := cfg.SecureCookies()
+	if !cfg.DevMode && cfg.PublicURL == "" {
+		log.Warn("this panel does not know its own address, so its cookies are marked Secure and will only work over https",
+			"fix", "set SKIFITY_PUBLIC_URL to the address people open, http:// or https://")
+	}
+	log.Info("session cookies", "secure", secureCookies, "host_prefixed", secureCookies)
+	authService := auth.NewService(db, keyring, cfg.SessionTTL, secureCookies)
 
 	// The cluster is optional at start: the panel must come up and be usable
 	// for settings even when Kubernetes is not reachable yet, because that is

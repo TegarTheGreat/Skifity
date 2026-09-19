@@ -35,7 +35,7 @@ clientset and golden manifests, and that is said plainly rather than glossed ove
 * `docs/research/stack.md` — component versions verified 2026-09-16, reconciled
   with the code 2026-09-17.
 * `docs/architecture.md` — layers, deploy path, add-server state machine, data model, isolation.
-* `docs/decisions.md` — ADR-0001 onwards; there are nineteen.
+* `docs/decisions.md` — ADR-0001 onwards; there are twenty-one.
 
 ### Phase 1 — done
 
@@ -1648,6 +1648,98 @@ panel needs a Cloudflare API token with Zero Trust permissions, which is a
 second credential and a second integration — and this one has never been pointed
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
+
+## Phase 65 — signing in, taken apart
+
+The panel's own front door, read line by line against what it would take to get
+through it. Most of it held: Argon2id at the OWASP parameters, a single error
+for every kind of failure so an unknown address cannot be told from a wrong
+password, an unknown account hashed anyway so the timing does not say either, a
+TOTP code spent when it is used, two separate lockouts, and an OIDC flow whose
+ID token is verified by the library with a per-sign-in nonce and a single-use
+state. Five things did not.
+
+### A cookie is not isolated by origin, and this panel hosts other people's apps
+
+The largest one, and it is specific to what this product is. Any page on a
+sibling name can write a cookie scoped to the parent domain, and the server
+cannot tell it from its own. The common configuration here — a wildcard app
+domain with the panel on the same domain — gives **every application deployed on
+this panel** a way to write the panel's session cookie. That is session
+fixation: the victim silently signed in as the attacker, typing their own
+secrets into an account somebody else can read. The same trick rewrites the SSO
+state cookie, which carries the state, the nonce and the PKCE verifier.
+
+Every cookie the panel sets now carries the `__Host-` prefix, which a browser
+refuses to store if the cookie names a Domain at all, and only that name is
+read. Accepting the bare name as a fallback would hand it all back — the
+attacker would write that one instead — so it is not accepted. ADR-0019.
+
+### CSRF compared two things the caller supplied
+
+Double-submit is a cookie checked against a header, and it rests entirely on the
+assumption above. The session now carries the hash of its own CSRF token and the
+header is checked against that; the cookie is how the token reaches the
+frontend and nothing else. The test that proves it forges both halves the way
+an app on a sibling subdomain would, and a smoke check does the same against the
+real binary.
+
+### A cookie that was Secure on a panel that is not
+
+Found while writing those tests, and it predates them: `secureCookies` was
+`!DevMode`, and the default install is **plain HTTP** on an sslip.io address
+(ADR-0015). A Secure cookie is never stored over http, so the default install
+would have set a session cookie no browser would keep, and nothing in the panel
+could have said why. It follows `SKIFITY_PUBLIC_URL` now — the address people
+actually open — and an unset one gets the safe answer plus a warning at startup.
+Nobody had ever signed into this panel over http from a browser, which is how it
+survived.
+
+### A session that renewed forever
+
+The sliding expiry answers "has this person been away", and never "how long has
+this cookie been valid". A session used once a day renewed indefinitely, so a
+token stolen in January was still good in December. Thirty days from when it was
+created, whatever the activity.
+
+### A borrowed session could keep itself
+
+Turning two-factor off needed nothing but a session. Neither did reading the
+recovery codes or minting an API token that outlives the session it came from.
+Each turns a minute at an unlocked laptop into access somebody keeps. All three
+now require that the password — and the second factor, when there is one — was
+given in the last five minutes. Signing in counts, so in practice it is one
+dialog. ADR-0020.
+
+An API token is refused outright rather than waved through: it has nobody to
+ask, and a token that could disable two-factor would be a way around the thing
+two-factor protects. The step-up is rate limited exactly like signing in,
+because otherwise it is an unmetered password oracle for an account whose
+session has already been taken — which is the case it exists for.
+
+The frontend never learns any of this happened. The API client sees the panel's
+refusal, opens the dialog, and repeats the request, so an action added later
+cannot forget to ask.
+
+### And a memory amplifier
+
+Argon2 costs 19 MiB by design, every sign-in attempt starts one, and attempts
+for accounts that do not exist have to hash anyway so that timing says nothing.
+Nothing capped how many ran at once. On the 1 GB server this product is sold on,
+fifty in flight is the machine. Four at a time now, with the rest waiting rather
+than refused, so a real sign-in still works while a flood is in progress.
+
+### What was also added
+
+**Sign out everywhere else**, because the moment somebody wants it — a laptop
+left on a train — is not the moment to work through a list deciding which row is
+which device.
+
+Six properties, six tests, each proven by removing the thing it checks and
+watching it fail: the prefix, the name that is not accepted, the CSRF check, the
+ceiling, the step-up, and its rate limit. Three more run against the real binary
+in `make smoke`. `make check` exits 0, `make smoke` 119 checks, 15 interface
+tests pass.
 
 ## Phase 64 — the three things between here and an MVP
 

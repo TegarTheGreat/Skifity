@@ -164,7 +164,15 @@
     "teamNameExample": "Acme",
     "revokeSessionConfirm": "{{device}} is signed out and has to sign in again.",
     "revokeTokenConfirm": "The token {{name}} stops working immediately.",
-    "revokeTokenConsequence": "A token cannot be got back. Anything using it — a script, a deploy pipeline, an assistant — fails until it is given a new one."
+    "revokeTokenConsequence": "A token cannot be got back. Anything using it — a script, a deploy pipeline, an assistant — fails until it is given a new one.",
+    "reauth": {
+      "title": "Confirm it is you",
+      "description": "This action needs your password again. Being signed in is not the same as being at the keyboard.",
+      "confirm": "Confirm"
+    },
+    "signOutEverywhere": "Sign out everywhere else",
+    "signOutEverywhereConfirm": "Every other device signed in to this account will be signed out. This one stays signed in.",
+    "signedOutEverywhereDone": "Every other device has been signed out."
   },
   "dashboard": {
     "title": "Overview",
@@ -263,7 +271,9 @@
       "variable.deleted": "Variable removed",
       "variable.set": "Variable set",
       "volume.created": "Volume created",
-      "volume.deleted": "Volume deleted"
+      "volume.deleted": "Volume deleted",
+      "auth.reauthenticated": "Confirmed who they are",
+      "auth.sessions_revoked": "Signed out every other device"
     }
   },
   "projects": {
@@ -1858,6 +1868,30 @@
         "cause": "The signature on the request does not match this connection's webhook secret.",
         "impact": "No deploy was started.",
         "fix": "Check that the secret in your Git host's webhook settings matches the one in Skifity."
+      },
+      "auth_reauth_required": {
+        "title": "Confirm it is you",
+        "cause": "This action needs your password again, because holding a signed-in session is not the same as being at the keyboard.",
+        "impact": "Nothing was changed.",
+        "fix": "Enter your password to continue."
+      },
+      "auth_reauth_failed": {
+        "title": "That is not the right password",
+        "cause": "The password, or the two-factor code, did not match this account.",
+        "impact": "Nothing was changed.",
+        "fix": "Type it again. After several wrong attempts this pauses for a while."
+      },
+      "auth_no_password": {
+        "title": "This account has no password to confirm with",
+        "cause": "It signs in through your identity provider, and two-factor authentication is not turned on here, so there is nothing this panel can ask you for.",
+        "impact": "Nothing was changed.",
+        "fix": "Turn on two-factor authentication for this account first, or use an account with a password."
+      },
+      "auth_needs_person": {
+        "title": "This has to be done from the panel",
+        "cause": "Changing two-factor authentication or creating a token has to be done by somebody who can prove who they are, and an API token cannot.",
+        "impact": "Nothing was changed.",
+        "fix": "Sign in to the panel and do it there."
       }
     }
   },

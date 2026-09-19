@@ -247,7 +247,7 @@ const SSOStateCookieName = "skifity_sso"
 // SSOStateCookie holds the three values the callback needs.
 func (s *Service) SSOStateCookie(value string) *http.Cookie {
 	return &http.Cookie{
-		Name:     SSOStateCookieName,
+		Name:     s.CookieName(SSOStateCookieName),
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,

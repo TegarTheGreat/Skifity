@@ -273,9 +273,7 @@ function TwoFactorCard() {
       <CardContent className="space-y-4">
         {/* Codes are shown whenever the panel has just generated them, on or
             off: this is the only moment they exist in readable form. */}
-        {setup?.recovery_codes?.length ? (
-          <RecoveryCodes codes={setup.recovery_codes} />
-        ) : null}
+        {setup?.recovery_codes?.length ? <RecoveryCodes codes={setup.recovery_codes} /> : null}
 
         {user?.totp_enabled ? (
           <>
@@ -310,11 +308,7 @@ function TwoFactorCard() {
                 {start.isPending && <Spinner />}
                 {t("auth.recoveryCodesRegenerate")}
               </Button>
-              <Button
-                variant="ghost"
-                disabled={disable.isPending}
-                onClick={() => disable.mutate()}
-              >
+              <Button variant="ghost" disabled={disable.isPending} onClick={() => disable.mutate()}>
                 {t("auth.twoFactorDisable")}
               </Button>
             </div>
@@ -445,10 +439,43 @@ function SessionsCard() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sessions"] }),
   })
 
+  // One button, because the moment somebody wants this — a laptop left on a
+  // train — is not the moment to work through a list deciding which row is
+  // which device.
+  const revokeOthers = useMutation({
+    mutationFn: () => api.delete("/api/me/sessions"),
+    onSuccess: () => {
+      toast.success(t("auth.signedOutEverywhereDone"))
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] })
+    },
+  })
+
+  const others = (sessions.data?.items ?? []).filter((session) => !session.current).length
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="text-base">{t("auth.sessions")}</CardTitle>
+        {others > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={revokeOthers.isPending}
+            onClick={() =>
+              void confirmRevoke({
+                title: t("auth.signOutEverywhere"),
+                description: t("auth.signOutEverywhereConfirm"),
+                confirmLabel: t("auth.signOutEverywhere"),
+                destructive: true,
+              }).then((yes) => {
+                if (yes) revokeOthers.mutate()
+              })
+            }
+          >
+            {revokeOthers.isPending && <Spinner />}
+            {t("auth.signOutEverywhere")}
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         {sessions.isLoading ? (

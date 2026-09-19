@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -283,8 +282,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			}
 		}
 
-		if cookie, err := r.Cookie(auth.SessionCookieName); err == nil && cookie.Value != "" {
-			user, session, err := s.auth.Authenticate(ctx, cookie.Value)
+		if value := s.auth.ReadCookie(r, auth.SessionCookieName); value != "" {
+			user, session, err := s.auth.Authenticate(ctx, value)
 			if err == nil {
 				ctx = context.WithValue(ctx, ctxUser, user)
 				ctx = context.WithValue(ctx, ctxSession, session)
@@ -326,7 +325,8 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-// csrf enforces the double-submit cookie pattern on state-changing requests.
+// csrf checks that a state-changing request carries this session's own CSRF
+// token in a header.
 //
 // Requests carrying a bearer token are exempt: a CSRF attack cannot set an
 // Authorization header, and the CLI has no cookie to submit.
@@ -341,21 +341,63 @@ func (s *Server) csrf(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, ok := sessionFrom(r.Context()); !ok {
+		session, ok := sessionFrom(r.Context())
+		if !ok {
 			// No cookie session, so there is nothing for a cross-site request
 			// to ride on.
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		cookie, err := r.Cookie(auth.CSRFCookieName)
-		header := r.Header.Get(auth.CSRFHeaderName)
-		if err != nil || cookie.Value == "" || header == "" ||
-			subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(header)) != 1 {
+		// Against the session, not against a second cookie. See HostPrefix in
+		// internal/auth: on a panel that hosts applications, "a page on another
+		// site" can be an app somebody deployed here, and a page on a sibling
+		// subdomain can write cookies this panel would otherwise trust.
+		if !s.auth.CheckCSRF(session, r.Header.Get(auth.CSRFHeaderName)) {
 			writeError(w, r, errdoc.New("auth.csrf", "This request was blocked for safety").
 				WithCause("The request did not carry a matching CSRF token.").
 				WithImpact("Nothing was changed.").
 				WithFix("Reload the page and try again. If you are calling the API directly, use an API token with an Authorization header instead of a cookie.").
+				WithStatus(http.StatusForbidden))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireRecentAuth refuses an action unless the caller has proved who they are
+// within the last few minutes, rather than merely holding a session cookie.
+//
+// It guards the three actions that turn a borrowed session into permanent
+// access: turning two-factor off, reading the recovery codes, and minting an
+// API token that outlives the session it was made from. Without it, a laptop
+// left unlocked for a minute is an account somebody else keeps.
+//
+// A bearer token is refused outright rather than waved through. A token cannot
+// re-authenticate — there is nobody at the keyboard — and letting one disable
+// two-factor would make the token a way around the very thing it protects.
+func (s *Server) requireRecentAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := apiTokenFrom(r.Context()); ok {
+			writeError(w, r, errdoc.New("auth.needs_person", "This has to be done from the panel").
+				WithCause("Changing two-factor authentication or creating a token has to be done by somebody who can prove who they are, and an API token cannot.").
+				WithImpact("Nothing was changed.").
+				WithFix("Sign in to the panel and do it there.").
+				WithStatus(http.StatusForbidden))
+			return
+		}
+		session, ok := sessionFrom(r.Context())
+		if !ok {
+			writeError(w, r, errdoc.Unauthorized())
+			return
+		}
+		if !s.auth.RecentlyAuthenticated(session) {
+			// The frontend routes on this code: it opens the dialog that asks
+			// for the password, then repeats the request.
+			writeError(w, r, errdoc.New("auth.reauth_required", "Confirm it is you").
+				WithCause("This action needs your password again, because holding a signed-in session is not the same as being at the keyboard.").
+				WithImpact("Nothing was changed.").
+				WithFix("Enter your password to continue.").
 				WithStatus(http.StatusForbidden))
 			return
 		}

@@ -446,3 +446,68 @@ Third-party JavaScript in the panel's origin can read the session of somebody wh
 holds the master key. If in-panel pages are ever offered, they will be declarative
 — a plugin describing a table or a form that the panel renders — and not a bundle
 the panel executes.
+
+---
+
+## ADR-0019 - The panel's cookies carry the `__Host-` prefix, and the CSRF token lives on the session
+
+**Context.** A cookie is not isolated by origin. Any page on a sibling name can
+write one scoped to the parent domain, and the server cannot tell it from its
+own. For most products that is a remote risk. For this one it is the product:
+Skifity hosts other people's applications, and the common configuration — a
+wildcard app domain with the panel on the same domain — gives every app a way to
+write the panel's cookies.
+
+Two things depended on that not happening. The session cookie, which an app
+could overwrite to sign somebody silently into the attacker's account, where
+they would then type their own secrets. And CSRF, which was double-submit: a
+cookie compared with a header, both supplied by the caller.
+
+**Decision.** On HTTPS every cookie the panel sets carries the `__Host-` prefix,
+and only that name is read. The CSRF token's hash is stored on the session and
+the header is checked against it; the cookie is a way to get the token to the
+frontend and nothing else.
+
+**Reason.** A browser refuses to store a `__Host-` cookie that names a Domain at
+all, which is exactly the thing a sibling subdomain needs to do. Accepting the
+unprefixed name as a fallback would hand all of that back, so it is not
+accepted. Checking CSRF against the session removes the assumption rather than
+defending it: the header now has to match something only this panel and this
+browser have ever held.
+
+**Consequences.** The prefix also requires `Secure`, so it can only be used when
+the panel is on HTTPS — and the default install is plain HTTP on an sslip.io
+address (ADR-0015). Whether cookies are Secure is therefore decided from the
+address people reach the panel on, `SKIFITY_PUBLIC_URL`, rather than from
+whether this is a development build: marking them Secure over plain HTTP does
+not make anything safer, it makes signing in impossible, and the panel would
+have had no idea why. An install with no domain is protected by the prefix only
+once a domain is added, which is one more reason the documentation says to add
+one.
+
+---
+
+## ADR-0020 - Three actions ask for the password again
+
+**Context.** Holding a session cookie is not the same as being at the keyboard.
+A laptop left unlocked for a minute, a cookie lifted from a browser, a shoulder
+surfed sign-in: each gives somebody a session, and a session could turn
+two-factor authentication off, read the recovery codes and mint an API token
+that outlives it. All three convert borrowed access into access somebody keeps.
+
+**Decision.** Those three, and only those three, require that the password — and
+the second factor, when the account has one — has been given within the last
+five minutes. Signing in counts. The panel answers `auth.reauth_required`, the
+frontend asks, and the request is repeated.
+
+**Reason.** Asking on every action trains people to type their password into
+anything that asks, which is worse than not asking. Asking on the actions that
+are irreversible is the whole of the benefit for almost none of the cost.
+
+**Consequences.** An API token cannot take these actions at all, and is told so
+rather than being waved through: a token has nobody to ask, and a token that
+could disable two-factor would be a way around the thing two-factor protects.
+The step-up is rate limited exactly like signing in, because otherwise it is an
+unmetered password oracle for an account whose session has already been taken —
+which is the case it exists for. Changing a password already asked for the
+current one and is unchanged.

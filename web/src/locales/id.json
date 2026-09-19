@@ -156,7 +156,15 @@
     "teamNameExample": "Nusantara",
     "revokeSessionConfirm": "{{device}} akan keluar dan harus masuk lagi.",
     "revokeTokenConfirm": "Token {{name}} langsung berhenti berfungsi.",
-    "revokeTokenConsequence": "Token tidak bisa dikembalikan. Apa pun yang memakainya — skrip, pipeline deploy, asisten — akan gagal sampai diberi token baru."
+    "revokeTokenConsequence": "Token tidak bisa dikembalikan. Apa pun yang memakainya — skrip, pipeline deploy, asisten — akan gagal sampai diberi token baru.",
+    "reauth": {
+      "title": "Pastikan ini memang Anda",
+      "description": "Tindakan ini memerlukan kata sandi Anda lagi. Sudah masuk tidak sama dengan sedang berada di depan papan ketik.",
+      "confirm": "Konfirmasi"
+    },
+    "signOutEverywhere": "Keluar dari perangkat lain",
+    "signOutEverywhereConfirm": "Semua perangkat lain yang masuk ke akun ini akan dikeluarkan. Perangkat ini tetap masuk.",
+    "signedOutEverywhereDone": "Semua perangkat lain sudah dikeluarkan."
   },
   "dashboard": {
     "title": "Ringkasan",
@@ -255,7 +263,9 @@
       "variable.deleted": "Variabel dihapus",
       "variable.set": "Variabel diatur",
       "volume.created": "Volume dibuat",
-      "volume.deleted": "Volume dihapus"
+      "volume.deleted": "Volume dihapus",
+      "auth.reauthenticated": "Membuktikan identitasnya kembali",
+      "auth.sessions_revoked": "Mengeluarkan semua perangkat lain"
     }
   },
   "projects": {
@@ -1846,6 +1856,30 @@
         "cause": "Tanda tangan pada permintaannya tidak cocok dengan rahasia webhook koneksi ini.",
         "impact": "Tidak ada deploy yang dimulai.",
         "fix": "Pastikan rahasia di pengaturan webhook di host Git-mu sama dengan yang ada di Skifity."
+      },
+      "auth_reauth_required": {
+        "title": "Pastikan ini memang Anda",
+        "cause": "Tindakan ini memerlukan kata sandi Anda lagi, karena memegang sesi yang sudah masuk tidak sama dengan berada di depan papan ketik.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Masukkan kata sandi Anda untuk melanjutkan."
+      },
+      "auth_reauth_failed": {
+        "title": "Kata sandi itu tidak benar",
+        "cause": "Kata sandi, atau kode dua faktor, tidak cocok dengan akun ini.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Ketik ulang. Setelah beberapa kali salah, ini dijeda sejenak."
+      },
+      "auth_no_password": {
+        "title": "Akun ini tidak punya kata sandi untuk dikonfirmasi",
+        "cause": "Akun ini masuk lewat penyedia identitas Anda, dan autentikasi dua faktor belum dinyalakan di sini, jadi tidak ada yang bisa panel ini tanyakan.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Nyalakan dulu autentikasi dua faktor untuk akun ini, atau gunakan akun yang punya kata sandi."
+      },
+      "auth_needs_person": {
+        "title": "Ini harus dilakukan dari panel",
+        "cause": "Mengubah autentikasi dua faktor atau membuat token harus dilakukan oleh orang yang bisa membuktikan identitasnya, dan token API tidak bisa.",
+        "impact": "Tidak ada yang diubah.",
+        "fix": "Masuk ke panel dan lakukan di sana."
       }
     }
   },

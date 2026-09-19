@@ -1649,6 +1649,103 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 64 — the three things between here and an MVP
+
+`docs/checklist.md` named three. Two of them turned out to be work; the third
+cannot be done by anything that types.
+
+### Where this project publishes
+
+It publishes where it lives: `TegarTheGreat/Skifity`, so
+`ghcr.io/tegarthegreat/skifity` for the image and that repository's raw URL for
+the installer and the manifests. That was never a hard decision — it was an
+undecided one, and undecided meant the installer carried a name nobody owned.
+
+It is now one `PROJECT_REPO` line in `installer/install.sh` and one in the
+`Makefile`. The image tag, the manifest URL, the clone command in every error
+message and the tag `make image` builds all derive from those two. Moving to an
+organisation of its own later is those two lines.
+`scripts/check-home.sh` — `make check` runs it — fails the build if a name this
+project does not own reappears anywhere, and four test fixtures that had been
+using the old one now say `example/`.
+
+### The manifests follow the release, not a branch
+
+`fetch_manifest` read from `.../main/deploy`. Two things were wrong with that.
+The small one: **this repository has no `main`.** There is no default branch at
+all — the only branch is the one being worked on — so that URL was a 404 waiting
+for somebody to install from `curl | sh`.
+
+The large one is that a branch is the wrong thing to read from. An install that
+pulled v1's image and `main`'s objects would apply a Deployment that image had
+never seen. The manifests now come from
+`raw.githubusercontent.com/<repo>/<version>/deploy`, the same ref the installer
+itself was fetched from, so the objects always match the image — and no default
+branch has to exist for an install to work.
+
+### The installer knows which release it is
+
+It has to, because it runs as one file with no repository around it.
+`RELEASED_VERSION` is a line in its own source, empty until a release sets it,
+and `check_release` refuses before k3s is installed while it is empty. A second
+refusal covers the other half: an image named with no version and no manifests
+on disk, which would have been a 404 twenty minutes into an install.
+
+The release workflow reads that line out of the script and **fails the release
+when it disagrees with the tag**. Getting it wrong would publish an installer
+that pulls the wrong image or refuses to install at all, and it would be found
+by a stranger rather than by CI. `docs/releasing.md` is the procedure.
+
+No tag was cut. Everything a tag needs is in place; what it waits on is the
+cluster run, because a release is an invitation to install and the first person
+to accept it should not be the first person to find out whether any of this
+works on a cluster.
+
+### The cluster run, from a laptop
+
+`test/cluster/verify.sh` has existed and never been run, and part of the reason
+is that running it meant a server, an image on that server, and the repository
+beside it. `make verify-remote HOST=root@…` does those three: it builds the
+image for the server's architecture — asked, not assumed, because the wrong one
+dies with "exec format error" — streams it into
+`/var/lib/rancher/k3s/agent/images` **before k3s exists**, so the panel's first
+pod finds it locally with no registry and no credentials, sends the committed
+tree with `git archive`, runs the phases, and brings the report back.
+`DRY_RUN=1` prints every command instead of running it, which is how it is
+checked here, where there is no server and no Docker.
+
+One thing it found before it ever ran: `verify.sh` defaulted
+`VERIFY_GIT_BRANCH` to `main`, which does not exist. An hour of installing,
+then a clone that fails. It reads the branch from the checkout now.
+
+`test/smoke/verify.sh` is thirteen checks on the two crosscheck scripts —
+including that the image lands in the directory k3s imports from, that the tag
+sent is the tag the Makefile builds, and that a dry run never claims the checks
+passed. Proven by pointing the image somewhere else.
+
+### The person
+
+Nothing here can be that person, and `docs/walkthrough.md` does not pretend
+otherwise: it is the sheet somebody fills in while watching one. The rule it
+puts first is not to help, and the thing it says to watch hardest for is the
+stop nobody reports — where the reader worked it out and carried on, which feels
+like success from the inside and is a bug for every reader after them.
+
+Walking `docs/quick-start.md` as literally as possible did find one real defect.
+Step 3 said the first app "has a working address with HTTPS", and the README
+said the same in its opening paragraph. It does not: an sslip.io address
+deliberately gets no certificate, for the rate-limit reason in ADR-0015, and
+two tests assert that it does not. The pages say what actually happens now, and
+say why. `llms.txt` had it right all along, which is its own small lesson about
+which page gets re-read.
+
+The interface's own deep link caught the fix: renaming that heading broke
+`/docs/quick-start#4-add-your-own-domain`, and `TestEveryDocsLinkInTheInterface
+Resolves` failed the build. The heading stayed; the sentence moved into the
+body.
+
+`make check` exits 0, `make smoke` exits 0 across 116 checks.
+
 ## Phase 63 — the default that would have installed a stranger's image
 
 ### What the readiness check found
@@ -3067,12 +3164,14 @@ all ten pages the panel serves rather than eight.
 
 ## Next tasks
 
-1. Run the installer end to end on a real Ubuntu server and measure idle memory.
-   Both need hardware this sandbox cannot provide.
-2. Tag a release, which publishes the binaries and the image the installer
-   points at.
-3. Deploy a real application from Git, end to end, on that server — the one
-   flow that has never been exercised against a live cluster.
+1. `make verify-remote HOST=root@…` on a server somebody is willing to rebuild.
+   It installs, deploys an application from Git, and works through the phases in
+   `docs/checklist.md`. Measure idle memory while it is up. Everything below is
+   worth less than this.
+2. Tag a release. `docs/releasing.md`; everything it needs is in place, and what
+   it waits on is the run above rather than a decision.
+3. Phase 6: give somebody `docs/quick-start.md` and nothing else, and fill in
+   `docs/walkthrough.md` while they use it.
 4. A schedule for a volume backup. The scheduler already runs a policy whose
    target is a volume; there is no route, no handler and no control, and
    `docs/backups.md` now says so rather than implying otherwise.
@@ -3093,18 +3192,19 @@ all ten pages the panel serves rather than eight.
   largest single gap in this repository, it is a consequence of ADR-0010, and
   writing scripts that could not be run here would have widened it rather than
   closed it.
-* **None of the published install path exists.** `get.skifity.com` does not
-  resolve. There is no `skifity/skifity` repository on GitHub — this one is
-  `TegarTheGreat/Skifity` — so the installer's manifest fetch
-  (`raw.githubusercontent.com/skifity/skifity/main/deploy`) and its CLI download
-  (`github.com/skifity/skifity/releases`) both point at nothing, and
-  `ghcr.io/skifity/skifity` has never been pushed. This entry used to admit only
-  the image. The working path is to clone the repository, `make image`, and run
+* **Nothing has been released.** No tag, so nothing at
+  `ghcr.io/tegarthegreat/skifity` and no version to put in the one-line install.
+  Where it publishes is settled and derived from one line (Phase 64); what is
+  missing is the tag, and `docs/releasing.md` is the procedure. The installer
+  knows it is unreleased and refuses before k3s is installed rather than after.
+  The working path is still to clone, `make image`, and run
   `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set, which
   makes it read `deploy/*.yaml` from disk; the README, `llms.txt` and the quick
-  start now say so where the one-line command is. Since Phase 63 the installer
-  refuses the unpublished image in `preflight`, before k3s is installed, rather
-  than failing on the pull with a half-built cluster already on the machine.
+  start say so where the one-line command is.
+* **This repository has no default branch.** The only branch is the one being
+  worked on. Nothing depends on that any more — the installer reads its
+  manifests from the release's own ref rather than from a branch — but a release
+  should be cut from somewhere stable, and deciding where is the owner's.
 * **No plugin has ever actually run.** The manifest standard, the permission
   model, the rendered Kubernetes objects, the event delivery and the blocking
   verdicts are unit-tested. Whether a real plugin image starts in the namespace

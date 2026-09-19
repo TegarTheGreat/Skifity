@@ -13,17 +13,18 @@ You give it a server. It gives you URLs.
 ---
 
 ```sh
-curl -fsSL https://get.skifity.com | sudo sh
+curl -fsSL https://raw.githubusercontent.com/TegarTheGreat/Skifity/<version>/installer/install.sh | sudo sh
 ```
 
 That is the whole installation. It checks the server, installs Kubernetes,
 starts the panel, and prints a URL and a one-time token. Open the URL, create
-your account, paste a Git repository, and you have an app on the internet with
-HTTPS.
+your account, paste a Git repository, and you have an app on the internet. Add
+a domain you own and HTTPS is turned on for it automatically; the free address
+every app starts with is plain HTTP on purpose, for the reason in ADR-0015.
 
-**That command does not work yet.** `get.skifity.com` does not resolve and
-nothing has been released, so there is no one-line install to run — see
-[Status](#status) for what does work today and what it is waiting on.
+**There is no `<version>` to put in that URL yet**, because no release has been
+tagged. The installer refuses before it changes anything rather than half
+installing — see [Status](#status) for the two commands that do work today.
 
 <p align="center">
   <img src="docs/images/overview-dark.png" alt="The overview, on a fresh install with no servers yet" width="820">
@@ -199,18 +200,23 @@ and runs on anything.
 
 Honest version, two parts.
 
-**Nothing is published.** `get.skifity.com` does not resolve. There is no
-`skifity/skifity` repository on GitHub — this one lives at
-`TegarTheGreat/Skifity`. No image has been pushed to `ghcr.io/skifity/skifity`,
-and no release has been tagged, so the CLI download in the installer has nothing
-to download. Every one-line install command in this README and in the
-documentation is what the install will be, not what it is. `plugins.skifity.com`
-does not resolve either, so the panel's plugin store reads an index that is not
-there yet; a plugin is installed by giving its address. What works today:
-clone the repository, `make image`, and run `installer/install.sh` from inside
-the clone with `SKIFITY_IMAGE` pointed at the image you just built — the
-installer then reads its manifests from disk. [Quick
-start](docs/quick-start.md) has the exact commands.
+**Nothing is published.** No release has been tagged, so nothing has been
+pushed to `ghcr.io/tegarthegreat/skifity` and there is no version to put in the
+one-line install above. The installer knows: it names the release it installs in
+its own source, and refuses before touching the machine while that is empty.
+`plugins.skifity.com` does not resolve either, so the panel's plugin store reads
+an index that is not there yet; a plugin is installed by giving its address.
+
+What works today is two commands:
+
+```sh
+make image
+sudo SKIFITY_IMAGE=ghcr.io/tegarthegreat/skifity:$(git describe --tags --always --dirty) \
+  sh installer/install.sh
+```
+
+Run from inside the clone, the installer reads `deploy/*.yaml` from disk, so
+nothing is fetched. [Quick start](docs/quick-start.md) has the rest.
 
 **Nothing has run against a real cluster.** The environment this was built in
 refuses privileged containers, so k3s could never be started in it. Everything

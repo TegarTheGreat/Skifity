@@ -1,7 +1,8 @@
 # Quick start
 
-From an empty server to an app on the internet. About ten minutes, most of it
-waiting for things to download.
+From an empty server to an app on the internet. Most of it is waiting for things
+to download, and how long that takes has never been measured on real hardware —
+when it has, the number goes here.
 
 ## What you need
 
@@ -54,36 +55,42 @@ Linux.
 
 ## 1. Install
 
-> **Not published yet.** `get.skifity.com` does not resolve, there is no
-> `skifity/skifity` repository on GitHub, and no image has been pushed to
-> `ghcr.io/skifity/skifity`. The command below is what the install *will* be. To
-> try it today, clone the repository and run the installer from inside it, which
-> reads the manifests from disk instead of fetching them:
+> **Not published yet.** No release has been tagged, so there is no version to
+> put in the URL below and nothing at `ghcr.io/tegarthegreat/skifity` to pull.
+> The installer knows this and refuses before it changes anything. To try it
+> today, clone the repository and run the installer from inside it, which reads
+> the manifests from disk instead of fetching them:
 >
 > ```sh
 > git clone https://github.com/TegarTheGreat/Skifity && cd Skifity
-> make image                        # builds ghcr.io/skifity/skifity:<version>
-> sudo SKIFITY_IMAGE=ghcr.io/skifity/skifity:$(git describe --tags --always --dirty) \
+> make image                        # prints the tag it built
+> sudo SKIFITY_IMAGE=ghcr.io/tegarthegreat/skifity:$(git describe --tags --always --dirty) \
 >   sh installer/install.sh
 > ```
 >
 > The image tag is local; nothing is pushed anywhere. Running the installer from
 > inside the clone is what makes it read `deploy/*.yaml` from disk rather than
-> fetching them from a repository that is not there.
+> fetching them from a release that does not exist.
 >
 > Do that on a VPS you can throw away. See the Status section of the README.
 
 SSH into the server and run:
 
 ```sh
-curl -fsSL https://get.skifity.com | sudo sh
+curl -fsSL https://raw.githubusercontent.com/TegarTheGreat/Skifity/<version>/installer/install.sh | sudo sh
 ```
+
+`<version>` is the release you are installing, `v1.2.3`. It is in the URL on
+purpose: the installer fetched from a tag applies the Kubernetes objects that
+tag's image was built with, so an upgrade never mixes one release's image with
+another's Deployment.
 
 If you already have a domain pointed at the server, tell the installer and it
 sets up HTTPS at the same time:
 
 ```sh
-curl -fsSL https://get.skifity.com | sudo SKIFITY_DOMAIN=panel.example.com sh
+curl -fsSL https://raw.githubusercontent.com/TegarTheGreat/Skifity/<version>/installer/install.sh \
+  | sudo SKIFITY_DOMAIN=panel.example.com sh
 ```
 
 It checks the server first, installs Kubernetes, starts the panel, and finishes
@@ -126,7 +133,15 @@ That is the whole form. Skifity works out how to build it, gives it a URL, and
 sets `PORT` for it to listen on. The deployment page shows the build as it
 happens.
 
-When it finishes, the app has a working address with HTTPS. Press it.
+When it finishes, the app has a working address. Press it.
+
+That first address looks like `web.203-0-113-10.sslip.io`, and it is **plain
+HTTP, on purpose**. sslip.io resolves any name under it to the IP in the name,
+so there is no DNS to set up — but every Skifity install in the world shares
+that one domain's certificate rate limit, and a free address that stops working
+because somebody else installed Skifity this morning is worse than one that was
+never encrypted (ADR-0015). HTTPS is the next step, and it is automatic once the
+domain is yours.
 
 > The button is there because setup already made you a project called **First
 > project** with a **Production** environment in it, and because the server you
@@ -139,7 +154,8 @@ When it finishes, the app has a working address with HTTPS. Press it.
 
 Open the app, go to **Domains**, and add yours. The panel shows the DNS record
 to create. Once it resolves, the certificate is issued automatically and the
-domain goes green.
+domain goes green. This is where HTTPS comes from: a domain you control has its
+own rate limit, so cert-manager can ask for a certificate and keep renewing it.
 
 Your app keeps its original address too, so nothing breaks while DNS
 propagates.

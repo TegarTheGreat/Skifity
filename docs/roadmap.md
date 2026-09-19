@@ -112,23 +112,20 @@ In the order it matters.
    is drawn, and measures what the whole thing costs. Until it has passed once,
    every other claim in this repository is about code that has never met a
    cluster.
-2. **Tag a release.** This was worse than "the image does not exist yet". The
-   release published to `ghcr.io/skifity/skifity`, which is **not this
-   repository and not a namespace anybody here owns** — so a tag would either
-   fail or, worse, point every installer at a name somebody else could register.
-   The release now publishes to the repository it is cut from, derived from
-   `GITHUB_REPOSITORY`, so it is right wherever that is.
+2. **Tag a release.** Everything a tag needs is now in place. The release
+   publishes to the repository it is cut from, derived from `GITHUB_REPOSITORY`,
+   so it is right wherever that is; the installer derives its image, its
+   manifests and its links from one `PROJECT_REPO` line; the manifests are
+   pinned to the release being installed rather than to a branch, so no default
+   branch has to exist and no install can mix one release's image with another's
+   objects; `scripts/check-home.sh` fails the build if a name this project does
+   not own comes back; and the release workflow refuses a tag whose installer
+   does not say it installs that tag. `docs/releasing.md` is the procedure.
 
-   The installer is no longer part of that hole. A shell script downloaded by
-   a stranger cannot derive where it was cut from, so `install.sh` still has a
-   literal default — but it now refuses that default in `preflight`, before k3s
-   is installed or anything on the machine changes, and says how to build an
-   image and pass it instead. `make smoke` checks the refusal fires and is
-   asked first.
+   What it waits on is the run above, not a decision. A release is an invitation
+   to install, and the first person to accept it should not be the first person
+   to find out whether any of this works on a cluster.
 
-   What is still a decision rather than a fix: where this project publishes.
-   That line has to name a real home before anybody can install with one
-   command, and choosing it is choosing the project's public home.
 3. **Measure k3s's own footprint.** The panel's is measured, in
    `docs/performance.md`. The cluster's is not, and "runs on a 2 GB VPS" is a
    claim about the pair.

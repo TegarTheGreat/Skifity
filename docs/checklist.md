@@ -150,36 +150,52 @@ binary. The check that actually matters is Phase 6, and it needs a person.
 
 ## Can somebody install this today?
 
-No, and that is the shortest true answer about MVP readiness.
+Not with one command, and the reason is now one step rather than three.
 
-There is no published image. The release workflow now publishes to whatever
-repository it is cut from, so a tag would produce one — but no tag has been cut,
-and `installer/install.sh` cannot derive a name a stranger's `curl | sh` would
-reach. Until this session it carried a literal default of
-`ghcr.io/skifity/skifity`, a namespace nobody here owns: the install would run
-to the end — k3s installed, firewall changed, `/etc` written — and only then
-fail on the pull, or, the day somebody registered that name, quietly run a
-stranger's image as root. It now refuses in `preflight`, before the machine is
-touched, and names the two commands that build and pass a local image instead.
-`make smoke` checks that refusal fires, says what to do and is asked before k3s
-is installed.
+**Where this project publishes is settled: the repository it is in.**
+`TegarTheGreat/Skifity`, so `ghcr.io/tegarthegreat/skifity` for the image and
+that repository's raw URL for the installer and the manifests. It is one line in
+`installer/install.sh` and one in the `Makefile`; everything else derives from
+them, and `scripts/check-home.sh` fails the build if a name this project does
+not own reappears anywhere. Moving to an organisation of its own later is those
+two lines.
 
-So the honest install story is: **clone, `make image`, and pass
-`SKIFITY_IMAGE`.** That is a developer's install, not a user's. Turning it into
-a user's install is one decision — where this project publishes — followed by
-one tag.
+**The manifests are pinned to the release**, not to a branch:
+`raw.githubusercontent.com/<repo>/<version>/deploy`. That fixes a real defect —
+an install that pulled one release's image and another's Deployment — and it
+means no default branch has to exist for an install to work, which matters here,
+because this repository does not have one.
 
-That is the first of three things between here and an MVP anybody else can use:
+**What is missing is the tag.** No release has ever been cut, so
+`RELEASED_VERSION` in the installer is empty, and the installer says so and
+refuses before k3s is installed rather than after. `docs/releasing.md` is the
+list of steps, and the release workflow refuses to publish a tag whose installer
+disagrees with it.
 
-1. **Somewhere to publish, and a tag.** One decision, then the existing
-   workflow. Without it item 15 is a claim about a script nobody can run.
-2. **`test/cluster/verify.sh`, once, on a real server.** Thirteen of the
+So the install that works today is still two commands:
+
+```sh
+make image
+sudo SKIFITY_IMAGE=<the tag it printed> sh installer/install.sh
+```
+
+That is a developer's install. The user's install is one `git tag` away — and
+that tag should not be cut before the run below, because the first thing a
+release does is invite somebody to install code that has never met a cluster.
+
+That is the order of what is left:
+
+1. **`test/cluster/verify.sh`, once, on a real server.** Thirteen of the
    eighteen rows are Written outright and two more are half of one, which means
    the code and its unit tests exist and no cluster has ever seen them. One run
    moves most of them, or tells us which ones were wrong, and nothing else in
-   this repository is worth as much.
+   this repository is worth as much. `make verify-remote HOST=root@…` runs it on
+   a throwaway server from a laptop.
+2. **The tag.** `docs/releasing.md`. Everything it needs is in place; what it
+   waits on is the run above, not a decision.
 3. **Phase 6, with a person who has not seen it.** The documentation is served
    and its links resolve, which is not the same as it being followed.
+   `docs/walkthrough.md` is the sheet they fill in.
 
 Everything else on the roadmap is smaller than any of these.
 

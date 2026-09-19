@@ -47,7 +47,11 @@ REPORT="/var/log/skifity-verify.log"
 # file and a Dockerfile with nothing to download, so a failure is the builder's
 # and not the network's.
 : "${VERIFY_GIT_REPO:=https://github.com/TegarTheGreat/Skifity}"
-: "${VERIFY_GIT_BRANCH:=main}"
+# The branch to build from. This repository has no "main": what exists is
+# whatever branch this checkout is on, and that is the one worth verifying, so
+# it is read rather than assumed. A run that spent an hour installing and then
+# failed to clone a branch nobody ever pushed would be a waste of a server.
+: "${VERIFY_GIT_BRANCH:=$(git -C "$(dirname "$0")/../.." rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
 : "${VERIFY_GIT_ROOT:=test/cluster/sample-app}"
 : "${VERIFY_APP_PORT:=8080}"
 # Backups need somewhere to put them. Without these, phase 2 says so and skips

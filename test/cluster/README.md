@@ -28,6 +28,20 @@ Phase 6 is a person and should not become a script: give somebody
 **It installs k3s and changes the machine permanently.** Use a server you are
 willing to rebuild — a fresh VPS, not something you care about.
 
+From a laptop, against a server you are willing to rebuild:
+
+```sh
+make verify-remote HOST=root@203.0.113.10
+```
+
+That builds the image for the server's architecture, streams it into the
+directory k3s imports from before k3s exists — so nothing is pushed to a
+registry and no credentials are needed — copies this checkout across, runs the
+phases, and brings the report back to `verify-report.log`. `DRY_RUN=1` prints
+every command instead of running it.
+
+On the server itself:
+
 ```sh
 git clone <this repository> && cd Skifity
 make image                                   # or pull one from somewhere
@@ -46,6 +60,7 @@ of them failed and you are fixing it.
 | `SKIFITY_DOMAIN` | The panel's domain. Defaults to `<public-ip>.nip.io`, so there is nothing to set up in DNS. A domain you own is what makes the HTTPS check run rather than skip. |
 | `SKIFITY_PUBLIC_IP` | Set it when the machine cannot work its own out. |
 | `SKIFITY_PHASES` | Which phases to run. Default `1 2 3 4 5`. |
+| `HOST` | For `make verify-remote`: the server to run on, `root@1.2.3.4`. |
 | `SKIFITY_ASSUME_YES` | `1` to skip the confirmation. |
 | `VERIFY_GIT_REPO` / `VERIFY_GIT_BRANCH` / `VERIFY_GIT_ROOT` | The application phase 1 builds. Defaults to this repository's own `test/cluster/sample-app`: one Go file and a Dockerfile with nothing to download, so a build failure is the builder's and not the network's. |
 | `VERIFY_S3_ENDPOINT` / `VERIFY_S3_BUCKET` / `VERIFY_S3_ACCESS_KEY` / `VERIFY_S3_SECRET_KEY` | Where backups go. Without them phase 2 skips the backup check and says so — a backup with nowhere to put it is not a backup. |

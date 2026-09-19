@@ -34,3 +34,6 @@ web/.e2e-workdir
 # Python bytecode from the one-off importers in hack/.
 __pycache__/
 *.pyc
+
+# The report test/cluster/verify-remote.sh brings back from a server.
+verify-report.log

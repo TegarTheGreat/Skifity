@@ -16,7 +16,7 @@ import (
 // values are what the installer substitutes, with obviously fake stand-ins.
 var values = map[string]string{
 	"NAMESPACE":   "skifity-system",
-	"IMAGE":       "ghcr.io/skifity/skifity:0.0.0-test",
+	"IMAGE":       "ghcr.io/example/skifity:0.0.0-test",
 	"NODE":        "test-node-1",
 	"PUBLIC_URL":  "https://panel.example.test",
 	"POD_NETWORK": "wireguard-native",

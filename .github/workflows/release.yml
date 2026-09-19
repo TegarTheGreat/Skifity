@@ -44,6 +44,23 @@ jobs:
         run: |
           echo "IMAGE_REPO=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
           echo "REPO_URL=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_ENV"
+          echo "RAW_BASE=https://raw.githubusercontent.com/${{ github.repository }}" >> "$GITHUB_ENV"
+
+      # The installer downloaded from this tag has to know which release it is.
+      # It reads RELEASED_VERSION from its own source, so a tag whose installer
+      # still says something else would install the wrong image — or, while the
+      # line is empty, refuse to install at all. Caught here, before anything is
+      # published, rather than by the first person to run it.
+      - name: The installer agrees with the tag
+        run: |
+          set -eu
+          declared=$(SKIFITY_INSTALLER_LIB=1 sh -c '. ./installer/install.sh; printf "%s" "$RELEASED_VERSION"')
+          if [ "$declared" != "${GITHUB_REF_NAME}" ]; then
+            echo "installer/install.sh says RELEASED_VERSION=\"${declared}\", but this tag is ${GITHUB_REF_NAME}." >&2
+            echo "Set it in the release commit and tag that commit. See docs/releasing.md." >&2
+            exit 1
+          fi
+          echo "installer/install.sh installs ${declared}"
 
       - uses: goreleaser/goreleaser-action@v6
         with:

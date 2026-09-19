@@ -10,6 +10,11 @@ BIN_DIR := bin
 DIST := web/dist
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Where this project publishes, lowercased for a registry that insists on it.
+# One line here, one in installer/install.sh, and nothing else names a host.
+PROJECT_REPO ?= TegarTheGreat/Skifity
+IMAGE_REPO ?= ghcr.io/$(shell echo $(PROJECT_REPO) | tr '[:upper:]' '[:lower:]')
+IMAGE ?= $(IMAGE_REPO):$(VERSION)
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -24,7 +29,7 @@ export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
 .PHONY: help build frontend backend dev dev-api test test-go test-race lint lint-go \
-	lint-web fmt check i18n smoke e2e screenshots image audit clean deps tidy release install-hooks ui
+	lint-web fmt check i18n home smoke e2e screenshots image audit clean deps tidy release install-hooks ui
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*##" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -68,7 +73,7 @@ test-go: ## Run the Go tests
 test-race: ## Run the Go tests with the race detector
 	go test -race ./...
 
-lint: lint-go lint-web i18n destructive ## Run every linter
+lint: lint-go lint-web i18n destructive home ## Run every linter
 
 lint-go: ## Vet the Go code, and run golangci-lint when it can read this module
 	go vet ./...
@@ -88,6 +93,9 @@ i18n: ## Fail if any translation is missing in any language
 destructive: ## Fail if anything destructive happens without asking first
 	npm --prefix web run check:destructive
 
+home: ## Fail if anything names a repository or domain this project does not own
+	@./scripts/check-home.sh
+
 fmt: ## Format Go and frontend code
 	gofmt -w ./cmd ./internal
 	npm --prefix web run format
@@ -106,15 +114,28 @@ check: lint test audit ## What CI runs
 smoke: backend ## Run the smoke tests against a freshly built binary
 	./test/smoke/panel.sh
 	./test/smoke/installer.sh
+	./test/smoke/verify.sh
 
 # Never part of `check`, and never run by CI: it installs k3s and changes the
 # machine. It is what somebody runs on a server they are willing to rebuild,
 # before a release, and it asks for a typed yes first.
-.PHONY: verify
+.PHONY: verify verify-remote print-image
 verify: ## Install on THIS machine and crosscheck the whole checklist on a real cluster
 	@echo "This installs k3s and changes this machine. See test/cluster/README.md."
 	@echo "SKIFITY_PHASES=\"1 2 3 4 5\" picks which phases run; docs/checklist.md says what each covers."
 	sudo -E bash test/cluster/verify.sh
+
+# The same crosscheck, on a server that is not this one — which is the only way
+# most people will ever run it. It builds the image for the server's
+# architecture, sends it into the directory k3s imports from before k3s exists,
+# copies this checkout across and brings the report back. No registry, no
+# credentials.
+verify-remote: ## Run the crosscheck on a throwaway server (HOST=root@1.2.3.4)
+	@bash test/cluster/verify-remote.sh
+
+# The image tag the other targets build, for a script that has to name it.
+print-image:
+	@echo $(IMAGE)
 
 e2e: ui backend ## Run the Playwright user interface test against the real binary
 	npm --prefix web run test:e2e
@@ -140,7 +161,8 @@ image: ## Build the panel's container image (PLATFORM=linux/arm64 to cross-build
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
 		--build-arg DATE=$(DATE) \
-		-t ghcr.io/skifity/skifity:$(VERSION) .
+		-t $(IMAGE) .
+	@printf '\nBuilt %s\n\n  sudo SKIFITY_IMAGE=%s sh installer/install.sh\n\n' "$(IMAGE)" "$(IMAGE)"
 
 deps: ## Download dependencies
 	go mod download

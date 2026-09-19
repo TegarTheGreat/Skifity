@@ -21,7 +21,7 @@ func TestRepoAndTag(t *testing.T) {
 		{"skifity-registry.skifity-builds.svc.cluster.local:5000/acme-prod/web:a1b2c3d4e5f6",
 			"acme-prod/web", "a1b2c3d4e5f6", true},
 		{"registry:5000/acme-prod/web:buildcache", "acme-prod/web", "buildcache", true},
-		{"ghcr.io/skifity/skifity:v1.2.3", "skifity/skifity", "v1.2.3", true},
+		{"ghcr.io/example/skifity:v1.2.3", "example/skifity", "v1.2.3", true},
 		// A reference with no tag is not something a sweep should guess about.
 		{"registry:5000/acme-prod/web", "", "", false},
 		{"nginx", "", "", false},

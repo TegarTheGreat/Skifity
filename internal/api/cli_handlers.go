@@ -16,7 +16,7 @@ import (
 // twice over.
 //
 // The installer used to fetch the CLI from a releases page, and there is no
-// release: `github.com/skifity/skifity` does not exist, so every install ended
+// release: no releases page existed, so every install ended
 // with "could not download the command line tool" and a link to nothing. It now
 // asks the panel it has just started, which always answers and always answers
 // with the matching version — a CLI one release behind its panel is a class of

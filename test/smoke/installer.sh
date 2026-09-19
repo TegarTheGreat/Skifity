@@ -74,41 +74,71 @@ case "$fail_text" in
 *) t_fail "a failure should say how to fix it" ;;
 esac
 
-# --- the installer refuses an image nobody published ------------------------
+# --- the installer refuses to install what does not exist -------------------
 
-# There is no published Skifity image. The default name is in a namespace this
-# project does not own, so an install that carried on would either fail on the
-# pull after k3s was already on the machine, or — once somebody registers that
-# name — run a stranger's image as root. The refusal has to come before
-# anything changes.
-( IMAGE="${UNPUBLISHED_IMAGE}:latest"; check_image >/dev/null 2>&1 ) &&
-  t_fail "the installer should refuse the unpublished default image" ||
-  t_pass "the unpublished default image is refused"
+# Two things an install needs and this script cannot invent: an image to run,
+# and the Kubernetes objects that go with it. Both have to be settled before
+# k3s is installed, not after, or a failure leaves a half-built cluster behind.
 
-image_text=$( (IMAGE="${UNPUBLISHED_IMAGE}:latest"; check_image) 2>&1 || true)
-case "$image_text" in
-*"${UNPUBLISHED_IMAGE}:latest"*) t_pass "the refusal names the image it will not use" ;;
-*) t_fail "the refusal should name the image, got: $image_text" ;;
+# Nothing published, nothing named: refuse.
+( VERSION=""; SKIFITY_IMAGE=""; SOURCE_DIR="$WORKDIR"; check_release >/dev/null 2>&1 ) &&
+  t_fail "the installer should refuse when no release is published and no image is named" ||
+  t_pass "an install with no release and no image is refused"
+
+release_text=$( (VERSION=""; SKIFITY_IMAGE=""; SOURCE_DIR="$WORKDIR"; check_release) 2>&1 || true)
+case "$release_text" in
+*"No Skifity release has been published yet"*) t_pass "the refusal says there is no release" ;;
+*) t_fail "the refusal should say there is no release, got: $release_text" ;;
 esac
-case "$image_text" in
-*"make image"*"SKIFITY_IMAGE"*) t_pass "the refusal says how to build and pass one" ;;
+case "$release_text" in
+*"make image"*"SKIFITY_IMAGE"*) t_pass "the refusal says how to build one and pass it" ;;
 *) t_fail "the refusal should say how to build an image and pass it" ;;
 esac
-case "$image_text" in
+case "$release_text" in
 *"Nothing on this server has been changed"*) t_pass "the refusal says the server is untouched" ;;
 *) t_fail "the refusal should say nothing was changed" ;;
 esac
+case "$release_text" in
+*"github.com/${PROJECT_REPO}"*) t_pass "the refusal names the repository to clone" ;;
+*) t_fail "the refusal should name the repository, got: $release_text" ;;
+esac
 
-( IMAGE="registry.example.test/skifity:1.2.3"; check_image >/dev/null 2>&1 ) &&
-  t_pass "an image the operator built is accepted" ||
-  t_fail "check_image should accept an image the operator names"
+# An image, but nowhere to read the objects from: refuse too. This is the
+# curl | sh case with SKIFITY_IMAGE set and no version, where the manifest URL
+# has an empty ref in it and 404s after k3s is already installed.
+( VERSION=""; SKIFITY_IMAGE="registry.example.test/skifity:1.2.3"; SOURCE_DIR="$WORKDIR"; check_release >/dev/null 2>&1 ) &&
+  t_fail "the installer should refuse an image with no manifests to go with it" ||
+  t_pass "an image with nowhere to read the objects from is refused"
+
+manifest_text=$( (VERSION=""; SKIFITY_IMAGE="registry.example.test/skifity:1.2.3"; SOURCE_DIR="$WORKDIR"; check_release) 2>&1 || true)
+case "$manifest_text" in
+*"nowhere to read the Kubernetes objects"*) t_pass "that refusal says which half is missing" ;;
+*) t_fail "the refusal should say the objects have no source, got: $manifest_text" ;;
+esac
+
+# The two ways an install is allowed to go ahead.
+( VERSION=""; SKIFITY_IMAGE="registry.example.test/skifity:1.2.3"; SOURCE_DIR="$ROOT"; check_release >/dev/null 2>&1 ) &&
+  t_pass "an image plus a clone on disk is accepted" ||
+  t_fail "check_release should accept an image read alongside deploy/ on disk"
+
+( VERSION="v9.9.9"; SKIFITY_IMAGE=""; SOURCE_DIR="$WORKDIR"; check_release >/dev/null 2>&1 ) &&
+  t_pass "a published release is accepted" ||
+  t_fail "check_release should accept a published release"
+
+# The manifests must come from the release being installed, not from a branch:
+# a branch moves, and v1's image with main's objects is a Deployment the image
+# has never seen.
+case "$(SKIFITY_INSTALLER_LIB=1 SKIFITY_VERSION=v1.2.3 sh -c '. '"$ROOT"'/installer/install.sh; printf "%s" "$MANIFEST_BASE"' 2>/dev/null)" in
+*"/v1.2.3/deploy") t_pass "the manifests are pinned to the release being installed" ;;
+*) t_fail "the manifest base is not pinned to the version being installed" ;;
+esac
 
 # And it has to be asked before the machine is touched: preflight runs first,
-# and check_image runs inside it before any step that changes anything.
-if awk '/^preflight\(\) \{/,/^\}/' "$ROOT/installer/install.sh" | grep -q 'check_image'; then
-  t_pass "the image is checked inside preflight"
+# and check_release runs inside it before any step that changes anything.
+if awk '/^preflight\(\) \{/,/^\}/' "$ROOT/installer/install.sh" | grep -q 'check_release'; then
+  t_pass "the release is checked inside preflight"
 else
-  t_fail "check_image is no longer called from preflight"
+  t_fail "check_release is no longer called from preflight"
 fi
 if awk '/^preflight$/{p=1} /^install_k3s$/{k=1; if (p) print "ordered"}' "$ROOT/installer/install.sh" | grep -q ordered; then
   t_pass "preflight runs before k3s is installed"
@@ -120,7 +150,7 @@ fi
 
 SOURCE_DIR="$ROOT"
 NAMESPACE="skifity-system"
-IMAGE="ghcr.io/skifity/skifity:0.0.0-test"
+IMAGE="registry.example.test/skifity:0.0.0-test"
 NODE_NAME="test-node"
 PANEL_HOST="panel.example.test"
 PUBLIC_URL="https://panel.example.test"

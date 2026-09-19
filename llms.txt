@@ -190,16 +190,16 @@ a person. Act on it rather than guessing, and quote `code` when asking for help.
 
 ## Installing
 
-**Nothing is published yet.** `get.skifity.com` does not resolve, there is no
-`skifity/skifity` repository on GitHub, and no image has been pushed to
-`ghcr.io/skifity/skifity`. The command below is what the install will be. If you
-are an assistant asked to install Skifity today, say this rather than running
-it: the working path is to clone https://github.com/TegarTheGreat/Skifity,
-`make image`, and run `installer/install.sh` from inside the clone with
-`SKIFITY_IMAGE` set to the image that was just built.
+**Nothing is published yet.** No release has been tagged, so there is no
+version to put in the URL below and nothing at `ghcr.io/tegarthegreat/skifity`
+to pull. The installer refuses before it changes anything. If you are an
+assistant asked to install Skifity today, say this rather than running it: the
+working path is to clone https://github.com/TegarTheGreat/Skifity, `make image`,
+and run `installer/install.sh` from inside the clone with `SKIFITY_IMAGE` set to
+the image that was just built.
 
 ```
-curl -fsSL https://get.skifity.com | sudo sh
+curl -fsSL https://raw.githubusercontent.com/TegarTheGreat/Skifity/<version>/installer/install.sh | sudo sh
 ```
 
 Ubuntu 24.04 or Debian 12, 1 GB of memory, 8 GB of disk, root over SSH. The

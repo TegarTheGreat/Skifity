@@ -53,7 +53,7 @@ func sampleConfig() guard.Config {
 // Traefik has no way to ignore an authorizer that does not answer, so anything
 // that can take both replicas away at once takes every protected site with it.
 func TestTheGuardSurvivesAServerAndARollout(t *testing.T) {
-	objects, err := guardObjects("skifity-system", "ghcr.io/skifity/skifity:1.0.0", sampleConfig())
+	objects, err := guardObjects("skifity-system", "ghcr.io/example/skifity:1.0.0", sampleConfig())
 	if err != nil {
 		t.Fatalf("guardObjects: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestTheGuardSurvivesAServerAndARollout(t *testing.T) {
 // that every request on the internet reaches is the first thing an attacker
 // looks for.
 func TestTheGuardHoldsNoCredentials(t *testing.T) {
-	objects, err := guardObjects("skifity-system", "ghcr.io/skifity/skifity:1.0.0", sampleConfig())
+	objects, err := guardObjects("skifity-system", "ghcr.io/example/skifity:1.0.0", sampleConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

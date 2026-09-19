@@ -55,11 +55,10 @@ checksum:
 
 # The image is published to the repository this release is cut from.
 #
-# It used to name ghcr.io/skifity/skifity, which is not this repository and not
-# a namespace anyone here owns — so a release would either fail or, worse, tell
-# every installer to pull from a name somebody else could register. The workflow
-# sets IMAGE_REPO from GITHUB_REPOSITORY, lowercased, which is right wherever it
-# is released from and needs no decision here.
+# It used to name a namespace nobody here owns — so a release would either fail
+# or, worse, tell every installer to pull from a name somebody else could
+# register. The workflow sets IMAGE_REPO from GITHUB_REPOSITORY, lowercased,
+# which is right wherever it is released from and needs no decision here.
 dockers_v2:
   - id: panel
     images:
@@ -102,8 +101,11 @@ release:
     ## Installing
 
     ```sh
-    curl -fsSL https://get.skifity.com | sudo sh
+    curl -fsSL {{ .Env.RAW_BASE }}/{{ .Tag }}/installer/install.sh | sudo sh
     ```
+
+    The installer is pinned to this tag, so the Kubernetes objects it applies
+    are the ones this image was built with.
 
     Already running Skifity? Upgrade from Settings, or:
 

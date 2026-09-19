@@ -1,13 +1,13 @@
 #!/bin/sh
 # Skifity installer.
 #
-#   curl -fsSL https://get.skifity.com | sh
+#   curl -fsSL https://raw.githubusercontent.com/<repo>/<version>/installer/install.sh | sudo sh
 #
-# That command does not work yet: get.skifity.com does not resolve and no image
-# has been published. Until it has, install from a clone:
+# No release has been tagged yet, so there is no <version> to put in that URL.
+# Until there is, install from a clone:
 #
 #   make image
-#   sudo SKIFITY_IMAGE=<your image> SKIFITY_MANIFEST_BASE=./deploy sh installer/install.sh
+#   sudo SKIFITY_IMAGE=<your image> sh installer/install.sh
 #
 # Turns a fresh Ubuntu or Debian server into a Skifity control plane: k3s, the
 # panel, and a URL to open. It is safe to run again: every step checks what is
@@ -35,15 +35,28 @@
 
 set -eu
 
-VERSION="${SKIFITY_VERSION:-latest}"
-# The name the project would publish under if it had a published home. It does
-# not: ghcr.io/skifity and github.com/skifity are not namespaces this project
-# owns, and nothing has ever been pushed to either. So this is not a default
-# that happens to fail — it is a default that would, the day somebody else
-# registers that name, silently start working and run a stranger's image as
-# root on your server. preflight refuses it before the machine is touched.
-UNPUBLISHED_IMAGE="ghcr.io/skifity/skifity"
-IMAGE="${SKIFITY_IMAGE:-${UNPUBLISHED_IMAGE}:${VERSION}}"
+# Where this project publishes. Moving it to another repository or
+# organisation is this one line: the image, the manifests and the links in
+# every message below are derived from it, and nothing else names a host.
+PROJECT_REPO="${SKIFITY_REPO:-TegarTheGreat/Skifity}"
+
+# The newest published release, set by the commit that tags one — the release
+# workflow refuses to build a tag whose installer disagrees with it. While it
+# is empty nothing has been published, and check_release says so before
+# anything on this machine changes rather than after k3s is installed.
+RELEASED_VERSION=""
+VERSION="${SKIFITY_VERSION:-$RELEASED_VERSION}"
+
+# ghcr.io wants a lowercase path and a repository name keeps its owner's
+# capitals, so it is lowered here rather than assumed.
+IMAGE_REPO="ghcr.io/$(printf '%s' "$PROJECT_REPO" | tr '[:upper:]' '[:lower:]')"
+IMAGE="${SKIFITY_IMAGE:-${IMAGE_REPO}:${VERSION}}"
+
+# The manifests come from the release being installed, not from a branch. A
+# branch moves; an install that pulled v1's image and main's objects would
+# apply a Deployment the image has never seen. This also means no default
+# branch has to exist for an install to work.
+MANIFEST_BASE="${SKIFITY_MANIFEST_BASE:-https://raw.githubusercontent.com/${PROJECT_REPO}/${VERSION}/deploy}"
 NAMESPACE="skifity-system"
 CONFIG_DIR="/etc/skifity"
 DATA_DIR="/var/lib/skifity"
@@ -117,26 +130,39 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # --- preflight --------------------------------------------------------------
 
-# The image has to be one that exists. Called by preflight before anything on
-# this machine changes: carrying on would install k3s, change the firewall and
-# write to /etc, and only then fail on a pull — leaving a half-built cluster
-# behind — or, once somebody registers that namespace, succeed with an image
-# nobody here published.
-check_image() {
-	case "$IMAGE" in
-	"${UNPUBLISHED_IMAGE}:"*)
+# An install needs two things this script cannot invent: an image to run, and
+# the Kubernetes objects that go with it. Called by preflight before anything
+# on this machine changes, because the alternative is installing k3s, changing
+# the firewall and writing to /etc, and only then failing on a pull — leaving a
+# half-built cluster on somebody's server.
+check_release() {
+	if [ -z "${SKIFITY_IMAGE:-}" ] && [ -z "$VERSION" ]; then
 		fail \
-			"There is no published Skifity image yet, and ${IMAGE} is not a name this project owns." \
+			"No Skifity release has been published yet, so there is no image to install." \
 			"Build one from the repository and point the installer at it:
 
-  git clone <this repository> && cd skifity
+  git clone https://github.com/${PROJECT_REPO}.git && cd ${PROJECT_REPO##*/}
   make image                     # builds and tags a local image
-  sudo SKIFITY_IMAGE=<your image> SKIFITY_MANIFEST_BASE=./deploy sh installer/install.sh
+  sudo SKIFITY_IMAGE=<your image> sh installer/install.sh
 
-Running installer/install.sh from inside a clone reads deploy/*.yaml from disk,
-so no manifest is fetched either. Nothing on this server has been changed."
-		;;
-	esac
+Run from inside a clone it reads deploy/*.yaml from disk, so no manifest is
+fetched either. Nothing on this server has been changed."
+	fi
+
+	# An image was named but no release and no manifests: the objects would be
+	# fetched from a URL with no version in it, which is a 404 after k3s is
+	# already installed.
+	if [ -z "$VERSION" ] && [ -z "${SKIFITY_MANIFEST_BASE:-}" ] && [ ! -f "${SOURCE_DIR:-.}/deploy/panel.yaml" ]; then
+		fail \
+			"SKIFITY_IMAGE names an image, but there is nowhere to read the Kubernetes objects from." \
+			"Run this script from inside a clone, so deploy/*.yaml is read from disk:
+
+  git clone https://github.com/${PROJECT_REPO}.git && cd ${PROJECT_REPO##*/}
+  sudo SKIFITY_IMAGE=<your image> sh installer/install.sh
+
+Or point SKIFITY_MANIFEST_BASE at a copy of deploy/. Nothing on this server has
+been changed."
+	fi
 }
 
 preflight() {
@@ -152,7 +178,7 @@ preflight() {
 	: >>"$LOG_FILE" 2>/dev/null || LOG_FILE=/dev/null
 	log "skifity installer starting, image ${IMAGE}"
 
-	check_image
+	check_release
 
 	OS_NAME="unknown"; OS_VERSION=""
 	if [ -r /etc/os-release ]; then
@@ -578,7 +604,7 @@ render() {
 }
 
 fetch_manifest() {
-	url="${SKIFITY_MANIFEST_BASE:-https://raw.githubusercontent.com/skifity/skifity/main/deploy}/$1"
+	url="${MANIFEST_BASE}/$1"
 	curl -fsSL "$url" || fail \
 		"Could not download the manifest ${1} from ${url}." \
 		"Check that this server can reach the internet, or clone the repository and run installer/install.sh from inside it so the manifests are read from disk."
@@ -627,8 +653,8 @@ install_cli() {
 	# page. One binary is the panel, the CLI and the MCP server, so the file
 	# answering this request is the file we want on the PATH — always present,
 	# always the matching version, and it needs no internet at all. It used to
-	# be fetched from github.com/skifity/skifity, which does not exist, so
-	# every install ended with a warning and a link to nothing.
+	# be fetched from a releases page that did not exist, so every install
+	# ended with a warning and a link to nothing.
 	#
 	# The panel's image is distroless, so the binary cannot simply be copied
 	# out of the container: there is no shell, no cat and no tar in there.

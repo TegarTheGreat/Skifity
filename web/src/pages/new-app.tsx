@@ -50,6 +50,8 @@ export function NewAppPage() {
   const [dockerfilePath, setDockerfilePath] = useState("")
   const [port, setPort] = useState("")
   const [healthPath, setHealthPath] = useState("")
+  const [buildCommand, setBuildCommand] = useState("")
+  const [staticDir, setStaticDir] = useState("")
   const [startCommand, setStartCommand] = useState("")
   const [deployNow, setDeployNow] = useState(true)
   const [gitSourceID, setGitSourceID] = useState("")
@@ -95,6 +97,11 @@ export function NewAppPage() {
       if (!port && found.port) setPort(String(found.port))
       if (!healthPath && found.health_path) setHealthPath(found.health_path)
       if (!startCommand && found.start_command) setStartCommand(found.start_command)
+      // A front end is built and then served. These two say how, and until now
+      // the form read them and sent neither, so the build copied the
+      // repository into a web server and the page came up blank.
+      if (!buildCommand && found.build_command) setBuildCommand(found.build_command)
+      if (!staticDir && found.static_dir) setStaticDir(found.static_dir)
       if (builder === "auto" && (found.builder === "dockerfile" || found.builder === "static")) {
         setBuilder(found.builder)
       }
@@ -130,6 +137,8 @@ export function NewAppPage() {
         dockerfile_path: dockerfilePath.trim(),
         port: Number(port) || 0,
         health_path: healthPath.trim(),
+        build_command: buildCommand.trim(),
+        static_dir: staticDir.trim(),
         start_command: startCommand.trim(),
         deploy: deployNow,
         variables,

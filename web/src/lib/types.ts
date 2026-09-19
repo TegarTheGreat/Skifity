@@ -134,6 +134,8 @@ export type App = {
   image: string
   port: number
   health_path: string
+  build_command: string
+  static_dir: string
   start_command: string
   release_command: string
   replicas: number
@@ -519,6 +521,7 @@ export type Detection = {
   health_path?: string
   dockerfile_path?: string
   static_dir?: string
+  build_command?: string
   /** "high" when a marker file is unambiguous, lower when it is a guess. */
   confidence: string
   /** Why it decided that, which is what makes the guess reviewable. */

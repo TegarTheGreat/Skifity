@@ -41,6 +41,11 @@ type createAppRequest struct {
 	RootDir        string `json:"root_dir,omitempty"`
 	Builder        string `json:"builder,omitempty"`
 	DockerfilePath string `json:"dockerfile_path,omitempty"`
+	// BuildCommand and StaticDir are what a front end needs: the command that
+	// produces the output, and the directory that output lands in. Without
+	// them a static build serves the repository's source.
+	BuildCommand   string `json:"build_command,omitempty"`
+	StaticDir      string `json:"static_dir,omitempty"`
 	Image          string `json:"image,omitempty"`
 	Port           int    `json:"port,omitempty"`
 	HealthPath     string `json:"health_path,omitempty"`
@@ -143,6 +148,8 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		Image:          strings.TrimSpace(req.Image),
 		Port:           defaultInt(req.Port, kube.DefaultAppPort),
 		HealthPath:     strings.TrimSpace(req.HealthPath),
+		BuildCommand:   strings.TrimSpace(req.BuildCommand),
+		StaticDir:      strings.TrimSpace(req.StaticDir),
 		StartCommand:   strings.TrimSpace(req.StartCommand),
 		ReleaseCommand: strings.TrimSpace(req.ReleaseCommand),
 		// Safe defaults, per the product principles: one instance, modest
@@ -236,6 +243,8 @@ type updateAppRequest struct {
 	Image          *string `json:"image,omitempty"`
 	Port           *int    `json:"port,omitempty"`
 	HealthPath     *string `json:"health_path,omitempty"`
+	BuildCommand   *string `json:"build_command,omitempty"`
+	StaticDir      *string `json:"static_dir,omitempty"`
 	StartCommand   *string `json:"start_command,omitempty"`
 	ReleaseCommand *string `json:"release_command,omitempty"`
 	AutoDeploy     *bool   `json:"auto_deploy,omitempty"`
@@ -267,6 +276,8 @@ func (s *Server) handleUpdateApp(w http.ResponseWriter, r *http.Request) {
 	assignString(&app.DockerfilePath, req.DockerfilePath)
 	assignString(&app.Image, req.Image)
 	assignString(&app.HealthPath, req.HealthPath)
+	assignString(&app.BuildCommand, req.BuildCommand)
+	assignString(&app.StaticDir, req.StaticDir)
 	assignString(&app.StartCommand, req.StartCommand)
 	assignString(&app.ReleaseCommand, req.ReleaseCommand)
 	if req.Port != nil {

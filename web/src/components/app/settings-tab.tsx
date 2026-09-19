@@ -33,6 +33,8 @@ export function SettingsTab({ app }: { app: App }) {
   const [image, setImage] = useState(app.image)
   const [port, setPort] = useState(String(app.port || ""))
   const [healthPath, setHealthPath] = useState(app.health_path)
+  const [buildCommand, setBuildCommand] = useState(app.build_command)
+  const [staticDir, setStaticDir] = useState(app.static_dir)
   const [startCommand, setStartCommand] = useState(app.start_command)
   const [releaseCommand, setReleaseCommand] = useState(app.release_command)
   const [autoDeploy, setAutoDeploy] = useState(app.auto_deploy)
@@ -47,6 +49,8 @@ export function SettingsTab({ app }: { app: App }) {
         image: image.trim(),
         port: Number(port) || 0,
         health_path: healthPath.trim(),
+        build_command: buildCommand.trim(),
+        static_dir: staticDir.trim(),
         start_command: startCommand.trim(),
         release_command: releaseCommand.trim(),
         auto_deploy: autoDeploy,
@@ -110,6 +114,35 @@ export function SettingsTab({ app }: { app: App }) {
                 />
                 <FieldDescription>{t("apps.rootDirectoryHelp")}</FieldDescription>
               </Field>
+              {/*
+                A front end is built and then served, and the two fields that
+                say how were detected and then thrown away. Without them the
+                image holds the repository's own source and the page is blank.
+              */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="settings-build-command">{t("apps.buildCommand")}</FieldLabel>
+                  <Input
+                    id="settings-build-command"
+                    value={buildCommand}
+                    onChange={(event) => setBuildCommand(event.target.value)}
+                    placeholder="npm run build"
+                    className="font-mono"
+                  />
+                  <FieldDescription>{t("apps.buildCommandHelp")}</FieldDescription>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="settings-static-dir">{t("apps.outputDirectory")}</FieldLabel>
+                  <Input
+                    id="settings-static-dir"
+                    value={staticDir}
+                    onChange={(event) => setStaticDir(event.target.value)}
+                    placeholder="dist"
+                    className="font-mono"
+                  />
+                  <FieldDescription>{t("apps.outputDirectoryHelp")}</FieldDescription>
+                </Field>
+              </div>
             </>
           )}
 

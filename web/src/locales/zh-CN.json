@@ -427,7 +427,11 @@
     "deleteVolumeConfirm": "这会删除挂载在 {{path}} 的磁盘，以及上面的全部内容。",
     "deleteVolumeConsequence": "之后文件无法找回。如果还可能用到，请先做一次备份。",
     "deleteVolumeLastBackup": "这块磁盘最近一次成功备份是{{when}}。那之后写入的内容会一并消失。",
-    "deleteVolumeNeverBackedUp": "这块磁盘从未备份过。上面的所有内容将永久消失。"
+    "deleteVolumeNeverBackedUp": "这块磁盘从未备份过。上面的所有内容将永久消失。",
+    "buildCommand": "构建命令",
+    "buildCommandHelp": "前端项目中生成待发布文件的命令。仓库里已有这些文件时留空。",
+    "outputDirectory": "输出目录",
+    "outputDirectoryHelp": "该命令把文件写到哪里：Vite 是 dist，Create React App 是 build。"
   },
   "deploy": {
     "title": "部署记录",

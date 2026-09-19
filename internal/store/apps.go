@@ -9,7 +9,7 @@ import (
 )
 
 const appColumns = `id, environment_id, name, slug, source_type, COALESCE(git_source_id,''), repo_url, branch,
-	root_dir, builder, dockerfile_path, image, port, health_path, start_command, release_command, replicas,
+	root_dir, builder, dockerfile_path, build_command, static_dir, image, port, health_path, start_command, release_command, replicas,
 	autoscale, min_replicas, max_replicas, cpu_target, memory_target, scale_to_zero,
 	cpu_request_m, cpu_limit_m, mem_request_mb, mem_limit_mb, auto_deploy, preview_deploys,
 	status, created_at, updated_at`
@@ -18,7 +18,7 @@ func scanApp(row interface{ Scan(...any) error }) (App, error) {
 	var a App
 	var created, updated string
 	err := row.Scan(&a.ID, &a.EnvironmentID, &a.Name, &a.Slug, &a.SourceType, &a.GitSourceID, &a.RepoURL,
-		&a.Branch, &a.RootDir, &a.Builder, &a.DockerfilePath, &a.Image, &a.Port, &a.HealthPath,
+		&a.Branch, &a.RootDir, &a.Builder, &a.DockerfilePath, &a.BuildCommand, &a.StaticDir, &a.Image, &a.Port, &a.HealthPath,
 		&a.StartCommand, &a.ReleaseCommand, &a.Replicas, &a.Autoscale, &a.MinReplicas, &a.MaxReplicas, &a.CPUTarget,
 		&a.MemoryTarget, &a.ScaleToZero, &a.CPURequestM, &a.CPULimitM, &a.MemRequestMB, &a.MemLimitMB,
 		&a.AutoDeploy, &a.PreviewDeploys, &a.Status, &created, &updated)
@@ -41,12 +41,12 @@ func (db *DB) CreateApp(ctx context.Context, a *App) error {
 	now := Now()
 	_, err := db.Exec(ctx, `INSERT INTO apps
 		(id, environment_id, name, slug, source_type, git_source_id, repo_url, branch, root_dir, builder,
-		 dockerfile_path, image, port, health_path, start_command, release_command, replicas, autoscale,
+		 dockerfile_path, build_command, static_dir, image, port, health_path, start_command, release_command, replicas, autoscale,
 		 min_replicas, max_replicas, cpu_target, memory_target, scale_to_zero, cpu_request_m, cpu_limit_m,
 		 mem_request_mb, mem_limit_mb, auto_deploy, preview_deploys, status, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.EnvironmentID, a.Name, a.Slug, defaultStr(a.SourceType, "git"), NullString(a.GitSourceID),
-		a.RepoURL, a.Branch, a.RootDir, defaultStr(a.Builder, "auto"), a.DockerfilePath, a.Image,
+		a.RepoURL, a.Branch, a.RootDir, defaultStr(a.Builder, "auto"), a.DockerfilePath, a.BuildCommand, a.StaticDir, a.Image,
 		a.Port, a.HealthPath, a.StartCommand, a.ReleaseCommand, a.Replicas, a.Autoscale, a.MinReplicas, a.MaxReplicas,
 		a.CPUTarget, a.MemoryTarget, a.ScaleToZero, a.CPURequestM, a.CPULimitM, a.MemRequestMB,
 		a.MemLimitMB, a.AutoDeploy, a.PreviewDeploys, defaultStr(a.Status, "created"), now, now)
@@ -172,12 +172,12 @@ func (db *DB) UpdateApp(ctx context.Context, a *App) error {
 	now := Now()
 	res, err := db.Exec(ctx, `UPDATE apps SET
 		name=?, slug=?, source_type=?, git_source_id=?, repo_url=?, branch=?, root_dir=?, builder=?,
-		dockerfile_path=?, image=?, port=?, health_path=?, start_command=?, release_command=?, replicas=?, autoscale=?,
+		dockerfile_path=?, build_command=?, static_dir=?, image=?, port=?, health_path=?, start_command=?, release_command=?, replicas=?, autoscale=?,
 		min_replicas=?, max_replicas=?, cpu_target=?, memory_target=?, scale_to_zero=?, cpu_request_m=?,
 		cpu_limit_m=?, mem_request_mb=?, mem_limit_mb=?, auto_deploy=?, preview_deploys=?, status=?, updated_at=?
 		WHERE id=?`,
 		a.Name, a.Slug, a.SourceType, NullString(a.GitSourceID), a.RepoURL, a.Branch, a.RootDir, a.Builder,
-		a.DockerfilePath, a.Image, a.Port, a.HealthPath, a.StartCommand, a.ReleaseCommand, a.Replicas, a.Autoscale,
+		a.DockerfilePath, a.BuildCommand, a.StaticDir, a.Image, a.Port, a.HealthPath, a.StartCommand, a.ReleaseCommand, a.Replicas, a.Autoscale,
 		a.MinReplicas, a.MaxReplicas, a.CPUTarget, a.MemoryTarget, a.ScaleToZero, a.CPURequestM,
 		a.CPULimitM, a.MemRequestMB, a.MemLimitMB, a.AutoDeploy, a.PreviewDeploys, a.Status, now, a.ID)
 	if err != nil {

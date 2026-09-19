@@ -166,6 +166,38 @@ form.
 A private repository needs a connected Git account with access to it. The token
 is only ever sent to the host that account is for.
 
+## How your code becomes an image
+
+Four ways, in the order the panel picks them:
+
+| | When | What happens |
+|---|---|---|
+| **Dockerfile** | The repository has one | It is built as written. Your decision, not overridden. |
+| **Front end** | A build script and no server: Vite, Create React App, Angular | The build runs, and what it writes is served by Caddy. No Node process in the image. |
+| **Static** | The repository already holds `index.html` | The files are served as they are. |
+| **Zero-config** | Everything else | [Railpack](https://railpack.com) works out the language, the versions and how to start it, inside the build. |
+
+The zero-config builder is the answer to "does it support my stack": it is not a
+list Skifity maintains, it is Railpack's, and it covers Node, Python, Go, PHP,
+Ruby, Rust, Java, Deno, Elixir and more. Nixpacks is selectable as a fallback
+because Railpack is young. And anything at all builds with a Dockerfile, which
+is the escape hatch that never runs out — if a stack is not supported, that
+sentence means "you write four lines of Dockerfile", not "you cannot deploy it".
+
+**A front end needs two things named**, and the panel fills both in when it
+recognises the framework:
+
+* **Build command** — what produces the files, usually `npm run build`. The
+  package manager comes from whichever lockfile is in the repository, so pnpm
+  and Yarn work without being told.
+* **Output directory** — where that command writes them. `dist` for Vite,
+  `build` for Create React App, `dist/<project>` for Angular.
+
+Get the second one wrong and the site comes up empty; both are editable under
+the app's **Settings**.
+
+Nothing from the repository's own `.git` directory ever reaches a served image.
+
 ## Instances and scaling
 
 An app runs one instance by default. You can set a fixed number, or let Skifity

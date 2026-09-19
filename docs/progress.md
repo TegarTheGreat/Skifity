@@ -1649,6 +1649,73 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 66 — the builder, and the front end it never built
+
+The question was whether the builder is mature and whether it handles every
+stack. The answer to the second is yes in principle — Railpack does its own
+detection inside the build and a Dockerfile takes anything it cannot — and the
+answer to the first was no, because the most common front end in the world
+deployed a blank page.
+
+### A Vite project was detected, and then not built
+
+`detectNode` maps a repository with Vite and a build script to the static
+builder with `StaticDir: "dist"`. The static builder generates a Dockerfile
+that copies a directory into Caddy. `dist` does not exist in a Vite
+repository — producing it is the entire point of the build step — and nothing
+ran `npm run build`. So the image held `index.html` and `src/main.tsx`, the
+page was blank, and the deploy reported success.
+
+It is worse than a missing directory, because of the second half: the detected
+`StaticDir` **never reached the build at all**. `Detection` had the field,
+`JobSpec` had the field, and `internal/deploy/build.go` never assigned it, so
+the directory was always the default. Every static build was `COPY . /srv` —
+the whole checkout, served.
+
+A front end is now built before it is served: a Node stage installs with
+whichever package manager the repository locks to, runs the build command, and
+only what that produced is copied into Caddy. Create React App and Angular are
+detected too, with the directories they actually write to. Both fields are on
+the app, in the form and in Settings, so a framework the detection does not
+know is two boxes rather than a Dockerfile.
+
+### And `.git` was being published
+
+`COPY . /srv` included the repository's own `.git`: every commit of a private
+repository, served at a path anybody can guess.
+
+With, underneath it, the reason that is worse than a source leak. The clone
+step built the URL as `https://x-access-token:${TOKEN}@host/...` and ran `git
+remote add origin` with it — and git writes the remote to `.git/config`. So a
+private repository deployed as a static site published **its own access token**
+on the internet. The token reaches git through a scoped `http.<origin>.extraHeader`
+now, so it is never written to disk, and the remote is the address as given.
+The header is scoped to the repository's own host on purpose: an unscoped one
+is sent wherever a submodule points.
+
+### The gate
+
+The shape of this bug is the one this repository keeps finding: a value worked
+out, stored, shown in the interface, and dropped one layer before it is used.
+`TestEveryBuildSettingOnTheAppReachesTheBuild` reads `store.App` and
+`builder.JobSpec` with go/ast and fails when a field on both is never assigned
+where the build is put together. Three fields are exempt and each says why —
+the app's CPU and memory are its runtime limits, not the build pod's, and a
+128 MB app can need 3 GB to build.
+
+Proven by removing each thing: the assignment, the build stage, the `.git`
+removal.
+
+### What is still true about all of this
+
+None of it has been run. A generated Dockerfile is a string this repository
+asserts on, and whether `pnpm install --frozen-lockfile` works in
+`node:22-alpine` against a real repository is a question only a cluster
+answers. That is ADR-0010 again and it is the same answer as everywhere else:
+`make verify-remote` is one command, and nobody has run it.
+
+`make check` exits 0, `make smoke` exits 0.
+
 ## Phase 65 — signing in, taken apart
 
 The panel's own front door, read line by line against what it would take to get

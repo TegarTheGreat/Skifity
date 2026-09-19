@@ -47,7 +47,12 @@ type JobSpec struct {
 	// Strategy
 	Builder        Builder
 	DockerfilePath string
-	StaticDir      string
+	// StaticDir is the directory to serve, relative to the root being built.
+	// Empty means the root of the build context.
+	StaticDir string
+	// BuildCommand produces that directory. Empty means the repository already
+	// holds what is to be served and nothing has to run first.
+	BuildCommand string
 
 	// Output
 	Image string
@@ -72,6 +77,8 @@ type JobSpec struct {
 	RailpackFrontend string
 	// NixpacksImage generates a Dockerfile for the fallback builder.
 	NixpacksImage string
+	// NodeImage builds a front end before its output is served.
+	NodeImage string
 
 	// Resources for the build pod.
 	CPURequestM  int
@@ -98,6 +105,9 @@ func (s *JobSpec) Defaults() {
 	}
 	if s.NixpacksImage == "" {
 		s.NixpacksImage = "ghcr.io/railwayapp/nixpacks:latest"
+	}
+	if s.NodeImage == "" {
+		s.NodeImage = "node:22-alpine"
 	}
 	if s.CPURequestM == 0 {
 		s.CPURequestM = 200
@@ -287,22 +297,35 @@ func cloneScript(s JobSpec) string {
 	b.WriteString("set -e\n")
 	b.WriteString("echo '==> Fetching the repository'\n")
 
-	if s.CloneSecret != "" {
-		// The token is injected at runtime from the environment, so it never
-		// appears in the Job spec, which anyone with read access could see.
-		// Only the scheme is replaced, so the host stays exactly as given.
-		b.WriteString(`URL=$(printf '%s' "$REPO_URL" | sed "s#^https://#https://x-access-token:${GIT_TOKEN}@#")` + "\n")
-	} else {
-		b.WriteString(`URL="$REPO_URL"` + "\n")
-	}
-
 	b.WriteString("cd " + workspace + "\n")
 	b.WriteString("git init -q .\n")
-	b.WriteString(`git remote add origin "$URL"` + "\n")
-	b.WriteString(`git fetch --depth 1 -q origin "$GIT_REF"` + "\n")
+	// The remote is the address as given, with no credential in it.
+	//
+	// It used to be the address with the token spliced into it, which git
+	// writes straight to .git/config — a file that then sits in the build
+	// context, goes into the image for a static site, and is served on the
+	// public internet at /.git/config. The token reaches git through a header
+	// on the one command that needs it instead, so it is never on disk.
+	b.WriteString(`git remote add origin "$REPO_URL"` + "\n")
+
+	if s.CloneSecret != "" {
+		// Scoped to this repository's own host: an unscoped header would be
+		// sent to wherever a submodule points, which is somebody else's
+		// server being handed your token.
+		b.WriteString(`ORIGIN=$(printf '%s' "$REPO_URL" | sed -n 's#^\(https\{0,1\}://[^/]*\).*#\1#p')` + "\n")
+		b.WriteString(`AUTH=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')` + "\n")
+		b.WriteString(`GIT_AUTH="-c http.${ORIGIN}/.extraHeader=Authorization: Basic ${AUTH}"` + "\n")
+	} else {
+		b.WriteString(`GIT_AUTH=""` + "\n")
+	}
+
+	// Unquoted on purpose: GIT_AUTH is either empty or the two -c words this
+	// script built itself, and quoting it would pass one empty argument.
+	b.WriteString("# shellcheck disable=SC2086\n")
+	b.WriteString(`git $GIT_AUTH fetch --depth 1 -q origin "$GIT_REF"` + "\n")
 	b.WriteString("git checkout -q FETCH_HEAD\n")
 	// Submodules are common enough that failing on them would be surprising.
-	b.WriteString("git submodule update --init --recursive --depth 1 -q 2>/dev/null || true\n")
+	b.WriteString(`git $GIT_AUTH submodule update --init --recursive --depth 1 -q 2>/dev/null || true` + "\n")
 	b.WriteString(`echo "==> Checked out $(git rev-parse --short HEAD)"` + "\n")
 	return b.String()
 }
@@ -499,23 +522,65 @@ func buildScript(s JobSpec) string {
 }
 
 // staticDockerfileScript writes the Dockerfile used for a static site.
+//
+// Two shapes, and getting the second one wrong is what this replaced. A
+// repository that already holds its HTML is copied. A front end — Vite, Create
+// React App, Astro, anything with a build script — has to be built first: the
+// directory it wants served does not exist in the repository, and copying the
+// repository instead produced an image holding `src/main.tsx` and an
+// index.html pointing at it. The page was blank and the build said it
+// succeeded.
 func staticDockerfileScript(s JobSpec) string {
 	dir := s.StaticDir
 	if dir == "" {
 		dir = "."
 	}
+
+	var b strings.Builder
+	// What the serving stage copies from: the build's output when there is a
+	// build, the checkout itself when the repository already holds its HTML.
+	var source string
+	if s.BuildCommand != "" {
+		// The package manager is chosen by the lockfile that is actually in
+		// the repository rather than assumed, because `npm ci` on a repository
+		// with only a pnpm lockfile fails in a way that reads like the build
+		// is broken.
+		fmt.Fprintf(&b, `FROM %s AS build
+WORKDIR /build
+COPY . .
+RUN if [ -f pnpm-lock.yaml ]; then corepack enable && pnpm install --frozen-lockfile; \
+    elif [ -f yarn.lock ]; then corepack enable && yarn install --immutable || yarn install --frozen-lockfile; \
+    elif [ -f package-lock.json ]; then npm ci; \
+    elif [ -f package.json ]; then npm install; \
+    else echo 'nothing to install'; fi
+RUN %s
+
+`, s.NodeImage, s.BuildCommand)
+		source = "--from=build /build/" + strings.TrimPrefix(strings.Trim(dir, "/"), "./")
+		if strings.HasSuffix(source, "/") || strings.HasSuffix(source, "/.") {
+			source = strings.TrimSuffix(strings.TrimSuffix(source, "."), "/")
+		}
+	} else {
+		source = dir
+	}
+
 	// Caddy rather than nginx: it needs no configuration to serve a directory
 	// with correct MIME types and SPA fallback, and its image is smaller.
-	dockerfile := fmt.Sprintf(`FROM caddy:2-alpine
+	fmt.Fprintf(&b, `FROM caddy:2-alpine
 COPY %s /srv
-RUN printf ':80 {\n  root * /srv\n  file_server\n  try_files {path} /index.html\n  encode gzip\n}\n' > /etc/caddy/Caddyfile
-EXPOSE 80
-`, dir)
+`, source)
+	// Never the repository's own history. With no build stage the context is
+	// the checkout itself, and .git holds every commit — and, for a private
+	// repository, whatever was used to clone it. Serving that on the public
+	// internet is how a source leak starts.
+	b.WriteString("RUN rm -rf /srv/.git /srv/.github /srv/.env /srv/.env.* 2>/dev/null || true" + "\n")
+	b.WriteString(`RUN printf ':80 {\n  root * /srv\n  file_server\n  try_files {path} /index.html\n  encode gzip\n}\n' > /etc/caddy/Caddyfile` + "\n")
+	b.WriteString("EXPOSE 80\n")
 
 	return fmt.Sprintf(`mkdir -p %s/.skifity
 cat > %s/.skifity/Dockerfile <<'SKIFITY_DOCKERFILE'
 %sSKIFITY_DOCKERFILE
-`, workspace, workspace, dockerfile)
+`, workspace, workspace, b.String())
 }
 
 // cacheRef is where the build cache lives: the image's own repository, at a

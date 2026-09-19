@@ -427,7 +427,11 @@
     "deleteVolumeConfirm": "Ini menghapus disk yang di-mount di {{path}} beserta seluruh isinya.",
     "deleteVolumeConsequence": "Filenya tidak bisa dikembalikan setelah ini. Ambil cadangan dulu kalau masih mungkin dibutuhkan.",
     "deleteVolumeLastBackup": "Cadangan terakhir disk ini yang berhasil adalah {{when}}. Semua yang ditulis setelah itu ikut hilang.",
-    "deleteVolumeNeverBackedUp": "Disk ini belum pernah dicadangkan. Seluruh isinya hilang selamanya."
+    "deleteVolumeNeverBackedUp": "Disk ini belum pernah dicadangkan. Seluruh isinya hilang selamanya.",
+    "buildCommand": "Perintah build",
+    "buildCommandHelp": "Yang menghasilkan berkas untuk disajikan, untuk sebuah front end. Kosongkan bila repositori sudah memuatnya.",
+    "outputDirectory": "Direktori keluaran",
+    "outputDirectoryHelp": "Tempat perintah itu menulisnya: dist untuk Vite, build untuk Create React App."
   },
   "deploy": {
     "title": "Deployment",

@@ -81,7 +81,7 @@ func TestCloneIsShallowAndPinned(t *testing.T) {
 	if !strings.Contains(script, "--depth 1") {
 		t.Fatal("the clone is not shallow; a large repository would take minutes")
 	}
-	if !strings.Contains(script, `git fetch --depth 1 -q origin "$GIT_REF"`) {
+	if !strings.Contains(script, `git $GIT_AUTH fetch --depth 1 -q origin "$GIT_REF"`) {
 		t.Fatalf("the ref is not fetched from the environment:\n%s", script)
 	}
 	if got := cloneEnv(t, job, "GIT_REF"); got != "a1b2c3d4e5f6a7b8" {
@@ -163,8 +163,29 @@ func TestCloneTokenNeverAppearsInTheSpec(t *testing.T) {
 	if !fromSecret {
 		t.Fatal("no credential is provided for a private repository")
 	}
-	if !strings.Contains(clone.Args[0], "${GIT_TOKEN}") {
+	if !strings.Contains(clone.Args[0], "$GIT_TOKEN") {
 		t.Fatal("the clone script does not use the injected token")
+	}
+
+	// And it must not put it where git would write it down. `git remote add`
+	// with a credential in the URL stores it in .git/config, which is in the
+	// build context, goes into the image for a static site, and is then served
+	// at /.git/config on the public internet.
+	script := clone.Args[0]
+	if strings.Contains(script, `x-access-token:${GIT_TOKEN}@`) ||
+		strings.Contains(script, "remote add origin \"$URL\"") {
+		t.Fatalf("the token is spliced into the remote URL, so git writes it to .git/config:\n%s", script)
+	}
+	if !strings.Contains(script, `git remote add origin "$REPO_URL"`) {
+		t.Fatalf("the remote is not the address as given:\n%s", script)
+	}
+	if !strings.Contains(script, "extraHeader") {
+		t.Fatalf("the token does not reach git through a header:\n%s", script)
+	}
+	// Scoped to the repository's own host: an unscoped header is sent wherever
+	// a submodule points, which is somebody else's server being handed it.
+	if !strings.Contains(script, "http.${ORIGIN}/.extraHeader") {
+		t.Fatalf("the credential header is not scoped to this repository's host:\n%s", script)
 	}
 }
 
@@ -446,5 +467,76 @@ func TestNixpacksWritesTheDockerfileItThenBuilds(t *testing.T) {
 	script := job.Spec.Template.Spec.Containers[0].Args[0]
 	if !strings.Contains(script, `--local 'dockerfile=/workspace/.nixpacks'`) {
 		t.Errorf("the build does not read the generated Dockerfile:\n%s", script)
+	}
+}
+
+// TestAFrontEndIsBuiltBeforeItIsServed.
+//
+// The static builder copied a directory into a web server and called that a
+// build. For a Vite, Create React App or Astro project the directory it was
+// told to serve does not exist until something runs the build, and nothing
+// did — so the image held the repository's own source, index.html pointed at
+// src/main.tsx, and the page came up blank with a green tick on the deploy.
+func TestAFrontEndIsBuiltBeforeItIsServed(t *testing.T) {
+	spec := baseJob()
+	spec.Builder = BuilderStatic
+	spec.StaticDir = "dist"
+	spec.BuildCommand = "npm run build"
+	spec.Defaults()
+
+	script := buildScript(spec)
+
+	if !strings.Contains(script, "AS build") {
+		t.Fatalf("there is no build stage, so nothing produces dist:\n%s", script)
+	}
+	if !strings.Contains(script, "RUN npm run build") {
+		t.Fatalf("the build command does not run:\n%s", script)
+	}
+	if !strings.Contains(script, "COPY --from=build /build/dist /srv") {
+		t.Fatalf("what is served is not what the build produced:\n%s", script)
+	}
+	// The package manager is whichever one the repository actually locks to.
+	// `npm ci` against a pnpm-only repository fails in a way that reads like
+	// the application is broken.
+	for _, manager := range []string{"pnpm-lock.yaml", "yarn.lock", "package-lock.json"} {
+		if !strings.Contains(script, manager) {
+			t.Errorf("the install step does not handle %s", manager)
+		}
+	}
+}
+
+// A repository that already holds its HTML still just gets copied.
+func TestAPlainStaticSiteIsStillJustCopied(t *testing.T) {
+	spec := baseJob()
+	spec.Builder = BuilderStatic
+	spec.StaticDir = "public"
+	spec.Defaults()
+
+	script := buildScript(spec)
+	if strings.Contains(script, "AS build") {
+		t.Fatalf("a site with nothing to build got a build stage:\n%s", script)
+	}
+	if !strings.Contains(script, "COPY public /srv") {
+		t.Fatalf("the directory to serve is not the one asked for:\n%s", script)
+	}
+}
+
+// TestAServedImageNeverCarriesTheRepositorysGitDirectory.
+//
+// With no build stage the context is the checkout itself, so `COPY . /srv`
+// publishes .git — every commit, and for a private repository whatever was
+// used to clone it. That is a source leak served on the public internet at a
+// path anybody can guess.
+func TestAServedImageNeverCarriesTheRepositorysGitDirectory(t *testing.T) {
+	for _, dir := range []string{"", ".", "public"} {
+		spec := baseJob()
+		spec.Builder = BuilderStatic
+		spec.StaticDir = dir
+		spec.Defaults()
+
+		script := buildScript(spec)
+		if !strings.Contains(script, "rm -rf /srv/.git") {
+			t.Errorf("a static build with dir %q does not remove .git:\n%s", dir, script)
+		}
 	}
 }

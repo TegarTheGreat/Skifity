@@ -70,15 +70,20 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 		Name: kube.ResourceName("build-"+app.Slug, shortID(deployment.ID)),
 		// Builds run in their own namespace, away from the panel's master key
 		// and database. See cluster.EnsureBuildNamespace.
-		Namespace:        d.cluster.Client().BuildNamespace(),
-		AppID:            app.ID,
-		DeploymentID:     deployment.ID,
-		RepoURL:          app.RepoURL,
-		CommitSHA:        deployment.CommitSHA,
-		Branch:           app.Branch,
-		RootDir:          app.RootDir,
-		Builder:          chosen,
-		DockerfilePath:   app.DockerfilePath,
+		Namespace:      d.cluster.Client().BuildNamespace(),
+		AppID:          app.ID,
+		DeploymentID:   deployment.ID,
+		RepoURL:        app.RepoURL,
+		CommitSHA:      deployment.CommitSHA,
+		Branch:         app.Branch,
+		RootDir:        app.RootDir,
+		Builder:        chosen,
+		DockerfilePath: app.DockerfilePath,
+		// Both were detected and then dropped on the floor: the app carried
+		// them, the build never read them, and every static build copied the
+		// whole repository into a web server instead of building it.
+		StaticDir:        app.StaticDir,
+		BuildCommand:     app.BuildCommand,
 		Image:            image,
 		RegistryInsecure: insecure,
 		RegistrySecret:   registrySecret,

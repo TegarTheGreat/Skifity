@@ -435,7 +435,11 @@
     "deleteVolumeConfirm": "This deletes the disk mounted at {{path}} and everything on it.",
     "deleteVolumeConsequence": "The files cannot be recovered afterwards. Take a backup first if you might need them.",
     "deleteVolumeLastBackup": "The last working backup of this disk was {{when}}. Anything written since then goes with it.",
-    "deleteVolumeNeverBackedUp": "This disk has never been backed up. Everything on it is gone for good."
+    "deleteVolumeNeverBackedUp": "This disk has never been backed up. Everything on it is gone for good.",
+    "buildCommand": "Build command",
+    "buildCommandHelp": "What produces the files to serve, for a front end. Leave empty when the repository already holds them.",
+    "outputDirectory": "Output directory",
+    "outputDirectoryHelp": "Where that command writes them: dist for Vite, build for Create React App."
   },
   "deploy": {
     "title": "Deployments",

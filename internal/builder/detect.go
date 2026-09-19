@@ -49,6 +49,10 @@ type Detection struct {
 	DockerfilePath string `json:"dockerfile_path,omitempty"`
 	// StaticDir is the directory to serve for a static site.
 	StaticDir string `json:"static_dir,omitempty"`
+	// BuildCommand produces that directory, for a front end that has to be
+	// built before there is anything to serve. Empty when the repository
+	// already holds its HTML.
+	BuildCommand string `json:"build_command,omitempty"`
 	// Confidence is high when a marker file is unambiguous, low when the guess
 	// is based on a file extension. The UI shows low-confidence guesses as a
 	// question rather than a statement.
@@ -268,10 +272,26 @@ func detectNode(tree Tree) (Detection, bool) {
 	case deps["vite"] && pkg.Scripts["build"] != "" && !deps["express"]:
 		// A Vite app with a build script and no server is a static site, and
 		// serving it as one avoids running a dev server in production.
+		//
+		// It still has to be built. `dist` does not exist in the repository —
+		// that is the whole point of a build step — so the build command comes
+		// with the directory, and the image is built from what it produces.
 		d.Builder, d.Framework, d.Port = BuilderStatic, "Vite", 80
-		d.StaticDir = "dist"
+		d.StaticDir, d.BuildCommand = "dist", "npm run build"
 		d.Notes = append(d.Notes,
-			"This looks like a front-end build, so the built files are served directly rather than running a Node process.")
+			"This looks like a front-end build: `npm run build` runs and the files it writes to `dist` are served directly, with no Node process in the image.")
+	case deps["react-scripts"] && pkg.Scripts["build"] != "":
+		// Create React App writes to build/ rather than dist/, and a wrong
+		// directory here is an image with nothing in it.
+		d.Builder, d.Framework, d.Port = BuilderStatic, "Create React App", 80
+		d.StaticDir, d.BuildCommand = "build", "npm run build"
+		d.Notes = append(d.Notes,
+			"Create React App writes to `build`, which is served directly.")
+	case deps["@angular/core"] && pkg.Scripts["build"] != "":
+		d.Builder, d.Framework, d.Port = BuilderStatic, "Angular", 80
+		d.StaticDir, d.BuildCommand = "dist", "npm run build"
+		d.Notes = append(d.Notes,
+			"Angular writes to `dist/<project>`; check the directory under Source if the site comes up empty.")
 	}
 
 	if start := pkg.Scripts["start"]; start != "" {

@@ -233,10 +233,17 @@ type App struct {
 	RootDir        string `json:"root_dir"`
 	Builder        string `json:"builder"`
 	DockerfilePath string `json:"dockerfile_path"`
-	Image          string `json:"image"`
-	Port           int    `json:"port"`
-	HealthPath     string `json:"health_path"`
-	StartCommand   string `json:"start_command"`
+	// BuildCommand is what produces a front end's output, empty when nothing
+	// has to run before the files are served.
+	BuildCommand string `json:"build_command"`
+	// StaticDir is the directory served for a static site, relative to the
+	// root being built: "dist" for Vite, "build" for Create React App, "." for
+	// a repository that already holds its HTML.
+	StaticDir    string `json:"static_dir"`
+	Image        string `json:"image"`
+	Port         int    `json:"port"`
+	HealthPath   string `json:"health_path"`
+	StartCommand string `json:"start_command"`
 	// ReleaseCommand runs after the build and before any traffic reaches the
 	// new version, which is where a migration belongs.
 	ReleaseCommand string    `json:"release_command"`

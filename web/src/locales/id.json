@@ -265,7 +265,8 @@
       "volume.created": "Volume dibuat",
       "volume.deleted": "Volume dihapus",
       "auth.reauthenticated": "Membuktikan identitasnya kembali",
-      "auth.sessions_revoked": "Mengeluarkan semua perangkat lain"
+      "auth.sessions_revoked": "Mengeluarkan semua perangkat lain",
+      "git_source.webhook_registered": "Webhook didaftarkan di repositori"
     }
   },
   "projects": {
@@ -436,7 +437,9 @@
     "volumeBackupsHelp": "Jadwal, salinan yang sudah diambil, dan cara mengembalikannya.",
     "noVolumeBackups": "Belum ada cadangan untuk disk ini.",
     "volumeRestoreStarted": "Pemulihan dimulai. Aplikasi berhenti selama proses berjalan dan dijalankan lagi setelahnya.",
-    "volumeRestoreWarning": "Semua isi {{app}} diganti dengan isi cadangan ini, dan aplikasi dihentikan selama proses itu."
+    "volumeRestoreWarning": "Semua isi {{app}} diganti dengan isi cadangan ini, dan aplikasi dihentikan selama proses itu.",
+    "volumeStopsRollingDeploys": "Dengan disk, deploy tidak lagi mulus",
+    "volumeStopsRollingDeploysHelp": "Satu disk hanya boleh ditulis satu instance dalam satu waktu, jadi Skifity menghentikan instance lama sebelum menjalankan yang baru. Setiap deploy punya jeda beberapa detik tanpa yang menjawab, dan aplikasi tidak bisa berjalan lebih dari satu instance."
   },
   "deploy": {
     "title": "Deployment",
@@ -1892,6 +1895,12 @@
         "cause": "Mengubah autentikasi dua faktor atau membuat token harus dilakukan oleh orang yang bisa membuktikan identitasnya, dan token API tidak bisa.",
         "impact": "Tidak ada yang diubah.",
         "fix": "Masuk ke panel dan lakukan di sana."
+      },
+      "cli_app_not_created": {
+        "title": "Panel tidak menyebutkan aplikasi mana yang dibuat",
+        "cause": "Balasan saat membuat aplikasi tidak memuat aplikasinya.",
+        "impact": "Berkas proyek tidak ditulis, jadi `skifity deploy` di sini tidak tahu apa yang harus di-deploy.",
+        "fix": "Periksa daftar aplikasi dengan `skifity apps`, lalu jalankan `skifity link` bila ada di sana."
       }
     }
   },
@@ -1916,7 +1925,11 @@
     "disconnect": "Putuskan",
     "disconnectWarning": "Aplikasi yang di-deploy dari akun ini berhenti men-deploy saat push. Aplikasi tetap berjalan.",
     "webhookURL": "Alamat webhook",
-    "webhookURLHelp": "Skifity menambahkan ini ke repositori Anda sendiri jika token mengizinkannya. Jika tidak bisa, tambahkan secara manual di pengaturan webhook repositori."
+    "webhookURLHelp": "Skifity menambahkan ini ke repositori Anda sendiri jika token mengizinkannya. Jika tidak bisa, tambahkan secara manual di pengaturan webhook repositori.",
+    "pushDeploysOn": "Push ke repositori ini langsung men-deploy",
+    "pushDeploysOnHelp": "Skifity sudah menambahkan webhook di host Git Anda. Tidak ada lagi yang perlu diatur.",
+    "pushDeploysManual": "Deploy saat push butuh satu langkah lagi",
+    "pushDeploysManualHelp": "Skifity tidak bisa menambahkan webhook sendiri, jadi tambahkan URL ini di pengaturan webhook repositori. Gunakan secret dari Pengaturan, Git."
   },
   "notifications": {
     "title": "Notifikasi",

@@ -546,10 +546,13 @@ func TestAnAppIsCreatedWithTheVariablesItWasGiven(t *testing.T) {
 	if status != http.StatusCreated {
 		t.Fatalf("create app: %d %s", status, body)
 	}
-	var created store.App
-	if err := json.Unmarshal([]byte(body), &created); err != nil {
+	var answer struct {
+		App store.App `json:"app"`
+	}
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
 		t.Fatalf("decode app: %v", err)
 	}
+	created := answer.App
 
 	rows, err := h.db.ListVariables(t.Context(), created.ID)
 	if err != nil {

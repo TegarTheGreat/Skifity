@@ -6,6 +6,7 @@ import {
   CalendarClockIcon,
   DownloadIcon,
   HardDriveIcon,
+  InfoIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -14,6 +15,7 @@ import { toast } from "sonner"
 import { useConfirm, useDeleteConfirm } from "@/components/confirm-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorDisplay, toProblem } from "@/components/error-display"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -160,6 +162,21 @@ export function StorageTab({ app }: { app: App }) {
             </form>
           </CardContent>
         </Card>
+      )}
+
+      {/*
+        The first disk changes how every deploy from then on behaves, and
+        nothing said so. An app with a disk cannot do a rolling deploy — one
+        disk, one writer — so Skifity stops the old instance before starting
+        the new one, and there are a few seconds with nothing answering.
+        Finding that out from a deploy is finding it out too late.
+      */}
+      {items.length > 0 && (
+        <Alert>
+          <InfoIcon className="size-4" />
+          <AlertTitle>{t("apps.volumeStopsRollingDeploys")}</AlertTitle>
+          <AlertDescription>{t("apps.volumeStopsRollingDeploysHelp")}</AlertDescription>
+        </Alert>
       )}
 
       {items.length === 0 && !adding ? (

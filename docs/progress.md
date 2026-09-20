@@ -1649,6 +1649,68 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 69 — the webhook the form promised to register
+
+Two questions: does a push to GitHub deploy on its own, and does anything go
+down. The first was half true and the second was true with one exception
+nobody was told about.
+
+### Half automatic
+
+Once a webhook exists, everything after it works: the delivery is verified
+against the connection's secret, matched to apps by repository, checked
+against the app's own team, skipped unless deploy on push is on, matched
+against the app's branch, and a pull request gets a preview of its own. That
+part is good.
+
+Nothing created the webhook. The panel printed a URL and a secret and left
+somebody to paste them into the Git host, once per repository. Miss it and
+deploy on push silently never happens: nothing is broken, the panel is simply
+never told.
+
+The connect form even says so — "a token is needed so Skifity can read the
+repository **and register a webhook**" — and only the first half of that
+sentence was ever true.
+
+`gitsrc.EnsureWebhook` registers it, on GitHub, GitLab and Gitea, at the moment
+an app is created, because a hook belongs to a repository and a token covers
+many. Idempotent by the address it delivers to, so a second app from the same
+repository does not mean two hooks and two deploys per push. Never fatal: a
+read-only token is the right token for somebody who deploys by hand, so a
+refusal comes back as "here is the URL, add it yourself" in the panel and on
+the CLI.
+
+### And a response shape that would have broken the CLI quietly
+
+Adding the webhook's status to the reply exposed something older. Creating an
+app answered two different shapes — the app on its own, or an object holding
+it when a deploy started — and three things decode that reply. The panel and
+the MCP server handled both. The CLI decoded straight into an `App`, so it
+would have written a project file naming no app at all, with no error, and
+`skifity deploy` in that directory would have had nothing to deploy.
+
+One shape now, always, with a test that says so. The interface test's own
+fixture broke on the change, loudly, which is the difference between a
+consumer that is tested and one that is not.
+
+### The one thing that does go down
+
+A deploy starts the new instance, waits for its readiness check, moves traffic,
+and only then stops the old one — which also pauses five seconds first, so
+every proxy has seen it leave.
+
+**Unless the app has a disk.** One disk, one writer, so Kubernetes is told to
+stop the old instance before starting the new one: `Recreate`. That is correct
+and deliberate, and the first place it was written down was `docs/checklist.md`
+— an internal document. Somebody who adds a disk for uploads gets a gap in
+every deploy from then on and finds out in production.
+
+The Storage tab says it now, as soon as there is a disk, and `docs/concepts.md`
+has a section on deploys and downtime that names all three cases: a disk,
+restoring a volume backup, and scale to zero.
+
+`make check` exits 0, `make smoke` exits 0, 15 interface tests pass.
+
 ## Phase 68 — eight promises to somebody else's code
 
 The plugin standard declares ten events. Two of them were ever sent.

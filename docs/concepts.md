@@ -198,6 +198,37 @@ the app's **Settings**.
 
 Nothing from the repository's own `.git` directory ever reaches a served image.
 
+## Deploying when you push
+
+Connect a Git account under **Settings → Git**, and when you create an app from
+a repository Skifity registers the webhook on it for you. After that a push to
+the app's branch builds and deploys it, and a pull request gets a preview of
+its own if you turned those on.
+
+If the token cannot manage that repository's webhooks — a read-only token is
+the right token for somebody who deploys by hand — the panel says so and gives
+you the URL to add yourself. It never fails creating the app over it.
+
+Only the app's own branch deploys. A push to any other branch is read, matched
+against nothing, and ignored.
+
+## Deploys and downtime
+
+A deploy starts the new instance, waits for it to answer its readiness check,
+moves traffic, and only then stops the old one. Nothing is dropped: the old
+instance also pauses for five seconds before it is told to stop, so every proxy
+has seen it leave before it goes.
+
+**Except when the app has a disk.** One disk can only be written by one
+instance at a time, so the old instance has to stop before the new one starts,
+and there are a few seconds when nothing answers. The panel says so on the
+app's **Storage** tab, because it is the disk that changes this rather than
+anything you did to the deploy.
+
+Two other things stop an app on purpose, and both say so first: restoring a
+volume backup, and scale to zero, where the first request after an idle period
+waits for an instance to start.
+
 ## Instances and scaling
 
 An app runs one instance by default. You can set a fixed number, or let Skifity

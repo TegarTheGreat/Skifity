@@ -184,6 +184,8 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		"app_id": app.ID, "app": app.Name, "environment_id": app.EnvironmentID,
 	})
 
+	hook := s.ensureWebhookFor(r, app)
+
 	if req.Deploy && s.deployer != nil {
 		deployment, err := s.deployer.Deploy(r.Context(), DeployRequest{
 			AppID: app.ID, Trigger: "create", CreatedBy: user.ID,
@@ -192,11 +194,68 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 			// The app exists; report the deploy failure without losing it.
 			s.log.Warn("could not start the first deploy", "app", app.ID, "error", err)
 		} else {
-			writeJSON(w, http.StatusCreated, map[string]any{"app": app, "deployment": deployment})
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"app": app, "deployment": deployment, "webhook": hook,
+			})
 			return
 		}
 	}
-	writeJSON(w, http.StatusCreated, app)
+	writeJSON(w, http.StatusCreated, map[string]any{"app": app, "webhook": hook})
+}
+
+// webhookStatus is what the panel can tell somebody about deploy on push.
+type webhookStatus struct {
+	// Registered is true when pushes will reach the panel without anybody
+	// setting anything up.
+	Registered bool `json:"registered"`
+	// URL is where the Git host should deliver, for the cases where somebody
+	// has to add it themselves.
+	URL string `json:"url,omitempty"`
+	// Reason says why it could not be registered, in words to act on.
+	Reason string `json:"reason,omitempty"`
+}
+
+// ensureWebhookFor asks the Git host to deliver this repository's pushes here.
+//
+// The connect form says a token is needed "so Skifity can read the repository
+// and register a webhook", and for a long time only the first half happened:
+// the panel printed a URL and a secret and left somebody to paste them into
+// the Git host, once per repository. Miss it and deploy on push silently never
+// works — nothing is broken, the panel is simply never told.
+//
+// Never fatal. A read-only token is the right token for somebody who deploys
+// by hand, so a refusal comes back as "here is the URL, add it yourself".
+func (s *Server) ensureWebhookFor(r *http.Request, app store.App) webhookStatus {
+	if app.SourceType != "git" || app.GitSourceID == "" || !app.AutoDeploy {
+		return webhookStatus{}
+	}
+	source, err := s.db.GetGitSource(r.Context(), app.GitSourceID)
+	if err != nil {
+		return webhookStatus{}
+	}
+	deliverTo := s.webhookURL(r, source.ID)
+	secret, err := s.webhookSecretFor(r, source)
+	if err != nil || secret == "" {
+		return webhookStatus{URL: deliverTo, Reason: "this Git connection has no webhook secret"}
+	}
+
+	result := gitsrc.EnsureWebhook(r.Context(), gitsrc.HookRequest{
+		RepoURL:   app.RepoURL,
+		Kind:      source.Kind,
+		BaseURL:   source.BaseURL,
+		Token:     s.gitToken(r, source),
+		DeliverTo: deliverTo,
+		Secret:    secret,
+	})
+	if result.Registered() {
+		if result.Created {
+			s.audit(r, source.TeamID, "git_source.webhook_registered", "app", app.ID, app.Name)
+		}
+		return webhookStatus{Registered: true, URL: deliverTo}
+	}
+	s.log.Info("could not register a webhook; it can be added by hand",
+		"app", app.ID, "reason", result.Reason)
+	return webhookStatus{URL: deliverTo, Reason: result.Reason}
 }
 
 // setInitialVariables stores the variables a new app was created with.

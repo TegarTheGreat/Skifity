@@ -178,9 +178,41 @@ func cmdInit(ctx context.Context, args []string, out io.Writer) error {
 		body["branch"] = detectGitBranch()
 	}
 
-	var app store.App
-	if err := client.Do(ctx, "POST", "/api/environments/"+environment+"/apps", body, &app); err != nil {
+	// The answer is an object with the app inside it, not the app: creating
+	// one can also start a deployment and register a webhook, and both belong
+	// in the reply. Decoding it as a bare App used to leave every field empty
+	// and write a project file pointing at no app at all.
+	var created struct {
+		App        store.App `json:"app"`
+		Deployment *struct {
+			ID string `json:"id"`
+		} `json:"deployment"`
+		Webhook *struct {
+			Registered bool   `json:"registered"`
+			URL        string `json:"url"`
+			Reason     string `json:"reason"`
+		} `json:"webhook"`
+	}
+	if err := client.Do(ctx, "POST", "/api/environments/"+environment+"/apps", body, &created); err != nil {
 		return err
+	}
+	app := created.App
+	if app.ID == "" {
+		return errdoc.New("cli.app_not_created", "The panel did not say which app it created").
+			WithCause("The reply to creating an app had no app in it.").
+			WithImpact("The project file was not written, so `skifity deploy` here would not know what to deploy.").
+			WithFix("Check the app list with `skifity apps`, and run `skifity link` if it is there.")
+	}
+
+	if created.Webhook != nil && created.Webhook.URL != "" {
+		if created.Webhook.Registered {
+			fmt.Println("Deploy on push is set up: a push to this repository deploys it.")
+		} else {
+			fmt.Printf("Deploy on push needs a webhook adding by hand: %s\n", created.Webhook.URL)
+			if created.Webhook.Reason != "" {
+				fmt.Printf("  (%s)\n", created.Webhook.Reason)
+			}
+		}
 	}
 
 	path, err := SaveProjectFile(ProjectFile{

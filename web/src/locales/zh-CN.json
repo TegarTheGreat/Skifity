@@ -265,7 +265,8 @@
       "volume.created": "已创建存储卷",
       "volume.deleted": "已删除存储卷",
       "auth.reauthenticated": "再次确认了身份",
-      "auth.sessions_revoked": "退出了其他所有设备"
+      "auth.sessions_revoked": "退出了其他所有设备",
+      "git_source.webhook_registered": "已在仓库上注册 webhook"
     }
   },
   "projects": {
@@ -436,7 +437,9 @@
     "volumeBackupsHelp": "备份计划、已有的副本，以及把某个副本还原回去。",
     "noVolumeBackups": "这个磁盘还没有备份。",
     "volumeRestoreStarted": "还原已开始。过程中应用会停止，结束后自动重新启动。",
-    "volumeRestoreWarning": "{{app}} 上的内容会被这个备份的内容全部覆盖，过程中应用会被停止。"
+    "volumeRestoreWarning": "{{app}} 上的内容会被这个备份的内容全部覆盖，过程中应用会被停止。",
+    "volumeStopsRollingDeploys": "有磁盘后部署不再无缝",
+    "volumeStopsRollingDeploysHelp": "一块磁盘同一时间只能被一个实例写入，所以 Skifity 会先停掉旧实例再启动新的。每次部署都会有几秒钟无人响应，应用也无法运行多个实例。"
   },
   "deploy": {
     "title": "部署记录",
@@ -1892,6 +1895,12 @@
         "cause": "更改两步验证或创建令牌必须由能够证明身份的人来做，而 API 令牌做不到。",
         "impact": "没有做任何更改。",
         "fix": "登录面板并在那里操作。"
+      },
+      "cli_app_not_created": {
+        "title": "面板没有说明它创建了哪个应用",
+        "cause": "创建应用的响应里没有应用。",
+        "impact": "项目文件没有写入，所以这里的 `skifity deploy` 不知道要部署什么。",
+        "fix": "用 `skifity apps` 查看应用列表，若已存在则运行 `skifity link`。"
       }
     }
   },
@@ -1916,7 +1925,11 @@
     "disconnect": "断开连接",
     "disconnectWarning": "从该账户部署的应用将不再在推送时部署，但会继续运行。",
     "webhookURL": "Webhook 地址",
-    "webhookURLHelp": "如果令牌权限足够，Skifity 会自行把它加入你的仓库。如果没能加上，请在仓库的 webhook 设置中手动添加。"
+    "webhookURLHelp": "如果令牌权限足够，Skifity 会自行把它加入你的仓库。如果没能加上，请在仓库的 webhook 设置中手动添加。",
+    "pushDeploysOn": "推送到这个仓库就会自动部署",
+    "pushDeploysOnHelp": "Skifity 已在你的 Git 主机上添加了 webhook，无需再设置。",
+    "pushDeploysManual": "推送即部署还差一步",
+    "pushDeploysManualHelp": "Skifity 无法自行添加 webhook，请把这个地址填进仓库的 webhook 设置，密钥在「设置 → Git」。"
   },
   "notifications": {
     "title": "通知",

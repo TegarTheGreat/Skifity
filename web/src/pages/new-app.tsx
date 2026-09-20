@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { ChevronRightIcon, ContainerIcon, GitBranchIcon, SparklesIcon } from "lucide-react"
+import { toast } from "sonner"
+
 import { cn } from "cn"
 
 import { ErrorDisplay } from "@/components/error-display"
@@ -23,7 +25,14 @@ import {
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { App, ComposeService, Deployment, Detection, GitSource } from "@/lib/types"
+import type {
+  App,
+  ComposeService,
+  Deployment,
+  Detection,
+  GitSource,
+  WebhookStatus,
+} from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
 
 type SourceType = "git" | "image"
@@ -125,28 +134,42 @@ export function NewAppPage() {
 
   const create = useMutation({
     mutationFn: () =>
-      api.post<App | { app: App; deployment: Deployment }>(`/api/environments/${envId}/apps`, {
-        name: (name.trim() || suggestedName).trim(),
-        source_type: sourceType,
-        repo_url: sourceType === "git" ? repoURL.trim() : "",
-        git_source_id: sourceType === "git" ? gitSourceID : "",
-        branch: branch.trim(),
-        root_dir: rootDir.trim(),
-        image: sourceType === "image" ? image.trim() : "",
-        builder,
-        dockerfile_path: dockerfilePath.trim(),
-        port: Number(port) || 0,
-        health_path: healthPath.trim(),
-        build_command: buildCommand.trim(),
-        static_dir: staticDir.trim(),
-        start_command: startCommand.trim(),
-        deploy: deployNow,
-        variables,
-      }),
+      api.post<{ app: App; deployment?: Deployment; webhook?: WebhookStatus }>(
+        `/api/environments/${envId}/apps`,
+        {
+          name: (name.trim() || suggestedName).trim(),
+          source_type: sourceType,
+          repo_url: sourceType === "git" ? repoURL.trim() : "",
+          git_source_id: sourceType === "git" ? gitSourceID : "",
+          branch: branch.trim(),
+          root_dir: rootDir.trim(),
+          image: sourceType === "image" ? image.trim() : "",
+          builder,
+          dockerfile_path: dockerfilePath.trim(),
+          port: Number(port) || 0,
+          health_path: healthPath.trim(),
+          build_command: buildCommand.trim(),
+          static_dir: staticDir.trim(),
+          start_command: startCommand.trim(),
+          deploy: deployNow,
+          variables,
+        },
+      ),
     onSuccess: (result) => {
-      const app = "app" in result ? result.app : result
       void queryClient.invalidateQueries({ queryKey: ["apps", envId] })
-      navigate(`/apps/${app.id}`)
+      // Whether pushes will deploy is worth knowing now rather than the first
+      // time somebody pushes and nothing happens.
+      if (result.webhook?.url) {
+        if (result.webhook.registered) {
+          toast.success(t("git.pushDeploysOn"), { description: t("git.pushDeploysOnHelp") })
+        } else {
+          toast.warning(t("git.pushDeploysManual"), {
+            description: `${t("git.pushDeploysManualHelp")} ${result.webhook.url}`,
+            duration: 15000,
+          })
+        }
+      }
+      navigate(`/apps/${result.app.id}`)
     },
   })
 

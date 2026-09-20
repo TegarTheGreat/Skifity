@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -191,5 +192,50 @@ func TestAVolumeScheduleNothingCanParseIsRefused(t *testing.T) {
 	})
 	if status != http.StatusBadRequest {
 		t.Fatalf("an unparseable schedule answered %d, want 400: %s", status, body)
+	}
+}
+
+// TestCreatingAnAppAlwaysAnswersWithTheAppInside.
+//
+// This endpoint used to answer two different shapes — the app on its own, or
+// an object holding the app when a deploy was started — and three things
+// decode it: the panel, the CLI and the MCP server. The panel and the MCP
+// server handled both. The CLI decoded straight into an App, so the day the
+// shape changed it would have written a project file naming no app at all,
+// silently, and `skifity deploy` in that directory would have had nothing to
+// deploy.
+//
+// One shape, always, with the app under "app".
+func TestCreatingAnAppAlwaysAnswersWithTheAppInside(t *testing.T) {
+	h := newHarness(t)
+	owner := h.newTenant("shapes")
+
+	for _, deploy := range []bool{false, true} {
+		name := "no-deploy"
+		if deploy {
+			name = "with-deploy"
+		}
+		t.Run(name, func(t *testing.T) {
+			status, body := h.do(owner, http.MethodPost,
+				"/api/environments/"+owner.env.ID+"/apps", map[string]any{
+					"name": "shape-" + name, "source_type": "image",
+					"image": "nginx:1", "port": 80, "deploy": deploy,
+				})
+			if status != http.StatusCreated {
+				t.Fatalf("creating an app answered %d: %s", status, body)
+			}
+			var answer struct {
+				App struct {
+					ID string `json:"id"`
+				} `json:"app"`
+			}
+			if err := json.Unmarshal([]byte(body), &answer); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if answer.App.ID == "" {
+				t.Fatalf(`the reply has no app under "app", so the CLI would write a project `+
+					"file naming nothing: %s", body)
+			}
+		})
 	}
 }

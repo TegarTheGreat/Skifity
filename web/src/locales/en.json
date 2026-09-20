@@ -273,7 +273,8 @@
       "volume.created": "Volume created",
       "volume.deleted": "Volume deleted",
       "auth.reauthenticated": "Confirmed who they are",
-      "auth.sessions_revoked": "Signed out every other device"
+      "auth.sessions_revoked": "Signed out every other device",
+      "git_source.webhook_registered": "Webhook registered on the repository"
     }
   },
   "projects": {
@@ -444,7 +445,9 @@
     "volumeBackupsHelp": "A schedule, the copies taken so far, and putting one back.",
     "noVolumeBackups": "No backups of this disk yet.",
     "volumeRestoreStarted": "The restore has started. The app stops while it runs and starts again afterwards.",
-    "volumeRestoreWarning": "Everything on {{app}} is replaced by what was in this backup, and the app is stopped while that happens."
+    "volumeRestoreWarning": "Everything on {{app}} is replaced by what was in this backup, and the app is stopped while that happens.",
+    "volumeStopsRollingDeploys": "A disk means deploys are no longer seamless",
+    "volumeStopsRollingDeploysHelp": "One disk can only be written by one instance at a time, so Skifity stops the old instance before starting the new one. Each deploy has a few seconds with nothing answering, and the app cannot run more than one instance."
   },
   "deploy": {
     "title": "Deployments",
@@ -1904,6 +1907,12 @@
         "cause": "Changing two-factor authentication or creating a token has to be done by somebody who can prove who they are, and an API token cannot.",
         "impact": "Nothing was changed.",
         "fix": "Sign in to the panel and do it there."
+      },
+      "cli_app_not_created": {
+        "title": "The panel did not say which app it created",
+        "cause": "The reply to creating an app had no app in it.",
+        "impact": "The project file was not written, so `skifity deploy` here would not know what to deploy.",
+        "fix": "Check the app list with `skifity apps`, and run `skifity link` if it is there."
       }
     }
   },
@@ -1928,7 +1937,11 @@
     "disconnect": "Disconnect",
     "disconnectWarning": "Apps deployed from this account stop deploying on push. They keep running.",
     "webhookURL": "Webhook address",
-    "webhookURLHelp": "Skifity adds this to your repositories by itself when the token allows it. If it could not, add it by hand in the repository's webhook settings."
+    "webhookURLHelp": "Skifity adds this to your repositories by itself when the token allows it. If it could not, add it by hand in the repository's webhook settings.",
+    "pushDeploysOn": "Pushes to this repository deploy it",
+    "pushDeploysOnHelp": "Skifity added the webhook to your Git host. Nothing else to set up.",
+    "pushDeploysManual": "Deploy on push needs one more step",
+    "pushDeploysManualHelp": "Skifity could not add the webhook itself, so add this URL to the repository's webhook settings. Use the secret from Settings, Git."
   },
   "notifications": {
     "title": "Notifications",

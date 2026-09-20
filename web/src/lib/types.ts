@@ -616,3 +616,10 @@ export type StoreCatalogue = {
   url: string
   installed: Record<string, string>
 }
+
+/** What the panel can say about deploy on push, after creating an app. */
+export type WebhookStatus = {
+  registered: boolean
+  url?: string
+  reason?: string
+}

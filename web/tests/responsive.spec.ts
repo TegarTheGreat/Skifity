@@ -66,7 +66,10 @@ async function seed(page: Page, request: APIRequestContext) {
   })
   const environments = await get(`/api/projects/${project.id}/environments`)
   const envID = environments.items[0].id
-  const app = await post(`/api/environments/${envID}/apps`, {
+  // Creating an app answers with an object holding the app, not with the app:
+  // the reply also carries the first deployment and whether the webhook was
+  // registered.
+  const created = await post(`/api/environments/${envID}/apps`, {
     name: "storefront",
     source_type: "git",
     // A long URL on purpose: a repository address is the longest unbreakable
@@ -77,6 +80,7 @@ async function seed(page: Page, request: APIRequestContext) {
     port: 3000,
     health_path: "/api/health",
   })
+  const app = created.app
   await request.put(`/api/apps/${app.id}/variables`, {
     headers,
     // Long, unbreakable and secret: the three things that break a variables

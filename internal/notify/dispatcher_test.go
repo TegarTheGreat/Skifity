@@ -16,10 +16,19 @@ import (
 )
 
 // fakeStore returns a fixed set of channels.
-type fakeStore struct{ channels []store.NotificationChannel }
+type fakeStore struct {
+	channels []store.NotificationChannel
+	// settings stands in for the panel's own SMTP configuration, which an
+	// email channel falls back to for anything it does not say itself.
+	settings map[string]string
+}
 
 func (f fakeStore) ListNotificationChannels(context.Context, string) ([]store.NotificationChannel, error) {
 	return f.channels, nil
+}
+
+func (f fakeStore) GetSetting(_ context.Context, key string) (string, bool, error) {
+	return f.settings[key], false, nil
 }
 
 // fakeKeyring hands back whatever was "sealed", so a test needs no master key.

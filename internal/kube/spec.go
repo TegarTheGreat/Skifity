@@ -88,6 +88,11 @@ type AppSpec struct {
 	// uid is a guess, and it was wrong for 120 of the 124 catalogue images
 	// whose configuration could be read from their registries.
 	ImageBuiltHere bool
+
+	// ImagePullSecret is the Secret the kubelet reads to pull this image, for
+	// an app whose image lives in a registry that is not the one in the
+	// cluster. Empty for everything else, which is the common case.
+	ImagePullSecret string
 }
 
 // Confinement is how a pod's security context is written for this app.

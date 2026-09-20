@@ -138,6 +138,24 @@ build, because a `Secure` cookie is never stored over plain HTTP: marking them
 Secure on an HTTP panel does not make anything safer, it makes signing in
 impossible. Set that variable to the address people actually open.
 
+## Your own registry, and your own mail server
+
+Two settings groups that hold credentials, and both are read now.
+
+**Registry.** Leave the address empty and images go to the registry inside the
+cluster, which needs nothing. Give it an address and a username and password,
+and Skifity places those credentials as a Kubernetes Secret in two places: the
+namespace builds run in, so the push works, and each app's namespace, so the
+kubelet can pull. Both were missing before, so an external registry broke a
+deploy at each end with nothing but a Kubernetes error about a Secret that was
+never created.
+
+**Email.** Fill in the SMTP server once here, and an email notification channel
+only needs the recipients. A channel that names its own server still wins, for
+the case where one alert goes somewhere else. Before this, every channel
+carried its own copy of the SMTP password and this page configured nothing at
+all.
+
 ## Single sign-on
 
 Skifity speaks **OpenID Connect**: Okta, Entra ID, Authentik, Keycloak, Zitadel,

@@ -83,7 +83,6 @@ const GROUPS: { key: string; label: string }[] = [
   { key: "domains", label: "settings.domains" },
   { key: "git", label: "settings.git" },
   { key: "storage", label: "settings.storage" },
-  { key: "dns", label: "settings.dns" },
   { key: "email", label: "settings.email" },
   { key: "notifications", label: "settings.notifications" },
   { key: "registry", label: "settings.registry" },

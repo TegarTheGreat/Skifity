@@ -12,6 +12,7 @@ import (
 	"skifity/internal/crypto"
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -326,9 +327,10 @@ func TestChooseBuilder(t *testing.T) {
 		{"dockerfile", "", "dockerfile"},
 		{"nixpacks", "", "nixpacks"},
 		{"static", "", "static"},
+		{"railpack", "", "railpack"},
 	}
 	for _, tc := range cases {
-		got, err := d.chooseBuilder(store.App{Builder: tc.setting, DockerfilePath: tc.dockerfile})
+		got, err := d.chooseBuilder(t.Context(), store.App{Builder: tc.setting, DockerfilePath: tc.dockerfile})
 		if err != nil {
 			t.Fatalf("chooseBuilder(%q): %v", tc.setting, err)
 		}
@@ -337,7 +339,7 @@ func TestChooseBuilder(t *testing.T) {
 				tc.setting, tc.dockerfile, got, tc.want)
 		}
 	}
-	if _, err := d.chooseBuilder(store.App{Builder: "magic"}); err == nil {
+	if _, err := d.chooseBuilder(t.Context(), store.App{Builder: "magic"}); err == nil {
 		t.Fatal("an unknown builder was accepted")
 	}
 }
@@ -629,5 +631,45 @@ func TestARollbackSaysWhatItWentBackTo(t *testing.T) {
 	}
 	if stored.RollbackOf != good.Number {
 		t.Errorf("the stored deployment points at #%d, not #%d", stored.RollbackOf, good.Number)
+	}
+}
+
+// TestTheDefaultBuilderSettingIsActuallyRead.
+//
+// "Which builder to use when a repository has no Dockerfile" has been on the
+// settings page since there were settings, and nothing read it: an operator
+// who chose Nixpacks got Railpack on every app anyway, and had to set it per
+// app to make it stick.
+func TestTheDefaultBuilderSettingIsActuallyRead(t *testing.T) {
+	d, db, _, _ := testDeployer(t)
+
+	// Nothing chosen is Railpack, which is what the product is designed around.
+	got, err := d.chooseBuilder(t.Context(), store.App{Builder: "auto"})
+	if err != nil {
+		t.Fatalf("chooseBuilder: %v", err)
+	}
+	if string(got) != "railpack" {
+		t.Fatalf("with no setting the builder is %q, want railpack", got)
+	}
+
+	if err := db.SetSetting(t.Context(), settings.KeyBuilderDefault, "nixpacks", false, "test"); err != nil {
+		t.Fatalf("set the default builder: %v", err)
+	}
+	got, err = d.chooseBuilder(t.Context(), store.App{Builder: "auto"})
+	if err != nil {
+		t.Fatalf("chooseBuilder: %v", err)
+	}
+	if string(got) != "nixpacks" {
+		t.Fatalf("the default builder setting was ignored: got %q, want nixpacks", got)
+	}
+
+	// A Dockerfile in the repository still wins: that is the author's decision
+	// and a panel-wide preference does not overrule it.
+	got, err = d.chooseBuilder(t.Context(), store.App{Builder: "auto", DockerfilePath: "Dockerfile"})
+	if err != nil {
+		t.Fatalf("chooseBuilder: %v", err)
+	}
+	if string(got) != "dockerfile" {
+		t.Fatalf("a Dockerfile was overruled by the default builder: got %q", got)
 	}
 }

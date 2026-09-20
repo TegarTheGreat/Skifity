@@ -419,6 +419,18 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 		// honest thing to say about its user is what the image itself says.
 		ImageBuiltHere: app.SourceType == "git",
 	}
+
+	// An image in somebody's own registry needs a credential to pull, and the
+	// same Secret the build pushed with is the one to read. Named only when an
+	// external registry is configured: a pull secret that does not exist stops
+	// every pod on a panel that never needed one.
+	external, _, err := c.db.GetSetting(ctx, settings.KeyRegistryURL)
+	if err != nil {
+		return kube.AppSpec{}, err
+	}
+	if strings.TrimSpace(external) != "" {
+		spec.ImagePullSecret = kube.RegistrySecretName
+	}
 	if app.StartCommand != "" {
 		// A start command is a shell line, so it runs through a shell rather
 		// than being split here and getting quoting subtly wrong.

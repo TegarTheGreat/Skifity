@@ -857,7 +857,6 @@
     "domains": "Домены и HTTPS",
     "git": "Git",
     "storage": "Хранилище копий",
-    "dns": "DNS",
     "email": "Электронная почта",
     "notifications": "Уведомления",
     "registry": "Реестр образов",

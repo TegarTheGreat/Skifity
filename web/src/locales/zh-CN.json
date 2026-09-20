@@ -821,7 +821,6 @@
     "domains": "域名与 HTTPS",
     "git": "Git",
     "storage": "备份存储",
-    "dns": "DNS",
     "email": "邮件",
     "notifications": "通知",
     "registry": "镜像仓库",

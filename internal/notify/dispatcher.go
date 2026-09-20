@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"skifity/internal/runsafe"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -28,6 +29,10 @@ type Keyring interface {
 // Store is the part of the database a dispatcher needs.
 type Store interface {
 	ListNotificationChannels(ctx context.Context, teamID string) ([]store.NotificationChannel, error)
+	// GetSetting reads a panel-wide setting, and says whether it was sealed.
+	// Used for the SMTP server, which belongs to the panel rather than to each
+	// email channel.
+	GetSetting(ctx context.Context, key string) (string, bool, error)
 }
 
 // Dispatcher sends an event to every channel in a team that asked for it.
@@ -93,6 +98,9 @@ func (d *Dispatcher) Notify(ctx context.Context, teamID, event string, msg Messa
 				"channel", channel.ID, "kind", channel.Kind, "error", err)
 			continue
 		}
+		if channel.Kind == "email" {
+			d.fillSMTPFromSettings(ctx, config)
+		}
 
 		d.wg.Add(1)
 		go func(kind, id string, config map[string]string) {
@@ -137,6 +145,52 @@ func (d *Dispatcher) configFor(teamID string, channel store.NotificationChannel)
 		return nil, err
 	}
 	return config, nil
+}
+
+// smtpSettings maps a panel-wide setting to the key an email channel reads.
+//
+// The settings page has had an Email section since the beginning — server,
+// port, user, password, from, TLS — and nothing read any of it. Every email
+// channel carried its own copy, so adding three recipients meant typing the
+// same SMTP password three times, and the page that looked like it configured
+// email configured nothing at all.
+var smtpSettings = map[string]string{
+	settings.KeySMTPHost:     "smtp_host",
+	settings.KeySMTPPort:     "smtp_port",
+	settings.KeySMTPUser:     "smtp_user",
+	settings.KeySMTPPassword: "smtp_password",
+	settings.KeySMTPFrom:     "from",
+	settings.KeySMTPTLS:      "smtp_tls",
+}
+
+// fillSMTPFromSettings fills in what the channel did not say for itself.
+//
+// The channel wins where it has an answer: somebody who put a different server
+// on one channel meant it. Everything else falls back to the panel's own
+// settings, so an email channel is a list of recipients and nothing more.
+func (d *Dispatcher) fillSMTPFromSettings(ctx context.Context, config map[string]string) {
+	for key, field := range smtpSettings {
+		if strings.TrimSpace(config[field]) != "" {
+			continue
+		}
+		value, encrypted, err := d.db.GetSetting(ctx, key)
+		if err != nil {
+			d.log.Warn("could not read an SMTP setting", "setting", key, "error", err)
+			continue
+		}
+		if value == "" {
+			continue
+		}
+		if encrypted {
+			plaintext, err := d.keyring.Open(value, settings.Context(key))
+			if err != nil {
+				d.log.Warn("could not read the SMTP password", "error", err)
+				continue
+			}
+			value = string(plaintext)
+		}
+		config[field] = value
+	}
 }
 
 // subscribes reports whether a channel's stored event list covers an event.

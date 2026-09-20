@@ -123,6 +123,10 @@ func BuildDeployment(s AppSpec) *appsv1.Deployment {
 		// An app has no business talking to the Kubernetes API, and a mounted
 		// token is the first thing an attacker looks for.
 		AutomountServiceAccountToken: ptr(false),
+		// Only for an image in somebody's own registry. Without it the kubelet
+		// pulls anonymously and a private repository answers 401, which shows
+		// up as ImagePullBackOff and says nothing about credentials.
+		ImagePullSecrets: pullSecrets(s),
 		// Long enough for a web server to finish in-flight requests, short
 		// enough that a deploy does not feel stuck.
 		TerminationGracePeriodSeconds: ptr(int64(30)),
@@ -504,6 +508,14 @@ func buildResources(s AppSpec) corev1.ResourceRequirements {
 		out.Limits = limits
 	}
 	return out
+}
+
+// pullSecrets is the one secret an external registry needs, or nothing.
+func pullSecrets(s AppSpec) []corev1.LocalObjectReference {
+	if s.ImagePullSecret == "" {
+		return nil
+	}
+	return []corev1.LocalObjectReference{{Name: s.ImagePullSecret}}
 }
 
 func probeHandler(s AppSpec) corev1.ProbeHandler {

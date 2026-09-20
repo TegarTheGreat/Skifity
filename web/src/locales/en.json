@@ -831,7 +831,6 @@
     "domains": "Domains and HTTPS",
     "git": "Git",
     "storage": "Backup storage",
-    "dns": "DNS",
     "email": "Email",
     "notifications": "Notifications",
     "registry": "Image registry",

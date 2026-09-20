@@ -106,7 +106,6 @@ const (
 	GroupDomains       = "domains"
 	GroupGit           = "git"
 	GroupStorage       = "storage"
-	GroupDNS           = "dns"
 	GroupEmail         = "email"
 	GroupNotifications = "notifications"
 	GroupRegistry      = "registry"
@@ -139,9 +138,6 @@ const (
 	KeyS3AccessKey           = "storage.s3_access_key"
 	KeyS3SecretKey           = "storage.s3_secret_key"
 	KeyS3PathStyle           = "storage.s3_path_style"
-	KeyDNSProvider           = "dns.provider"
-	KeyDNSAPIToken           = "dns.api_token"
-	KeyDNSZone               = "dns.zone"
 	KeySMTPHost              = "email.smtp_host"
 	KeySMTPPort              = "email.smtp_port"
 	KeySMTPUser              = "email.smtp_user"
@@ -376,17 +372,6 @@ var Definitions = []Definition{
 		Help: "Stored encrypted and never shown again."},
 	{Key: KeyS3PathStyle, Label: "Use path-style URLs", Group: GroupStorage, Kind: KindBool, Validate: validateBool,
 		Help: "Turn this on for MinIO and most self-hosted S3 services."},
-	{
-		Key: KeyDNSProvider, Label: "DNS provider", Group: GroupDNS,
-		Help:        "Lets Skifity create DNS records for you when you add a domain. Leave empty to create them yourself.",
-		Placeholder: "cloudflare",
-		Options:     []string{"cloudflare", "route53", "digitalocean", "hetzner"},
-		Validate:    validateOneOf("cloudflare", "route53", "digitalocean", "hetzner"),
-	},
-	{Key: KeyDNSAPIToken, Label: "DNS API token", Group: GroupDNS, Secret: true,
-		Help: "A token scoped to edit records in one zone. Do not use a global account key."},
-	{Key: KeyDNSZone, Label: "DNS zone", Group: GroupDNS, Placeholder: "example.com", Kind: KindDomain, Validate: validateDomain,
-		Help: "The zone records are created in."},
 	{Key: KeySMTPHost, Label: "SMTP host", Group: GroupEmail, Placeholder: "smtp.example.com",
 		Help: "Needed for email notifications and for password reset emails."},
 	{Key: KeySMTPPort, Label: "SMTP port", Group: GroupEmail, Placeholder: "587",

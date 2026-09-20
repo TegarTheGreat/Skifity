@@ -17,6 +17,7 @@ import (
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
 	"skifity/internal/logging"
+	"skifity/internal/settings"
 	"skifity/internal/store"
 )
 
@@ -57,7 +58,7 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 	}
 	image := builder.ImageName(registry, env.Namespace, app.Slug, tag)
 
-	chosen, err := d.chooseBuilder(app)
+	chosen, err := d.chooseBuilder(ctx, app)
 	if err != nil {
 		return "", err
 	}
@@ -128,29 +129,46 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 }
 
 // chooseBuilder resolves the app's builder setting into a concrete strategy.
-func (d *Deployer) chooseBuilder(app store.App) (builder.Builder, error) {
+func (d *Deployer) chooseBuilder(ctx context.Context, app store.App) (builder.Builder, error) {
 	switch app.Builder {
 	case "dockerfile":
 		return builder.BuilderDockerfile, nil
-	case "railpack", "":
-		if app.DockerfilePath != "" {
-			return builder.BuilderDockerfile, nil
-		}
-		return builder.BuilderRailpack, nil
 	case "nixpacks":
 		return builder.BuilderNixpacks, nil
 	case "static":
 		return builder.BuilderStatic, nil
-	case "auto":
-		// The zero-config builder does its own detection inside the build, so
-		// "auto" without a Dockerfile simply means Railpack.
+	case "railpack":
 		if app.DockerfilePath != "" {
 			return builder.BuilderDockerfile, nil
 		}
 		return builder.BuilderRailpack, nil
+	case "auto", "":
+		// A Dockerfile is a decision the repository's author already made.
+		if app.DockerfilePath != "" {
+			return builder.BuilderDockerfile, nil
+		}
+		return d.defaultBuilder(ctx), nil
 	default:
 		return "", errdoc.BadRequest(fmt.Sprintf("%q is not a builder Skifity knows.", app.Builder))
 	}
+}
+
+// defaultBuilder is the zero-config builder an operator chose for this panel.
+//
+// The setting has existed since there were settings — "Which builder to use
+// when a repository has no Dockerfile" — and nothing read it, so an operator
+// who had picked Nixpacks got Railpack on every app anyway and had to set it
+// per app to make it stick.
+func (d *Deployer) defaultBuilder(ctx context.Context) builder.Builder {
+	choice, _, err := d.db.GetSetting(ctx, settings.KeyBuilderDefault)
+	if err != nil {
+		d.log.Warn("could not read the default builder setting", "error", err)
+		return builder.BuilderRailpack
+	}
+	if strings.TrimSpace(choice) == "nixpacks" {
+		return builder.BuilderNixpacks
+	}
+	return builder.BuilderRailpack
 }
 
 func (d *Deployer) buildKitAddress() string {

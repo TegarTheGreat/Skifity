@@ -1649,6 +1649,71 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 70 — thirteen settings nobody read
+
+A form field is a promise: somebody types an answer and the panel keeps it.
+Thirteen of forty-five settings were answers nothing ever read.
+
+### An external registry broke a deploy at both ends
+
+The worst of them. `registry.url`, `registry.username` and `registry.password`
+are on the settings page, sealed and stored. The build Job mounted a Secret
+called `skifity-registry-auth` — and **nothing created it**, so the build pod
+could not start at all. Even if it had, the app's own pod had no
+`imagePullSecret`, so it could not pull what was pushed.
+
+Configuring your own registry did not quietly do nothing. It broke every
+deploy, twice, with a Kubernetes error about a missing Secret and no way to
+connect that to the settings page.
+
+Both ends now get the same `dockerconfigjson` Secret, applied on every deploy
+rather than when the setting is saved — namespaces are created later, and
+credentials change. Docker Hub's short name is rewritten to the URL a docker
+config is actually filed under, because a credential filed under `docker.io` is
+one the kubelet never finds.
+
+### An Email page that configured no email
+
+Six SMTP fields — server, port, user, password, from, TLS — under a heading
+that says Email, read by nothing. Every email channel carried its own copy
+instead, so three recipients meant typing the same SMTP password three times.
+
+A channel falls back to the panel's settings for anything it does not say
+itself, and still wins where it does: somebody who pointed one alert at a
+different server meant it.
+
+### Three fields for a feature that does not exist
+
+`dns.provider`, `dns.zone` and `dns.api_token`: "Lets Skifity create DNS
+records for you when you add a domain." Nothing anywhere creates a DNS record.
+The third one asked for an API token — a real credential, pasted in, sealed,
+stored, and used for nothing, which is worse than a field that does nothing.
+
+Removed, along with the settings tab that held only them. The same answer this
+repository gave to the GitHub App kind and to Compose support: a feature that
+does not exist should not have a form.
+
+### And a default nobody defaulted to
+
+`general.default_builder` — "which builder to use when a repository has no
+Dockerfile" — was ignored by `chooseBuilder`, which always answered Railpack.
+An operator who chose Nixpacks had to set it on every app. It is read now, and
+a Dockerfile in the repository still wins over it, because that is the
+repository author's decision rather than the panel's.
+
+### The gate
+
+`TestEverySettingIsReadBySomething` walks every `Key` constant with go/ast and
+fails when nothing outside the settings package names it. Forty-one settings,
+one exemption: the telemetry switch, which exists so the absence of telemetry
+is visible and says exactly that in its own help text.
+
+Proven by deleting one mapping. The other two of this shape — the seven
+notification events and the ten plugin events — were checked at the same time
+and the notification ones were already complete.
+
+`make check` exits 0, `make smoke` exits 0.
+
 ## Phase 69 — the webhook the form promised to register
 
 Two questions: does a push to GitHub deploy on its own, and does anything go

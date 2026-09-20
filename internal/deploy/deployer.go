@@ -256,6 +256,11 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 	if err != nil {
 		return err
 	}
+	// Before the objects that reference it: a Deployment naming a pull secret
+	// that is not there yet is an ImagePullBackOff nobody can explain.
+	if err := d.ensureRegistryAuth(ctx, env.Namespace); err != nil {
+		return err
+	}
 	if err := d.cluster.EnsureAutoDomain(ctx, app, env, teamID); err != nil {
 		// An app that cannot be given a free URL can still be deployed on a
 		// domain of its own, so this is a warning and not a failure.
@@ -796,7 +801,7 @@ func (d *Deployer) registryAddress(ctx context.Context) (address string, insecur
 		return "", false, "", err
 	}
 	if external != "" {
-		return strings.TrimSuffix(external, "/"), false, registrySecretName, nil
+		return strings.TrimSuffix(external, "/"), false, kube.RegistrySecretName, nil
 	}
 	if d.cluster == nil {
 		return "", false, "", errdoc.ClusterUnreachable(nil)
@@ -804,5 +809,70 @@ func (d *Deployer) registryAddress(ctx context.Context) (address string, insecur
 	return d.cluster.RegistryAddress(), true, "", nil
 }
 
-// registrySecretName is the Secret holding credentials for an external registry.
-const registrySecretName = "skifity-registry-auth"
+// ensureRegistryAuth puts the external registry's credentials where both ends
+// of a deploy can read them.
+//
+// They were stored, sealed and shown on the settings page, and turned into
+// nothing: the build Job mounted a Secret nobody created, so the pod could not
+// start, and the app had no pull secret either. An external registry broke the
+// deploy at both ends and said only that a Secret was missing.
+//
+// Applied on every deploy rather than when the setting is saved: a namespace
+// is created when an environment is, credentials change, and a secret that
+// exists only because somebody pressed save in the right order is one that
+// goes missing.
+func (d *Deployer) ensureRegistryAuth(ctx context.Context, appNamespace string) error {
+	address, _, secretName, err := d.registryAddress(ctx)
+	if err != nil || secretName == "" {
+		// No external registry, or no cluster to tell: either way there is no
+		// credential to place.
+		return nil //nolint:nilerr // the caller reports an unreachable cluster
+	}
+	username, err := d.settingValue(ctx, settings.KeyRegistryUser)
+	if err != nil {
+		return err
+	}
+	password, err := d.settingValue(ctx, settings.KeyRegistryPassword)
+	if err != nil {
+		return err
+	}
+	if username == "" && password == "" {
+		// A registry inside a private network needs no credential, and an
+		// empty secret would be worse than none.
+		return nil
+	}
+
+	for _, namespace := range []string{d.cluster.Client().BuildNamespace(), appNamespace} {
+		secret, err := kube.RegistrySecret(namespace, registryHost(address), username, password)
+		if err != nil {
+			return err
+		}
+		if err := d.cluster.Client().Applier().Apply(ctx, secret); err != nil {
+			return fmt.Errorf("place the registry credentials in %s: %w", namespace, err)
+		}
+	}
+	return nil
+}
+
+// settingValue reads one setting, decrypting it when it was sealed.
+func (d *Deployer) settingValue(ctx context.Context, key string) (string, error) {
+	value, encrypted, err := d.db.GetSetting(ctx, key)
+	if err != nil || value == "" || !encrypted {
+		return value, err
+	}
+	plaintext, err := d.keyring.Open(value, settings.Context(key))
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", key, err)
+	}
+	return string(plaintext), nil
+}
+
+// registryHost is the part of a registry address a docker config is filed
+// under: the host, without a scheme and without a path.
+func registryHost(address string) string {
+	address = strings.TrimPrefix(strings.TrimPrefix(address, "https://"), "http://")
+	if idx := strings.IndexByte(address, '/'); idx > 0 {
+		address = address[:idx]
+	}
+	return address
+}

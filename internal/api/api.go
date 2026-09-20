@@ -17,6 +17,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/metrics"
+	"skifity/internal/plugins"
 	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
@@ -46,6 +47,10 @@ type Server struct {
 	databases   DatabaseManager
 	backups     BackupManager
 
+	// plugins is how installed plugins hear about what happened here. A value
+	// with no Targets sends nothing, so nil is a working configuration.
+	plugins plugins.Dispatcher
+
 	// frontend serves the embedded UI.
 	frontend http.Handler
 
@@ -65,6 +70,7 @@ type Options struct {
 	Deployer    Deployer
 	Databases   DatabaseManager
 	Backups     BackupManager
+	Plugins     plugins.Dispatcher
 	Frontend    http.Handler
 	SetupToken  string
 	// Metrics is shared with the orchestrators, so a deployment counted there
@@ -87,6 +93,7 @@ func New(opts Options) *Server {
 		deployer:    opts.Deployer,
 		databases:   opts.Databases,
 		backups:     opts.Backups,
+		plugins:     opts.Plugins,
 		frontend:    opts.Frontend,
 		setup:       newSetupState(opts.SetupToken),
 		metrics:     opts.Metrics,

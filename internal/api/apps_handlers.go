@@ -14,6 +14,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
+	"skifity/internal/plugins"
 	"skifity/internal/settings"
 	"skifity/internal/store"
 )
@@ -179,6 +180,9 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
 	s.audit(r, teamID, "app.created", "app", app.ID, app.Name)
 	s.hub.Publish(events.TeamTopic(teamID), "app.created", app)
+	s.plugins.Notify(r.Context(), plugins.EventAppCreated, teamID, map[string]any{
+		"app_id": app.ID, "app": app.Name, "environment_id": app.EnvironmentID,
+	})
 
 	if req.Deploy && s.deployer != nil {
 		deployment, err := s.deployer.Deploy(r.Context(), DeployRequest{
@@ -367,6 +371,9 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
 	s.audit(r, teamID, "app.deleted", "app", app.ID, app.Name)
 	s.hub.Publish(events.TeamTopic(teamID), "app.deleted", app)
+	s.plugins.Notify(r.Context(), plugins.EventAppDeleted, teamID, map[string]any{
+		"app_id": app.ID, "app": app.Name, "environment_id": app.EnvironmentID,
+	})
 	writeOK(w)
 }
 

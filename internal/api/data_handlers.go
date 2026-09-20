@@ -9,6 +9,7 @@ import (
 	"skifity/internal/cron"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
+	"skifity/internal/plugins"
 	"skifity/internal/store"
 )
 
@@ -62,6 +63,10 @@ func (s *Server) handleCreateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
 	s.audit(r, teamID, "database.created", "database", record.ID, record.Name)
+	s.plugins.Notify(r.Context(), plugins.EventDatabaseCreated, teamID, map[string]any{
+		"database_id": record.ID, "database": record.Name,
+		"engine": record.Engine, "environment_id": record.EnvironmentID,
+	})
 	writeJSON(w, http.StatusAccepted, record)
 }
 

@@ -588,6 +588,18 @@ func (d *Deployer) fail(ctx context.Context, deployment store.Deployment, proble
 		Level:  "error",
 		Fields: map[string]string{"Reason": problem.Code},
 	})
+	// A plugin that subscribed to deploy.failed was never told, because only
+	// the success path sent anything. A rollback plugin, or one that opens a
+	// ticket, heard about every deploy that worked and none that did not.
+	teamID, err := d.db.TeamIDForApp(ctx, app.ID)
+	if err != nil {
+		return
+	}
+	d.Plugins.Notify(ctx, plugins.EventDeployFailed, teamID, map[string]any{
+		"app_id": app.ID, "app": app.Slug,
+		"deployment_id": deployment.ID, "commit": deployment.CommitSHA,
+		"reason": problem.Code, "error": problem.Error(),
+	})
 }
 
 // notify fills in what every deployment notification carries and sends it.

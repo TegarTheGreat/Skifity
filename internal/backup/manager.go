@@ -17,6 +17,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/plugins"
 	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
@@ -29,6 +30,10 @@ type Manager struct {
 	cluster  *cluster.Cluster
 	notifier notify.Notifier
 	log      *slog.Logger
+
+	// Plugins hear when a backup finishes, either way. A zero value sends
+	// nothing, so leaving it unset is a working configuration.
+	Plugins plugins.Dispatcher
 }
 
 // New builds a Manager. notifier may be nil, and then nothing is sent.
@@ -97,6 +102,7 @@ func (m *Manager) run(ctx context.Context, storage *Storage, backup store.Backup
 		_ = m.db.FinishBackup(ctx, backup.ID, "failed", backup.Location, 0, problem.Error())
 		m.publish(ctx, record.ID)
 		m.notifyFailure(ctx, record, problem)
+		m.tellPlugins(ctx, backup, record.Name, problem)
 	}
 	// A backup runs unattended, often at night. A panic here used to take the
 	// panel with it, so the first anybody knew was that the panel was gone.
@@ -164,6 +170,7 @@ func (m *Manager) run(ctx context.Context, storage *Storage, backup store.Backup
 		m.log.Warn("could not record the finished backup", "backup", backup.ID, "error", err)
 	}
 	m.publish(ctx, record.ID)
+	m.tellPlugins(ctx, backup, record.Name, nil)
 	m.log.Info("backup finished", "backup", backup.ID, "database", record.Name, "bytes", size)
 
 	m.applyRetention(ctx, storage, "database", record.ID)
@@ -476,6 +483,45 @@ func (m *Manager) RunScheduledAt(ctx context.Context, minutes []time.Time) {
 	}
 }
 
+// tellPlugins says a backup finished, whichever way it went.
+//
+// Four places finish one — a database and a volume, each succeeding and each
+// failing — and a plugin subscribed to backup.completed or backup.failed was
+// told by none of them. One helper rather than four call sites written out,
+// so a fifth kind of backup cannot quietly be added without an event.
+func (m *Manager) tellPlugins(ctx context.Context, backup store.Backup, name string, failure error) {
+	teamID, err := m.teamForBackup(ctx, backup)
+	if err != nil || teamID == "" {
+		return
+	}
+	data := map[string]any{
+		"backup_id": backup.ID, "target_type": backup.TargetType,
+		"target_id": backup.TargetID, "target": name, "kind": backup.Kind,
+	}
+	if failure != nil {
+		data["error"] = errdoc.From(failure).Error()
+		m.Plugins.Notify(ctx, plugins.EventBackupFailed, teamID, data)
+		return
+	}
+	m.Plugins.Notify(ctx, plugins.EventBackupCompleted, teamID, data)
+}
+
+// teamForBackup resolves whose backup this was, through whichever kind of
+// thing it copied.
+func (m *Manager) teamForBackup(ctx context.Context, backup store.Backup) (string, error) {
+	switch backup.TargetType {
+	case "database":
+		return m.db.TeamIDForDatabase(ctx, backup.TargetID)
+	case "volume":
+		volume, err := m.db.GetVolume(ctx, backup.TargetID)
+		if err != nil {
+			return "", err
+		}
+		return m.db.TeamIDForApp(ctx, volume.AppID)
+	}
+	return "", nil
+}
+
 // notifyFailure tells the team a backup did not happen.
 //
 // A backup that silently fails is the worst kind: it is only discovered when a
@@ -547,6 +593,7 @@ func (m *Manager) runVolume(ctx context.Context, storage *Storage, backup store.
 			"backup", backup.ID, "volume", volume.ID, "app", app.ID, "error", err)
 		_ = m.db.FinishBackup(ctx, backup.ID, "failed", backup.Location, 0, problem.Error())
 		m.publish(ctx, app.ID)
+		m.tellPlugins(ctx, backup, app.Name+" / "+volume.Name, problem)
 	}
 	defer runsafe.Recover(m.log, "volume backup "+backup.ID, fail)
 
@@ -601,6 +648,7 @@ func (m *Manager) runVolume(ctx context.Context, storage *Storage, backup store.
 		m.log.Warn("could not record the finished backup", "backup", backup.ID, "error", err)
 	}
 	m.publish(ctx, app.ID)
+	m.tellPlugins(ctx, backup, app.Name+" / "+volume.Name, nil)
 	m.log.Info("volume backup finished",
 		"backup", backup.ID, "app", app.Name, "volume", volume.Name, "bytes", size)
 

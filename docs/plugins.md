@@ -100,17 +100,29 @@ they will not install.
 
 ## Events
 
-| | |
-|---|---|
-| `app.created`, `app.deleted` | |
-| `deploy.before` | **Can be blocking.** You may refuse the deploy. |
-| `deploy.succeeded`, `deploy.failed` | |
-| `backup.completed`, `backup.failed` | |
-| `database.created` | |
-| `server.added`, `server.removed` | |
+Every event carries `event`, `team_id` and a `data` object. What is in `data`:
+
+| Event | `data` | |
+|---|---|---|
+| `app.created`, `app.deleted` | `app_id`, `app`, `environment_id` | |
+| `deploy.before` | `app_id`, `app`, `environment`, `deployment_id`, `image`, `commit` | **Can be blocking.** You may refuse the deploy. |
+| `deploy.succeeded` | the same six | |
+| `deploy.failed` | `app_id`, `app`, `deployment_id`, `commit`, `reason`, `error` | |
+| `backup.completed` | `backup_id`, `target_type`, `target_id`, `target`, `kind` | `target_type` is `database` or `volume`. |
+| `backup.failed` | the same five, plus `error` | |
+| `database.created` | `database_id`, `database`, `engine`, `environment_id` | |
+| `server.added` | `server_id`, `server`, `host`, `location`, `size` | |
+| `server.removed` | `server_id`, `server`, `host` | |
 
 Subscribing to an event the panel does not send is refused at install time, not
 discovered six months later when you notice your plugin has never run.
+
+That sentence was half true for longer than it should have been. The manifest
+checked a subscription against the list above and the list was right, but only
+two of these events were ever actually sent: a plugin could subscribe to
+`backup.failed`, be accepted, and never hear anything. A test now reads the
+standard and the panel's own source and fails when an event in one is missing
+from the other, which is the only way a promise like this stays true.
 
 **You hear about the teams whoever installed you is in, and no others.** A
 plugin is installed panel-wide and given a token belonging to the person who

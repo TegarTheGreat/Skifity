@@ -13,6 +13,7 @@ import (
 	"skifity/internal/api"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
+	"skifity/internal/plugins"
 	"skifity/internal/sshx"
 	"skifity/internal/store"
 )
@@ -103,6 +104,12 @@ func (p *Provisioner) runRemoveServer(ctx context.Context, op store.Operation, s
 	_ = p.db.SetOperationStatus(ctx, op.ID, store.OpSucceeded, "", "")
 	p.publishOperation(ctx, op.ID)
 	p.log.Info("server removed", "server", server.ID, "host", server.Host)
+
+	// The server's row is gone by now, so the team comes from the record read
+	// before it was deleted rather than from a lookup that would find nothing.
+	p.plugins.Notify(ctx, plugins.EventServerRemoved, server.TeamID, map[string]any{
+		"server_id": server.ID, "server": server.Name, "host": server.Host,
+	})
 }
 
 func (p *Provisioner) cordon(ctx context.Context, server store.Server, unschedulable bool) error {

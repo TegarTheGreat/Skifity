@@ -21,6 +21,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/kube"
 	"skifity/internal/notify"
+	"skifity/internal/plugins"
 	"skifity/internal/settings"
 	"skifity/internal/sshx"
 	"skifity/internal/store"
@@ -57,6 +58,8 @@ type Options struct {
 	Cluster *cluster.Cluster
 	// Notifier may be nil, and then nothing is sent.
 	Notifier notify.Notifier
+	// Plugins hear when a server joins or leaves. A zero value sends nothing.
+	Plugins plugins.Dispatcher
 	// ClusterTokenPath is where the installer left this cluster's k3s join
 	// token. See clusterToken.
 	ClusterTokenPath string
@@ -70,6 +73,7 @@ type Provisioner struct {
 	hub              *events.Hub
 	cluster          *cluster.Cluster
 	notifier         notify.Notifier
+	plugins          plugins.Dispatcher
 	clusterTokenPath string
 	log              *slog.Logger
 
@@ -82,7 +86,8 @@ type Provisioner struct {
 func New(opts Options) *Provisioner {
 	return &Provisioner{
 		db: opts.DB, keyring: opts.Keyring, hub: opts.Hub, cluster: opts.Cluster,
-		notifier: opts.Notifier, clusterTokenPath: opts.ClusterTokenPath, log: opts.Logger,
+		notifier: opts.Notifier, plugins: opts.Plugins,
+		clusterTokenPath: opts.ClusterTokenPath, log: opts.Logger,
 		running: map[string]context.CancelFunc{},
 	}
 }
@@ -268,6 +273,12 @@ func (p *Provisioner) runAddServer(ctx context.Context, op store.Operation, serv
 			Fields: map[string]string{"Server": req.Name, "Host": req.Host},
 		})
 	}
+	// A plugin that watches capacity — one that resizes something, or updates
+	// an inventory — subscribed to this and was never told.
+	p.plugins.Notify(ctx, plugins.EventServerAdded, req.TeamID, map[string]any{
+		"server_id": serverID, "server": req.Name, "host": req.Host,
+		"location": req.Location, "size": req.Size,
+	})
 }
 
 // addState carries what one step learned to the ones after it.

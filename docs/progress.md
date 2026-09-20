@@ -1649,6 +1649,68 @@ second credential and a second integration — and this one has never been point
 at a real Cloudflare account, so it is not the moment to add a third thing that
 cannot be run here either.
 
+## Phase 68 — eight promises to somebody else's code
+
+The plugin standard declares ten events. Two of them were ever sent.
+
+A plugin subscribes in its manifest. The manifest is validated against the
+list, so `backup.failed` is accepted. The install screen shows what the plugin
+will be told about. The documentation has a table of them. And then
+`app.created`, `app.deleted`, `deploy.failed`, `backup.completed`,
+`backup.failed`, `server.added`, `server.removed` and `database.created` never
+happened, because only the deployer held a dispatcher and only the deployer's
+two calls existed.
+
+This is worse than the same shape of bug found twice before — seven hub events
+nobody listened for, a build setting dropped before the build — because it is a
+promise to code somebody else wrote. Their plugin is not broken. It is waiting.
+There is no error, no log line, nothing to debug: a backup fails, and the
+plugin that exists to open a ticket about it sits there. The only way to find
+out is to make a backup fail and watch nothing happen.
+
+The documentation even said so, in a sentence that was half true: "Subscribing
+to an event the panel does not send is refused at install time, not discovered
+six months later when you notice your plugin has never run." The check was
+against the list. The list was right. What the list described did not happen.
+
+### What it took
+
+One dispatcher, built once and handed to everything that has news, rather than
+one the deployer happened to own. The API server, the backup manager and the
+provisioner each hold one now; a zero value sends nothing, so nothing has to be
+configured for a panel with no plugins.
+
+Then the eight calls, at the four places a backup finishes — a database and a
+volume, each succeeding and failing — the two places a server joins or leaves,
+the two an app is created or deleted, the one a database is created, and the
+deploy failure path that had a notification and a hub event and no plugin
+event.
+
+`tellPlugins` names its event at the call rather than picking it into a
+variable, which reads better and is also what the gate below can see. A rule
+that forces a call site to be readable is worth keeping.
+
+### The gate
+
+`TestEveryDeclaredEventIsActuallySent` reads the standard's `Events` and every
+`Notify`/`Ask` call across eight packages with go/ast, and fails when the panel
+declares an event it never sends. It named all eight on the first run, which is
+how they were found. Proven again afterwards by deleting one call.
+
+### Also
+
+The documentation now says what each event carries — nine rows of payload
+fields. An event standard with no payload documentation is one a plugin author
+reverse-engineers from a log, if they are lucky enough to have made the event
+fire.
+
+And `docs/progress.md` claimed plugins had "no store and no interface". The
+interface has been there for a while: installed plugins, a store catalogue,
+inspect before install, settings, uninstall. It is the store that does not
+exist, because nothing is published at `plugins.skifity.com`.
+
+`make check` exits 0, `make smoke` exits 0.
+
 ## Phase 67 — a backup nobody could restore
 
 Maturity rather than coverage: the parts that are built up to the last step and
@@ -3421,8 +3483,11 @@ all ten pages the panel serves rather than eight.
   model, the rendered Kubernetes objects, the event delivery and the blocking
   verdicts are unit-tested. Whether a real plugin image starts in the namespace
   this renders, and whether an event reaches it over a real cluster network, has
-  not been tried — ADR-0010 again. There is no store and no interface: a plugin
-  is installed over the API.
+  not been tried — ADR-0010 again. There is a page for it — installed plugins,
+  a store catalogue, inspect before install, settings, uninstall — and no store
+  for that page to read: nothing is published at `plugins.skifity.com`. All ten
+  events the standard declares are sent as of Phase 68; before that, eight of
+  them never were.
 * **The firewall has never been through a live Traefik.** The rules engine, the
   address handling, the geo lookup, the guard's decisions and the rendered
   Kubernetes objects are unit-tested, and the country and network lookups were

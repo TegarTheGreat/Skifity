@@ -104,24 +104,31 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	// deployer appears on the same page as a request counted by the API.
 	registry := metrics.New()
 
-	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
-	deployer.Metrics = registry
-	// Installed plugins hear about a deploy and, for the one blocking hook, get
-	// to stop it. The target list is read from the database on every event
-	// rather than cached, because a cached list is a plugin that keeps being
-	// sent events after somebody switched it off.
+	// Installed plugins hear what happens here, and for the one blocking hook
+	// get to stop it. Built once and handed to everything that has news: the
+	// standard declares ten events and until now two of them were ever sent,
+	// because only the deployer could send one. The target list is read from
+	// the database on every event rather than cached, because a cached list is
+	// a plugin that keeps being sent events after somebody switched it off.
+	var pluginEvents plugins.Dispatcher
 	if clusterAdapter != nil {
-		deployer.Plugins = plugins.Dispatcher{
+		pluginEvents = plugins.Dispatcher{
 			Targets: clusterAdapter.PluginTargets,
 			Log:     log,
 		}
 	}
+
+	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	deployer.Metrics = registry
+	deployer.Plugins = pluginEvents
 	provisioner := provision.New(provision.Options{
 		DB: db, Keyring: keyring, Hub: hub, Cluster: clusterAdapter,
-		Notifier: dispatcher, ClusterTokenPath: cfg.ClusterTokenPath, Logger: log,
+		Notifier: dispatcher, Plugins: pluginEvents,
+		ClusterTokenPath: cfg.ClusterTokenPath, Logger: log,
 	})
 	databases := dbsvc.New(db, keyring, hub, clusterAdapter, deployer, log)
 	backups := backup.New(db, keyring, hub, clusterAdapter, dispatcher, log)
+	backups.Plugins = pluginEvents
 	watcher := watch.New(db, watchCluster(clusterAdapter), hub, dispatcher, log)
 
 	setupToken, err := readSetupToken(cfg, db, log)
@@ -132,7 +139,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	server := api.New(api.Options{
 		Config: cfg, DB: db, Keyring: keyring, Auth: authService, Hub: hub, Logger: log,
 		Cluster: nilIfNil(clusterAdapter), Provisioner: provisioner, Deployer: deployer,
-		Databases: databases, Backups: backups,
+		Databases: databases, Backups: backups, Plugins: pluginEvents,
 		Frontend: frontend, SetupToken: setupToken, Metrics: registry,
 	})
 

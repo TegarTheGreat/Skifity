@@ -223,3 +223,143 @@ func mustExample(t *testing.T) Manifest {
 	}
 	return manifest
 }
+
+// A provider plugin, written as an author would write it. This is the half of
+// the standard that lets a plugin do something rather than only hear about it,
+// so it gets an example of its own.
+const providerExample = `
+apiVersion: plugin.skifity.com/v1
+id: com.example.chat
+name: Chat notifications
+description: Sends Skifity's notifications to a chat service.
+version: 0.3.1
+license: Apache-2.0
+author:
+  name: Example Ltd
+image: ghcr.io/example/skifity-chat@sha256:1111111111111111111111111111111111111111111111111111111111111111
+provides:
+  - kind: notify.channel
+    id: chat
+    name: Chat
+    description: A message in a channel.
+    settings:
+      - key: webhook_url
+        label: Webhook URL
+        kind: password
+        secret: true
+        required: true
+      - key: mention
+        label: Who to mention
+runtime:
+  port: 8080
+`
+
+func TestAProviderPluginParses(t *testing.T) {
+	manifest, err := Parse([]byte(providerExample))
+	if err != nil {
+		t.Fatalf("a plugin that provides something did not parse: %v", err)
+	}
+	provider, ok := manifest.ProviderFor(ProviderNotifyChannel, "chat")
+	if !ok {
+		t.Fatal("the provider it declares cannot be found")
+	}
+	if provider.Name != "Chat" {
+		t.Errorf("the provider's name is %q", provider.Name)
+	}
+	if len(provider.Settings) != 2 {
+		t.Errorf("the provider's form has %d fields", len(provider.Settings))
+	}
+	if !manifest.ProvidesKind(ProviderNotifyChannel) {
+		t.Error("the plugin does not report providing the kind it declares")
+	}
+	// A plugin may provide something and subscribe to nothing.
+	if len(manifest.Events) != 0 {
+		t.Error("this example was meant to subscribe to no events")
+	}
+}
+
+// The same rule as events: something the panel never asks for is refused at
+// install time rather than becoming a plugin that is never called.
+func TestAKindThePanelNeverAsksForIsRefused(t *testing.T) {
+	manifest := parseExample(t)
+	manifest.Provides = []Provider{{Kind: "storage.bucket", ID: "b2", Name: "Backblaze"}}
+	err := manifest.Validate()
+	if err == nil {
+		t.Fatal("a plugin providing something the panel never asks for was accepted")
+	}
+	if !strings.Contains(err.Error(), "storage.bucket") {
+		t.Errorf("the message does not name what was wrong: %v", err)
+	}
+}
+
+func TestAProviderNeedsAnIDAndAName(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		provider Provider
+	}{
+		{"no id", Provider{Kind: ProviderNotifyChannel, Name: "Chat"}},
+		{"an id nobody could put in a URL", Provider{Kind: ProviderNotifyChannel, ID: "Chat Service!", Name: "Chat"}},
+		{"no name", Provider{Kind: ProviderNotifyChannel, ID: "chat"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := parseExample(t)
+			manifest.Provides = []Provider{tc.provider}
+			if err := manifest.Validate(); err == nil {
+				t.Error("it was accepted")
+			}
+		})
+	}
+}
+
+func TestTheSameProviderTwiceIsRefused(t *testing.T) {
+	manifest := parseExample(t)
+	manifest.Provides = []Provider{
+		{Kind: ProviderNotifyChannel, ID: "chat", Name: "Chat"},
+		{Kind: ProviderNotifyChannel, ID: "chat", Name: "Chat again"},
+	}
+	if err := manifest.Validate(); err == nil {
+		t.Error("a plugin providing the same thing twice was accepted")
+	}
+}
+
+// A provider's form is stored and sealed exactly like the plugin's own
+// settings, so it has to pass exactly the same checks.
+func TestAProvidersFormIsCheckedLikeAnyOther(t *testing.T) {
+	manifest := parseExample(t)
+	manifest.Provides = []Provider{{
+		Kind: ProviderNotifyChannel, ID: "chat", Name: "Chat",
+		Settings: []Setting{{Key: "room", Label: "Room", Kind: "choice"}},
+	}}
+	err := manifest.Validate()
+	if err == nil {
+		t.Fatal("a choice with nothing to choose from was accepted in a provider's form")
+	}
+	if !strings.Contains(err.Error(), "room") {
+		t.Errorf("the message does not name the field: %v", err)
+	}
+}
+
+// Every kind in the vocabulary has to say what it will be asked to do, or a
+// plugin author has nothing to implement against.
+func TestEveryProviderKindSaysWhatItIsAskedToDo(t *testing.T) {
+	for _, kind := range ProviderKinds {
+		actions := ProviderActions[kind]
+		if len(actions) == 0 {
+			t.Errorf("%q is a kind a plugin may provide and nothing is ever asked of it", kind)
+		}
+		for _, action := range actions {
+			if !KnownProviderAction(kind, action) {
+				t.Errorf("%q does not recognise its own action %q", kind, action)
+			}
+		}
+	}
+}
+
+func parseExample(t *testing.T) Manifest {
+	t.Helper()
+	manifest, err := Parse([]byte(example))
+	if err != nil {
+		t.Fatalf("the example manifest does not parse: %v", err)
+	}
+	return manifest
+}

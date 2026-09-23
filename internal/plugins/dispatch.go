@@ -95,8 +95,20 @@ type Dispatcher struct {
 	// a plugin and it is told about every other team's deploys, and can refuse
 	// them.
 	Targets func(ctx context.Context, event, teamID string) ([]Target, error)
-	Client  *http.Client
-	Log     *slog.Logger
+	// Providers resolves the one plugin that provides a kind with an id, for
+	// Call. Separate from Targets because it is a different question with a
+	// different answer shape: an event goes to everybody who subscribed, and a
+	// call goes to exactly the plugin whose vendor was chosen. It returns
+	// ErrNoProvider when nothing installed provides it, which is an ordinary
+	// state rather than a failure.
+	//
+	// There is no team argument. A provider is configured by an administrator
+	// against a named plugin, so the choice has already been made by somebody
+	// who could make it; the team check that guards events is about a plugin
+	// hearing what it was not meant to hear, and nothing is being told here.
+	Providers func(ctx context.Context, kind, providerID string) (Target, error)
+	Client    *http.Client
+	Log       *slog.Logger
 }
 
 // MaxVerdictBytes bounds what a plugin may answer with.

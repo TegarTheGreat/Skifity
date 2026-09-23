@@ -85,6 +85,10 @@ type Manifest struct {
 
 	// Events are the hooks it subscribes to.
 	Events []EventSubscription `json:"events,omitempty"`
+	// Provides is what it brings to the panel: a vendor behind a feature the
+	// panel already owns. See provider.go, which is the half of this standard
+	// that lets a plugin do something rather than only hear about it.
+	Provides []Provider `json:"provides,omitempty"`
 	// Settings are its own, shown in the panel under the plugin.
 	Settings []Setting `json:"settings,omitempty"`
 
@@ -279,7 +283,10 @@ func (m Manifest) Validate() error {
 	if err := m.validateEvents(); err != nil {
 		return err
 	}
-	return m.validateSettings()
+	if err := m.validateSettings(); err != nil {
+		return err
+	}
+	return m.validateProviders()
 }
 
 func (m Manifest) validatePermissions() error {
@@ -331,16 +338,27 @@ func (m Manifest) validateEvents() error {
 }
 
 func (m Manifest) validateSettings() error {
-	if len(m.Settings) > MaxSettings {
-		return fmt.Errorf("a plugin may declare at most %d settings", MaxSettings)
+	return validateSettingList(m.Settings, "this plugin")
+}
+
+// validateSettingList checks one form, whether it is the plugin's own settings
+// or a provider's. Shared rather than duplicated: a provider's form is shown in
+// the same panel, stored in the same place and sealed the same way, so it had
+// better not be allowed to be a shape the plugin's own settings are not.
+//
+// whose names what is being checked, so the message says which form is wrong
+// when a manifest declares several.
+func validateSettingList(list []Setting, whose string) error {
+	if len(list) > MaxSettings {
+		return fmt.Errorf("%s may declare at most %d settings", whose, MaxSettings)
 	}
 	seen := map[string]bool{}
-	for _, setting := range m.Settings {
+	for _, setting := range list {
 		if !settingKeyPattern.MatchString(setting.Key) {
 			return fmt.Errorf("%q is not a setting key; they are lowercase letters, digits and underscores", setting.Key)
 		}
 		if seen[setting.Key] {
-			return fmt.Errorf("the setting %q is declared twice", setting.Key)
+			return fmt.Errorf("%s declares the setting %q twice", whose, setting.Key)
 		}
 		seen[setting.Key] = true
 		if strings.TrimSpace(setting.Label) == "" {

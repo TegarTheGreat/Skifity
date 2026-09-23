@@ -6,6 +6,13 @@ Skifity runs your image in a namespace of its own, gives it an API token
 carrying exactly the permissions your manifest asked for and an administrator
 granted, and posts the events you subscribed to. Write it in any language.
 
+A plugin does two kinds of thing, and most useful ones do only the second:
+
+* **It hears what happened.** You subscribe to [events](#events) and react.
+* **It provides a vendor.** The panel owns a feature and asks your container to
+  be the thing behind it — see [Providing something](#providing-something).
+  This is the half that makes a plugin worth writing.
+
 ## Why not a library
 
 Skifity is one static Go binary with CGO turned off, and Go cannot load code
@@ -80,6 +87,9 @@ valid, the standard changed and it was not on purpose.
 * **An unknown field is an error, not a warning.** A plugin written against a
   later panel refuses to install rather than installing and quietly losing half
   of what it declared.
+* **`events:` and `provides:` are both optional, and a plugin needs at least
+  one of them to do anything.** A plugin that provides something and subscribes
+  to nothing never has to implement `/events` at all.
 
 ## Permissions
 
@@ -137,6 +147,116 @@ not, so `blocking: true` on anything else is refused. A blocking hook holds up
 somebody watching a deployment page, so the panel caps it at ten seconds
 whatever you asked for. If you need longer, answer straight away and do the work
 afterwards.
+
+## Providing something
+
+Events are the half where the panel talks to you. This is the half where you
+answer.
+
+A plugin that only subscribes to events can react to what happened and nothing
+more, and every genuinely useful idea for one turned out to belong in the panel
+itself. So a plugin can also be the thing behind a feature the panel already
+has: **the panel owns the feature, your plugin owns the vendor.** Skifity knows
+what a notification is, when to send one and what goes in it. It does not know
+what Slack is. That is the seam.
+
+```yaml
+provides:
+  - kind: notify.channel
+    id: chat
+    name: Chat
+    description: A message in a channel.
+    settings:
+      - key: webhook_url
+        label: Webhook URL
+        kind: password
+        secret: true
+        required: true
+```
+
+`name` is what somebody picks from a list, so it names **the vendor and not
+your plugin**: "Slack", not "Acme notification pack". `id` is unique inside
+your manifest; you may provide several of the same kind.
+
+`settings` here is not the same as your plugin's own settings above. Yours are
+configured once, when the plugin is installed. These are the form for **one
+configured instance** — a plugin providing Slack has one set of its own
+settings and any number of channels configured against it, each with its own
+webhook URL. The panel collects them, seals the secret ones with its own
+keyring, and sends them to you with every call. **You keep nothing.** No
+database, no credential of your own for the vendor, and removing your plugin
+removes nothing the panel still needs.
+
+### What you can provide
+
+| Kind | What the panel asks | Actions |
+|---|---|---|
+| `notify.channel` | Somewhere a notification can be sent. | `validate`, `send` |
+
+One kind. That is not the roadmap being coy — a kind exists in this table only
+once the panel really asks for it, and a test fails the build if one is listed
+that no line of code anywhere calls. A kind you can declare and that nobody
+ever calls is a plugin that installs, is approved, and sits waiting for a
+request that never comes, with no way for you to find out except by watching
+nothing happen. Adding the second kind is cheap; adding it before a caller
+exists is how the list fills up with promises.
+
+### Answering a call
+
+`POST /provide` on your container, signed exactly like an event:
+
+```json
+{
+  "plugin": "com.example.chat",
+  "kind": "notify.channel",
+  "provider": "chat",
+  "action": "send",
+  "config": {"webhook_url": "https://example.test/hook"},
+  "data": {"title": "web is unhealthy", "body": "...", "level": "error", "url": "https://..."}
+}
+```
+
+`X-Skifity-Provider` carries `kind/id` and `X-Skifity-Action` the action, so
+you can route without parsing the body. Check `X-Skifity-Signature` the same way
+you check it on an event.
+
+Answer with:
+
+```json
+{"ok": true, "data": {}}
+```
+
+or, when you cannot:
+
+```json
+{"ok": false, "error": "that webhook URL was rejected"}
+```
+
+**Your `error` is shown to a person**, so write it for them and not for a log.
+It is cut at 500 characters. `{"ok": false}` with no reason gets them "it
+refused and did not say why", which is a support ticket with your name on it.
+
+**An empty body is a failure, not a yes.** A `200` with `{}` means `ok` is
+false, deliberately: reading silence as success is how a channel quietly
+delivers nothing for a month.
+
+You have fifteen seconds. Unlike an event, **a failure here is not swallowed**
+— somebody is waiting for it, so it reaches them. A plugin that is restarting
+is a notification that did not go out and a person who is told so, not a
+silence.
+
+`validate` is asked while somebody is still looking at the form, before
+anything is stored. Check what you can cheaply — the shape of a URL, a token
+that is obviously not one. It is not the place to send a test message.
+
+### What the panel does not promise
+
+A channel row in the panel's database outlives your plugin. It stores
+`plugin:<your id>/<provider id>`, both halves, because two plugins may each
+provide a `slack` and a channel configured against one must never start being
+delivered by the other. If your plugin is removed, or upgraded so that it no
+longer provides that id, the channel stops working and says which plugin to
+look for. It does not silently go somewhere else.
 
 ## Settings
 

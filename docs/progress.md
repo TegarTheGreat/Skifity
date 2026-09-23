@@ -3649,6 +3649,81 @@ all ten pages the panel serves rather than eight.
   vendor chunks a browser keeps across upgrades. Served from the binary on the
   same host, so it is not the problem it would be over a CDN.
 
+## Phase 71 — the plugin system did not have a job
+
+Ten events and nothing else. A plugin could be told a deploy succeeded and, in
+one case, refuse one. That was the whole standard.
+
+It was tested the only way a plugin system can be, by trying to name a plugin
+worth writing. Preview environments per pull request, uptime monitoring with a
+status page, a mail service for every app, error tracking from the logs: every
+one of them is a **core feature** of a platform-as-a-service, and not one of
+them is a plugin. What the standard could express were small operational
+conveniences — a deploy freeze, an automatic rollback, mirroring a backup. A
+plugin system whose best ideas all belong in the panel does not have a job.
+
+The cause is structural, and ADR-0021 records it: a plugin could add nothing to
+the system and change nothing in it. It could only react, and a system that can
+only react produces only small things.
+
+### The other direction
+
+A manifest now has `provides`. The panel owns the feature and the plugin owns
+the vendor: Skifity knows what a notification is, when to send one and what goes
+in it, and does not know what Slack is. The panel calls `/provide` on the
+plugin's container, signed with the same key as an event, and **uses the
+answer**.
+
+Three judgements are the opposite of the event half's, because somebody is
+waiting rather than nobody:
+
+* A failure is returned rather than logged, so an alert that did not go out is
+  a person who is told so.
+* A plugin refusing is a different error from a plugin being unreachable, and
+  they get different words.
+* `200` with an empty body is a failure. Reading silence as success is how a
+  channel quietly delivers nothing for a month.
+
+The panel keeps each configured instance's settings, sealed with its own
+keyring, and sends them with every call. A provider plugin has no database and
+no credential of its own.
+
+### Notification channels, all the way to the form
+
+`internal/notify` was a closed switch of four: Telegram, Discord, a webhook,
+email. Adding Slack meant editing the binary and cutting a release.
+
+A kind a plugin provides is now validated, listed, chosen, filled in and
+delivered. The list of kinds is read from the panel instead of being written
+into the frontend, and the plugin's own form is drawn from its manifest — all
+five field kinds, not just the two the built-ins use. Stopping at the API would
+have been the same defect this repository has now found eight times: a channel
+that can be stored and never picked.
+
+A stored kind is `plugin:<plugin id>/<provider id>`, both halves, because two
+plugins may each provide a `slack`. A channel whose plugin has been removed
+stops working and says which plugin to look for; it does not go somewhere else.
+
+### The gate, and why there is only one kind
+
+A test reads the vocabulary of kinds and actions and the panel's own source, and
+fails the build when one lists something the other never asks for. It was proved
+by adding a `storage.bucket` kind wired to nothing: both halves of the gate
+caught it.
+
+So the list has one kind. The ones that are obviously missing — a DNS provider,
+a backup destination, a git source, an identity provider — are each a real place
+where the panel is hardcoded to one vendor or to none, and each is blocked on
+the panel asking for it first. That order is the point. A kind that can be
+declared and is never called is a plugin that installs, is approved, and waits
+for a request nobody makes, with no way for its author to find out.
+
+### Still true
+
+No plugin has ever been run. What is proved is the manifest, the validation, the
+signature, the call, the resolution and the seam — by tests, against a fake
+plugin server, not against a container in a cluster. See ADR-0010.
+
 ## Idle resource usage
 
 `docs/performance.md`. The panel is measured: 34 MiB resident idle, 38 MiB after

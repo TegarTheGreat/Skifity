@@ -511,3 +511,74 @@ The step-up is rate limited exactly like signing in, because otherwise it is an
 unmetered password oracle for an account whose session has already been taken —
 which is the case it exists for. Changing a password already asked for the
 current one and is unchanged.
+
+## ADR-0021 - A plugin can provide a vendor, not only hear about events
+
+**Context.** ADR-0018 settled what a plugin *is*: a container and a manifest.
+It did not settle what a plugin is *for*, and the first version of the standard
+answered that with events alone — ten of them, one of which can refuse a
+deploy.
+
+That shape was tested the only way it can be, by trying to think of a plugin
+worth writing. Every good idea failed the same way. Preview environments per
+pull request, uptime monitoring with a status page, a mail service for every
+app, error tracking from the logs: all of them are core features of a
+platform-as-a-service, and none of them is a plugin. The ideas that *were*
+expressible — a deploy freeze window, an automatic rollback, mirroring a backup
+elsewhere — were small operational conveniences. A plugin system whose best
+ideas all belong in the panel does not have a job.
+
+The reason is structural. A WordPress plugin is worth writing because it can
+add nouns to the system — a post type, an admin page, a payment gateway — and
+because a filter can *change a value* rather than merely be told one. A Skifity
+plugin could add nothing and change nothing. It could only react, and a system
+that can only react produces only small things.
+
+**Decision.** A manifest gains `provides`: a list of vendors the plugin brings
+to features the panel already owns. The panel decides what a notification says,
+when it goes and who gets it; a plugin decides how it leaves the building. The
+panel calls the plugin's container at `/provide` with the same HMAC it signs
+events with, and **the answer is used**.
+
+Four things follow from that and are part of the decision:
+
+* **The vocabulary of kinds is closed, and a kind is added only once a caller
+  exists.** A test reads the vocabulary and the panel's own source and fails
+  the build when one lists a kind the other never asks for. This repository has
+  now found the same defect eight times — something computed, stored, validated,
+  documented or shown, and never delivered — and here it would be a promise
+  made to somebody else's code: a plugin that installs, is approved, and waits
+  for a request nobody makes. The list starts at one kind for that reason, not
+  out of caution.
+* **A failure is returned, not logged.** `Notify` drops its errors because
+  nobody is waiting and a deploy that succeeded did succeed. Here somebody is
+  waiting — a person looking at a form, or an alert saying an app is down — so
+  a plugin that is unreachable is a notification that did not go out and a
+  person who is told so.
+* **An empty answer is a failure.** A plugin that returns `200` with `{}` has
+  said nothing, and reading silence as success is how a channel quietly
+  delivers nothing for a month. The zero value of the response refuses, for the
+  same reason the zero value of a blocking verdict does.
+* **The panel keeps the configuration and the plugin keeps nothing.** Each
+  configured instance's settings are collected by the panel, sealed with its
+  keyring, and sent afresh with every call. A provider plugin therefore has no
+  database, no credential of its own for the vendor, and removing it removes
+  nothing the panel still needs.
+
+A stored row names both the plugin and the provider id within it, because two
+plugins may each provide a `slack`, and a channel configured against one must
+never start being delivered by the other the day both are installed.
+
+**Consequences.** Adding Slack, PagerDuty or Matrix to Skifity is now a
+container somebody publishes rather than a change to this binary and a release.
+
+What this does not do is change ADR-0018's other half: a plugin still cannot
+render a page inside the panel. A provider fills in a vendor behind an existing
+screen, which is exactly why `notify.channel` fits it and a status page does
+not. The kinds that are obviously missing — a DNS provider, a backup
+destination, a git source, an identity provider — are each a real place where
+the panel is hardcoded to one vendor or to none, and each one is blocked on the
+panel asking for it first. That order is the whole point of the gate.
+
+It also leaves the ideas that failed the test above where they belong: in the
+panel's own roadmap, as features, not as plugins that were never going to work.

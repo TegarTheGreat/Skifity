@@ -44,7 +44,7 @@ const (
 // ProviderKinds is every kind a plugin may provide.
 var ProviderKinds = []string{ProviderNotifyChannel}
 
-// Actions the panel asks of a provider, per kind.
+// ProviderActions is what the panel asks of a provider, per kind.
 //
 // Closed for the same reason as the kinds, and listed per kind rather than as
 // one set because "validate a Slack webhook URL" and "validate an S3 bucket"

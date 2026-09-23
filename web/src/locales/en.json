@@ -1948,6 +1948,8 @@
     "empty": "Nowhere to notify yet",
     "add": "Add somewhere",
     "channelKind": "Send it to",
+    "kindFromPlugin": "From a plugin",
+    "providedBy": "Sent by the {{plugin}} plugin.",
     "channelName": "Name",
     "events": "Tell me about",
     "eventsHelp": "Choose as few as you can live with. A channel nobody reads is worse than none.",

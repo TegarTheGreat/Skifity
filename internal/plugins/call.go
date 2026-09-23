@@ -68,8 +68,16 @@ const MaxProviderErrorRunes = 500
 
 // Request is what the panel asks a provider.
 type Request struct {
-	// Kind and Provider say which of the plugin's providers is meant. A plugin
-	// may provide more than one.
+	// Plugin is which installed plugin is being asked.
+	//
+	// Part of the address and not only of the log: a provider id is unique
+	// within a manifest and nowhere else, so two plugins may both provide a
+	// notify.channel called "slack". Addressing one by its id alone would pick
+	// whichever happened to be found first, and a channel configured against
+	// one would start being delivered by the other the day both are installed.
+	Plugin string `json:"plugin"`
+	// Kind and Provider say which of that plugin's providers is meant. A
+	// plugin may provide more than one.
 	Kind     string `json:"kind"`
 	Provider string `json:"provider"`
 	// Action is from ProviderActions for this kind.
@@ -146,7 +154,7 @@ func (d Dispatcher) Call(ctx context.Context, req Request) (json.RawMessage, err
 	if d.Providers == nil {
 		return nil, ErrNoProvider
 	}
-	target, err := d.Providers(ctx, req.Kind, req.Provider)
+	target, err := d.Providers(ctx, req.Plugin, req.Kind, req.Provider)
 	if err != nil {
 		return nil, err
 	}

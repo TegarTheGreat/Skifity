@@ -51,9 +51,26 @@ type Dispatcher struct {
 	// the panel is already running.
 	panelURL func(context.Context) string
 
+	// provider is the installed plugins, for a channel kind this package does
+	// not send itself. Nil on a panel with no plugins, which is the ordinary
+	// case and not a failure.
+	//
+	// Set after construction rather than passed in, because the plugin
+	// dispatcher is built from the cluster adapter and the cluster adapter is
+	// built after this. A dispatcher with no provider still sends every
+	// built-in kind.
+	provider Provider
+
 	// wg lets the panel wait for in-flight notifications during shutdown, so a
 	// deployment failure reported at the moment of a restart still goes out.
 	wg sync.WaitGroup
+}
+
+// SetProvider gives the dispatcher the plugins that provide channel kinds.
+func (d *Dispatcher) SetProvider(provider Provider) {
+	if d != nil {
+		d.provider = provider
+	}
 }
 
 // NewDispatcher returns a dispatcher. panelURL may be nil.
@@ -116,7 +133,7 @@ func (d *Dispatcher) Notify(ctx context.Context, teamID, event string, msg Messa
 			// nobody gets.
 			sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 			defer cancel()
-			if err := Send(sendCtx, kind, config, msg); err != nil {
+			if err := Send(sendCtx, kind, config, msg, d.provider); err != nil {
 				d.log.Warn("a notification could not be delivered",
 					"channel", id, "kind", kind, "event", event, "error", err)
 				return

@@ -106,7 +106,7 @@ type Dispatcher struct {
 	// against a named plugin, so the choice has already been made by somebody
 	// who could make it; the team check that guards events is about a plugin
 	// hearing what it was not meant to hear, and nothing is being told here.
-	Providers func(ctx context.Context, kind, providerID string) (Target, error)
+	Providers func(ctx context.Context, pluginID, kind, providerID string) (Target, error)
 	Client    *http.Client
 	Log       *slog.Logger
 }

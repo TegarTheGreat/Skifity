@@ -111,11 +111,19 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	// the database on every event rather than cached, because a cached list is
 	// a plugin that keeps being sent events after somebody switched it off.
 	var pluginEvents plugins.Dispatcher
+	var pluginChannels notify.Provider
 	if clusterAdapter != nil {
 		pluginEvents = plugins.Dispatcher{
-			Targets: clusterAdapter.PluginTargets,
-			Log:     log,
+			Targets:   clusterAdapter.PluginTargets,
+			Providers: clusterAdapter.PluginProvider,
+			Log:       log,
 		}
+		// The other half of the standard: a plugin does not only hear that a
+		// notification went out, it can be the thing that sends it. Given to
+		// the notification dispatcher and to the API, so a channel a plugin
+		// provides can be chosen, tested and delivered through.
+		pluginChannels = clusterAdapter.PluginNotifyChannels(pluginEvents)
+		dispatcher.SetProvider(pluginChannels)
 	}
 
 	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
@@ -137,7 +145,8 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	}
 
 	server := api.New(api.Options{
-		Config: cfg, DB: db, Keyring: keyring, Auth: authService, Hub: hub, Logger: log,
+		Channels: pluginChannels,
+		Config:   cfg, DB: db, Keyring: keyring, Auth: authService, Hub: hub, Logger: log,
 		Cluster: nilIfNil(clusterAdapter), Provisioner: provisioner, Deployer: deployer,
 		Databases: databases, Backups: backups, Plugins: pluginEvents,
 		Frontend: frontend, SetupToken: setupToken, Metrics: registry,

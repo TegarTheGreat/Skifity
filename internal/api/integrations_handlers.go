@@ -158,6 +158,33 @@ func (s *Server) handleListNotificationChannels(w http.ResponseWriter, r *http.R
 	writeList(w, channels)
 }
 
+// handleListNotificationKinds is what the form is built from.
+//
+// It exists because a plugin that provides a channel and is never offered is a
+// plugin that does nothing: the panel used to have the four kinds written into
+// the frontend, so a provided one could be stored through the API and never
+// picked by a person. The built-in kinds are returned with no fields, because
+// the panel has their forms already and has translated them; a provided kind
+// carries its own form, in the plugin author's English.
+func (s *Server) handleListNotificationKinds(w http.ResponseWriter, r *http.Request) {
+	teamID := chi.URLParam(r, "teamID")
+	if _, err := s.authorizeTeam(r, teamID, store.RoleAdmin); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	kinds := notify.BuiltInKinds()
+	if s.channels != nil {
+		provided, err := s.channels.Kinds(r.Context())
+		if err != nil {
+			// The built-in kinds still work, and a person opening this form
+			// should not be stopped by a plugin the panel could not read.
+			s.log.Warn("the channels plugins provide could not be listed", "error", err)
+		}
+		kinds = append(kinds, provided...)
+	}
+	writeList(w, kinds)
+}
+
 type createChannelRequest struct {
 	Kind   string            `json:"kind"`
 	Name   string            `json:"name"`
@@ -176,7 +203,7 @@ func (s *Server) handleCreateNotificationChannel(w http.ResponseWriter, r *http.
 		writeError(w, r, err)
 		return
 	}
-	if err := notify.ValidateConfig(req.Kind, req.Config); err != nil {
+	if err := notify.ValidateConfig(r.Context(), req.Kind, req.Config, s.channels); err != nil {
 		writeError(w, r, errdoc.BadRequest(err.Error()))
 		return
 	}
@@ -254,7 +281,7 @@ func (s *Server) handleTestNotificationChannel(w http.ResponseWriter, r *http.Re
 		Body:  "If you are reading this, notifications from " + version.Name + " are working.",
 		Level: "info",
 	}
-	if err := notify.Send(r.Context(), channel.Kind, config, message); err != nil {
+	if err := notify.Send(r.Context(), channel.Kind, config, message, s.channels); err != nil {
 		writeError(w, r, errdoc.New("notification.test_failed", "The test message could not be sent").
 			WithCause("%s", err.Error()).
 			WithImpact("This channel will not deliver notifications until it works.").

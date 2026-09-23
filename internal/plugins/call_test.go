@@ -44,8 +44,8 @@ func newProviderServer(t *testing.T, secret string, answer func(Request) Respons
 	return p
 }
 
-func providerAt(target Target) func(context.Context, string, string) (Target, error) {
-	return func(context.Context, string, string) (Target, error) { return target, nil }
+func providerAt(target Target) func(context.Context, string, string, string) (Target, error) {
+	return func(context.Context, string, string, string) (Target, error) { return target, nil }
 }
 
 // The whole point of the provider half: the panel asks, and the answer is used.
@@ -57,7 +57,7 @@ func TestCallingAProviderReturnsWhatItAnswered(t *testing.T) {
 	d := Dispatcher{Providers: providerAt(Target{ID: "com.example.chat", Name: "Chat", URL: server.URL, Secret: secret})}
 
 	data, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
 		Config: map[string]string{"webhook_url": "https://example.test/hook"},
 	})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestAPluginRefusingIsDistinguishableFromNotReachingIt(t *testing.T) {
 	d := Dispatcher{Providers: providerAt(Target{ID: "com.example.chat", Name: "Chat", URL: server.URL, Secret: secret})}
 
 	_, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionValidate,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionValidate,
 	})
 	if err == nil {
 		t.Fatal("a refusal was not reported at all")
@@ -115,7 +115,7 @@ func TestAProviderThatCannotBeReachedIsAnErrorAndNotASilence(t *testing.T) {
 
 	d := Dispatcher{Providers: providerAt(Target{ID: "com.example.chat", Name: "Chat", URL: url, Secret: "s"})}
 	if _, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
 	}); err == nil {
 		t.Fatal("a plugin that is not running was reported as a successful delivery")
 	}
@@ -131,7 +131,7 @@ func TestAnEmptyAnswerIsAFailure(t *testing.T) {
 
 	d := Dispatcher{Providers: providerAt(Target{ID: "com.example.chat", Name: "Chat", URL: server.URL, Secret: secret})}
 	if _, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
 	}); err == nil {
 		t.Fatal("a plugin that said nothing was treated as having delivered")
 	}
@@ -147,7 +147,7 @@ func TestAPluginCannotPutAnEssayOnThePanelsPage(t *testing.T) {
 	d := Dispatcher{Providers: providerAt(Target{ID: "com.example.chat", Name: "Chat", URL: server.URL, Secret: secret})}
 
 	_, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
 	})
 	refusal, ok := AsProviderError(err)
 	if !ok {
@@ -161,17 +161,17 @@ func TestAPluginCannotPutAnEssayOnThePanelsPage(t *testing.T) {
 // Asking for something no kind covers is refused here rather than posted to a
 // plugin that would not know what to do with it.
 func TestAnUnknownKindOrActionIsRefusedBeforeAnythingIsSent(t *testing.T) {
-	d := Dispatcher{Providers: func(context.Context, string, string) (Target, error) {
+	d := Dispatcher{Providers: func(context.Context, string, string, string) (Target, error) {
 		t.Error("a plugin was resolved for a request that should never have got that far")
 		return Target{}, nil
 	}}
 	if _, err := d.Call(context.Background(), Request{
-		Kind: "storage.bucket", Provider: "x", Action: ActionSend,
+		Plugin: "p", Kind: "storage.bucket", Provider: "x", Action: ActionSend,
 	}); err == nil {
 		t.Error("a kind this panel never asks for was accepted")
 	}
 	if _, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "x", Action: "explode",
+		Plugin: "p", Kind: ProviderNotifyChannel, Provider: "x", Action: "explode",
 	}); err == nil {
 		t.Error("an action this kind is never asked to do was accepted")
 	}
@@ -181,9 +181,29 @@ func TestAnUnknownKindOrActionIsRefusedBeforeAnythingIsSent(t *testing.T) {
 func TestNothingProvidingItIsNotAFailure(t *testing.T) {
 	d := Dispatcher{}
 	_, err := d.Call(context.Background(), Request{
-		Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "chat", Action: ActionSend,
 	})
 	if !errors.Is(err, ErrNoProvider) {
 		t.Fatalf("expected ErrNoProvider, got %v", err)
+	}
+}
+
+// Two plugins may each provide a notify.channel called "slack". A call has to
+// name which one, or a channel configured against one starts being delivered by
+// the other the day both are installed.
+func TestACallNamesThePluginAndNotOnlyTheProviderID(t *testing.T) {
+	var asked [3]string
+	d := Dispatcher{Providers: func(_ context.Context, pluginID, kind, providerID string) (Target, error) {
+		asked = [3]string{pluginID, kind, providerID}
+		return Target{}, ErrNoProvider
+	}}
+	_, _ = d.Call(context.Background(), Request{
+		Plugin: "com.example.chat", Kind: ProviderNotifyChannel, Provider: "slack", Action: ActionSend,
+	})
+	if asked[0] != "com.example.chat" {
+		t.Errorf("the plugin was not part of the address: %q", asked[0])
+	}
+	if asked[1] != ProviderNotifyChannel || asked[2] != "slack" {
+		t.Errorf("the provider was not named: %v", asked)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/metrics"
+	"skifity/internal/notify"
 	"skifity/internal/plugins"
 	"skifity/internal/runsafe"
 	"skifity/internal/store"
@@ -51,6 +52,11 @@ type Server struct {
 	// with no Targets sends nothing, so nil is a working configuration.
 	plugins plugins.Dispatcher
 
+	// channels is the installed plugins that provide a notification channel,
+	// for the kinds this panel does not send itself. Nil is a working
+	// configuration and means only the built-in kinds exist.
+	channels notify.Provider
+
 	// frontend serves the embedded UI.
 	frontend http.Handler
 
@@ -71,8 +77,11 @@ type Options struct {
 	Databases   DatabaseManager
 	Backups     BackupManager
 	Plugins     plugins.Dispatcher
-	Frontend    http.Handler
-	SetupToken  string
+	// Channels is the installed plugins that provide a notification channel.
+	// Nil is a panel with no plugins, and every built-in channel still works.
+	Channels   notify.Provider
+	Frontend   http.Handler
+	SetupToken string
 	// Metrics is shared with the orchestrators, so a deployment counted there
 	// appears on the same page as a request counted here. Nil is fine and
 	// means the panel keeps its own.
@@ -94,6 +103,7 @@ func New(opts Options) *Server {
 		databases:   opts.Databases,
 		backups:     opts.Backups,
 		plugins:     opts.Plugins,
+		channels:    opts.Channels,
 		frontend:    opts.Frontend,
 		setup:       newSetupState(opts.SetupToken),
 		metrics:     opts.Metrics,
@@ -211,6 +221,7 @@ func (s *Server) routes() chi.Router {
 				team.Post("/git-sources", s.handleCreateGitSource)
 				team.Delete("/git-sources/{sourceID}", s.handleDeleteGitSource)
 
+				team.Get("/notifications/kinds", s.handleListNotificationKinds)
 				team.Get("/notifications", s.handleListNotificationChannels)
 				team.Post("/notifications", s.handleCreateNotificationChannel)
 				team.Delete("/notifications/{channelID}", s.handleDeleteNotificationChannel)

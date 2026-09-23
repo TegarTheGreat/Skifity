@@ -1936,6 +1936,8 @@
     "empty": "Belum ada tujuan notifikasi",
     "add": "Tambahkan tujuan",
     "channelKind": "Kirim ke",
+    "kindFromPlugin": "Dari plugin",
+    "providedBy": "Dikirim oleh plugin {{plugin}}.",
     "channelName": "Nama",
     "events": "Beri tahu saya tentang",
     "eventsHelp": "Pilih sesedikit mungkin. Saluran yang tidak dibaca siapa pun lebih buruk daripada tidak ada.",

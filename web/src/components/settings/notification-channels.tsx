@@ -32,7 +32,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
-import type { NotificationChannel } from "@/lib/types"
+import type { NotificationChannel, NotificationField, NotificationKind } from "@/lib/types"
 
 /** The events a channel can subscribe to, matching internal/notify. */
 const EVENTS = [
@@ -45,24 +45,61 @@ const EVENTS = [
   "certificate.failed",
 ] as const
 
-/** What each kind needs, so the form asks for exactly that and nothing else. */
-const KINDS = {
+/**
+ * What each built-in kind needs, so the form asks for exactly that.
+ *
+ * Only the built-in ones. The list of kinds itself comes from the API now,
+ * because a plugin can provide a way of sending and a form that is written in
+ * here could never offer it: the panel would accept such a channel through the
+ * API and never let a person pick it.
+ */
+const BUILT_IN: Record<string, NotificationField[]> = {
   telegram: [
-    { key: "bot_token", label: "Bot token", secret: true },
-    { key: "chat_id", label: "Chat id", secret: false },
+    { key: "bot_token", label: "Bot token", secret: true, required: true },
+    { key: "chat_id", label: "Chat id", required: true },
   ],
-  discord: [{ key: "webhook_url", label: "Webhook URL", secret: true }],
-  webhook: [{ key: "url", label: "URL", secret: false }],
-  email: [{ key: "to", label: "To", secret: false }],
-} as const
+  discord: [{ key: "webhook_url", label: "Webhook URL", secret: true, required: true }],
+  webhook: [{ key: "url", label: "URL", required: true }],
+  email: [{ key: "to", label: "To", required: true }],
+}
 
-type Kind = keyof typeof KINDS
+/** The form for a kind: the panel's own for a built-in, the plugin's otherwise. */
+function fieldsFor(kind: NotificationKind | undefined): NotificationField[] {
+  if (!kind) return []
+  return BUILT_IN[kind.kind] ?? kind.fields ?? []
+}
+
+/** What to call a kind: a translated name for a built-in, the plugin's own otherwise. */
+function useKindLabel() {
+  const { t } = useTranslation()
+  return (kind: string, name?: string) =>
+    BUILT_IN[kind] !== undefined
+      ? t(`notifications.kind.${kind}`)
+      : (name ?? t("notifications.kindFromPlugin"))
+}
+
+/**
+ * The ways of sending that exist right now.
+ *
+ * Read from the API rather than written into the frontend, because a plugin is
+ * installed and removed while somebody has this page open.
+ */
+function useChannelKinds() {
+  const { team } = useSession()
+  return useQuery({
+    queryKey: ["notification-kinds", team?.id],
+    queryFn: () => api.get<List<NotificationKind>>(`/api/teams/${team!.id}/notifications/kinds`),
+    enabled: Boolean(team),
+  })
+}
 
 export function NotificationChannels() {
   const { t } = useTranslation()
   const confirmRemove = useConfirm()
   const { team } = useSession()
   const [adding, setAdding] = useState(false)
+  const kinds = useChannelKinds()
+  const label = useKindLabel()
 
   const channels = useQuery({
     queryKey: ["notifications", team?.id],
@@ -115,7 +152,11 @@ export function NotificationChannels() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="truncate font-medium">{channel.name}</span>
                     <Badge variant="secondary" className="text-[10px]">
-                      {t(`notifications.kind.${channel.kind}`, { defaultValue: channel.kind })}
+                      {label(
+                        channel.kind,
+                        kinds.data?.items.find((candidate) => candidate.kind === channel.kind)
+                          ?.name,
+                      )}
                     </Badge>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
@@ -176,7 +217,9 @@ export function NotificationChannels() {
 function ChannelForm({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation()
   const { team } = useSession()
-  const [kind, setKind] = useState<Kind>("telegram")
+  const kinds = useChannelKinds()
+  const label = useKindLabel()
+  const [kind, setKind] = useState("telegram")
   const [name, setName] = useState("")
   const [config, setConfig] = useState<Record<string, string>>({})
   // Failures are what people actually want to be told about; successes are
@@ -197,8 +240,15 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
     },
   })
 
-  const fields = KINDS[kind]
-  const complete = fields.every((field) => (config[field.key] ?? "").trim() !== "")
+  // Derived during render rather than copied into state by an effect: the
+  // chosen kind and the list from the API are the only facts, and the form is
+  // a function of them.
+  const available = kinds.data?.items ?? []
+  const chosen = available.find((candidate) => candidate.kind === kind)
+  const fields = fieldsFor(chosen)
+  const complete = fields.every(
+    (field) => field.required !== true || (config[field.key] ?? "").trim() !== "",
+  )
 
   return (
     <Card>
@@ -215,7 +265,7 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
             <Select
               value={kind}
               onValueChange={(next) => {
-                setKind(next as Kind)
+                setKind(next)
                 // The fields are different per kind; keeping the old values
                 // would send a Discord URL as a Telegram token.
                 setConfig({})
@@ -225,13 +275,21 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(KINDS) as Kind[]).map((candidate) => (
-                  <SelectItem key={candidate} value={candidate}>
-                    {t(`notifications.kind.${candidate}`)}
+                {available.map((candidate) => (
+                  <SelectItem key={candidate.kind} value={candidate.kind}>
+                    {label(candidate.kind, candidate.name)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {chosen?.provider != null && (
+              <FieldDescription>
+                {chosen.description != null && chosen.description !== ""
+                  ? `${chosen.description} — `
+                  : ""}
+                {t("notifications.providedBy", { plugin: chosen.provider })}
+              </FieldDescription>
+            )}
           </Field>
 
           <Field>
@@ -240,22 +298,17 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
               id="channel-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder={t(`notifications.kind.${kind}`)}
+              placeholder={label(kind, chosen?.name)}
             />
           </Field>
 
           {fields.map((field) => (
-            <Field key={field.key}>
-              <FieldLabel htmlFor={`channel-${field.key}`}>{field.label}</FieldLabel>
-              <Input
-                id={`channel-${field.key}`}
-                type={field.secret ? "password" : "text"}
-                autoComplete="off"
-                value={config[field.key] ?? ""}
-                onChange={(event) => setConfig({ ...config, [field.key]: event.target.value })}
-                required
-              />
-            </Field>
+            <ChannelField
+              key={field.key}
+              field={field}
+              value={config[field.key] ?? ""}
+              onChange={(value) => setConfig({ ...config, [field.key]: value })}
+            />
           ))}
 
           <FieldSet>
@@ -287,7 +340,7 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
             <Button type="button" variant="ghost" onClick={onDone}>
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={!complete || create.isPending}>
+            <Button type="submit" disabled={!complete || kinds.isLoading || create.isPending}>
               {create.isPending && <Spinner />}
               {create.isPending ? t("common.saving") : t("common.add")}
             </Button>
@@ -295,5 +348,89 @@ function ChannelForm({ onDone }: { onDone: () => void }) {
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * One input in a channel's form.
+ *
+ * A built-in kind only ever needs text and password. A plugin may declare a
+ * number, a switch or a choice, and a field the panel cannot draw is a field
+ * somebody cannot fill in — so all five kinds are drawn here rather than
+ * falling back to a text box that stores "true" as a word.
+ */
+function ChannelField({
+  field,
+  value,
+  onChange,
+}: {
+  field: NotificationField
+  value: string
+  onChange: (value: string) => void
+}) {
+  const id = `channel-${field.key}`
+  const help =
+    field.help != null && field.help !== "" ? (
+      <FieldDescription>{field.help}</FieldDescription>
+    ) : null
+
+  if (field.kind === "bool") {
+    return (
+      <Field orientation="horizontal">
+        <Checkbox
+          id={id}
+          checked={value === "true"}
+          onCheckedChange={(checked) => onChange(checked === true ? "true" : "false")}
+        />
+        <div>
+          <FieldLabel htmlFor={id} className="font-normal">
+            {field.label}
+          </FieldLabel>
+          {help}
+        </div>
+      </Field>
+    )
+  }
+
+  if (field.kind === "choice") {
+    return (
+      <Field>
+        <FieldLabel htmlFor={id}>{field.label}</FieldLabel>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger id={id}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(field.options ?? []).map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {help}
+      </Field>
+    )
+  }
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{field.label}</FieldLabel>
+      <Input
+        id={id}
+        type={
+          field.secret === true || field.kind === "password"
+            ? "password"
+            : field.kind === "number"
+              ? "number"
+              : "text"
+        }
+        autoComplete="off"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={field.required === true}
+      />
+      {help}
+    </Field>
   )
 }

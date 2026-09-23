@@ -1936,6 +1936,8 @@
     "empty": "还没有通知去处",
     "add": "添加去处",
     "channelKind": "发送到",
+    "kindFromPlugin": "来自插件",
+    "providedBy": "由 {{plugin}} 插件发送。",
     "channelName": "名称",
     "events": "通知我关于",
     "eventsHelp": "尽量少选。没人看的通知比没有通知更糟。",

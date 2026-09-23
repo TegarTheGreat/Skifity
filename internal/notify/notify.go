@@ -62,7 +62,16 @@ var client = netguard.Client(15 * time.Second)
 
 // ValidateConfig checks a channel's configuration before it is stored, so a typo
 // is caught while the person is still looking at the form.
-func ValidateConfig(kind string, config map[string]string) error {
+//
+// provider may be nil, which is a panel with no plugins: a kind this package
+// does not know is then simply not a kind.
+func ValidateConfig(ctx context.Context, kind string, config map[string]string, provider Provider) error {
+	if IsProvided(kind) {
+		if provider == nil {
+			return unknownKind(kind)
+		}
+		return provider.Validate(ctx, kind, config)
+	}
 	switch kind {
 	case "telegram":
 		if config["bot_token"] == "" {
@@ -86,13 +95,21 @@ func ValidateConfig(kind string, config map[string]string) error {
 			return errors.New("enter at least one address to send to")
 		}
 	default:
-		return fmt.Errorf("%q is not a notification channel Skifity supports", kind)
+		return unknownKind(kind)
 	}
 	return nil
 }
 
 // Send delivers a message through one channel.
-func Send(ctx context.Context, kind string, config map[string]string, msg Message) error {
+//
+// provider may be nil, as in ValidateConfig.
+func Send(ctx context.Context, kind string, config map[string]string, msg Message, provider Provider) error {
+	if IsProvided(kind) {
+		if provider == nil {
+			return unknownKind(kind)
+		}
+		return provider.Send(ctx, kind, config, msg)
+	}
 	switch kind {
 	case "telegram":
 		return sendTelegram(ctx, config, msg)
@@ -103,7 +120,7 @@ func Send(ctx context.Context, kind string, config map[string]string, msg Messag
 	case "email":
 		return sendEmail(ctx, config, msg)
 	default:
-		return fmt.Errorf("%q is not a notification channel Skifity supports", kind)
+		return unknownKind(kind)
 	}
 }
 

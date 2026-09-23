@@ -475,11 +475,42 @@ export type GitSource = {
 export type NotificationChannel = {
   id: string
   team_id: string
-  kind: "telegram" | "discord" | "webhook" | "email"
+  /**
+   * One of the built-in kinds, or `plugin:<plugin id>/<provider id>` for a
+   * channel an installed plugin sends. It is not a closed union any more: the
+   * panel no longer knows every way a notification can leave the building.
+   */
+  kind: string
   name: string
   events: string
   enabled: boolean
   created_at: string
+}
+
+/** One input in a channel form a plugin declared. */
+export type NotificationField = {
+  key: string
+  label: string
+  help?: string
+  kind?: "text" | "password" | "number" | "bool" | "choice"
+  options?: string[]
+  secret?: boolean
+  required?: boolean
+}
+
+/**
+ * A way of sending, as the panel offers it.
+ *
+ * A built-in kind arrives with no fields, because the panel has its form
+ * already and has translated it. A kind a plugin provides carries its own
+ * form, in the plugin author's English.
+ */
+export type NotificationKind = {
+  kind: string
+  name?: string
+  description?: string
+  provider?: string
+  fields?: NotificationField[]
 }
 
 /** A command that runs on a schedule, in the app's own image. */

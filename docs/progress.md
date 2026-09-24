@@ -3724,6 +3724,94 @@ No plugin has ever been run. What is proved is the manifest, the validation, the
 signature, the call, the resolution and the seam — by tests, against a fake
 plugin server, not against a container in a cluster. See ADR-0010.
 
+## Phase 72 — an audit of the parts nothing had swept
+
+Seven faults, in the packages no earlier phase had read end to end.
+
+### A scheduled command could break the app it belongs to
+
+Three faults in one path, and the worst of them was structural. The panel
+validated a schedule with its own parser and handed the raw string to
+Kubernetes, which parses it with a different one. Cron has two spellings for
+Sunday and this parser accepts both, so `0 3 * * 7` — an ordinary way to write
+it — was accepted, stored, shown with a next-run time the panel worked out, and
+refused by the API server.
+
+That refusal then failed the whole deployment, *after* the app's own objects had
+been applied: the panel recorded as failed a deployment the cluster was busy
+completing, and one schedule the API server would not take blocked every future
+deploy of that app for ever. A refused command is now a line in the deployment
+log and the app still goes out.
+
+`NextRun` scanned one year, so `0 0 29 2 *` was reported as a schedule that
+never fires.
+
+### A half-finished firewall rule blocked everybody
+
+Deleting the last condition out of an "all of" group sends `{"all":[]}`. The
+engine read that as "no conditions", which means match everything — so a block
+rule somebody was halfway through writing matched every request, locking them
+out of the app or out of this panel, which the same engine protects. Nothing on
+the screen said so.
+
+The package comment claimed "an empty Any is false". It was not, and it could
+not be: after a round trip through the stored JSON an empty Any and an empty All
+are the same value.
+
+### One header chose which firewall rules applied
+
+`internal/edgerules/clientip.go` opens by naming the two ways to get the
+client's address wrong, and then the address was the only thing guarded.
+`X-Forwarded-Host` selects the rule set, and a hostname with no rules is allowed
+through — so one header naming a hostname nobody protects, from any client,
+left no rules to fail. `X-Forwarded-Uri` and `X-Forwarded-Method` were the same
+shape.
+
+A header can also arrive twice, and `Get` answers with the first — the client's,
+with the proxy's line behind it unread.
+
+### Six goroutines could end the whole panel
+
+`internal/runsafe` exists because a panic in any goroutine ends the process, and
+its package comment listed the goroutines that had been fixed. The list was
+written by hand and six were missing: an app's own log output being scrubbed on
+its way to a browser, the fan-out to every open tab, an event posted to somebody
+else's plugin container, the two SSH readers, the guard, and the panel's own
+listener.
+
+Three of them could not simply recover — a goroutine whose job is to send on a
+channel turns a crash into a wait that never ends — so those send the failure
+instead. The list is now computed by a test rather than remembered, and it found
+the last two by itself.
+
+### Upgrading a password hash wrote eleven columns
+
+Signing in upgrades a hash made with older parameters, and did it with
+`UpdateUser`, which writes the whole row from whatever the caller last read —
+a copy read before the password had even been checked. Anything changed in
+between was put back, including whether the account is disabled. The write's
+error was discarded too, so a rehash that never landed looked exactly like one
+that did.
+
+### The image sweep half-read a reference it could not read
+
+`RepoAndTag` split on the last colon, and a digest reference has a colon of its
+own: `ns/app@sha256:abc` read as the repository `ns/app@sha256`. Latent rather
+than live — what it invents speaks for a repository the registry does not have —
+but it is a violated contract in the one place that decides which images are
+deleted, and the failure it sets up is an image removed while an app is still
+running it.
+
+### How they were found
+
+Two gates and one habit. Reading each unswept package against its own comments,
+which is where four of the seven announced themselves: the code did not do what
+the paragraph above it said. And two source-scanning tests — every goroutine
+recovers, every provider kind is asked for — which found two faults nobody was
+looking for.
+
+Every fix was proved by breaking it and watching the test name the failure.
+
 ## Idle resource usage
 
 `docs/performance.md`. The panel is measured: 34 MiB resident idle, 38 MiB after

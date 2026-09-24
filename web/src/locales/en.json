@@ -321,7 +321,7 @@
   "apps": {
     "title": "Apps",
     "newApp": "New app",
-    "newAppSubtitle": "Deploy from a Git repository, or run a container image you already have.",
+    "newAppSubtitle": "Deploy from a Git repository or a folder on your computer, or run a container image you already have.",
     "startFromTemplate": "Start from a template",
     "appName": "App name",
     "source": "Source",
@@ -449,7 +449,8 @@
     "volumeRestoreWarning": "Everything on {{app}} is replaced by what was in this backup, and the app is stopped while that happens.",
     "volumeStopsRollingDeploys": "A disk means deploys are no longer seamless",
     "volumeStopsRollingDeploysHelp": "One disk can only be written by one instance at a time, so Skifity stops the old instance before starting the new one. Each deploy has a few seconds with nothing answering, and the app cannot run more than one instance.",
-    "sourceUpload": "A folder sent with skifity up"
+    "sourceUpload": "An uploaded folder",
+    "sourceFolder": "A folder on my computer"
   },
   "deploy": {
     "title": "Deployments",
@@ -1917,15 +1918,15 @@
       },
       "upload_none": {
         "title": "There is no code to deploy yet",
-        "cause": "{{0}} deploys a folder sent from somebody's computer, and nothing has been sent yet.",
+        "cause": "{{0}} deploys a folder from somebody's computer, and nothing has been sent yet.",
         "impact": "Nothing was built or deployed.",
-        "fix": "Open a terminal in the app's folder and run `skifity up`. It sends the folder and deploys it."
+        "fix": "Press Send a new version on the app's page and pick its folder, or run `skifity up` in the folder."
       },
       "upload_not_found": {
         "title": "That upload is not on the panel",
         "cause": "No upload with the hash {{0}} belongs to this app. The panel keeps each app's ten newest uploads.",
         "impact": "Nothing was built or deployed.",
-        "fix": "Run `skifity up` again to send the folder as it is now."
+        "fix": "Send the folder again, from the app's page or with `skifity up`."
       },
       "upload_not_an_archive": {
         "title": "The panel could not read this upload",
@@ -2206,6 +2207,35 @@
       "sqlserver": "SQL Server",
       "sqlite": "SQLite",
       "file": "a data file"
-    }
+    },
+    "pastedReplaced": "{{variable}} from what you pasted is left out: the {{engine}} database created with the app sets it, pointing at itself rather than at the computer the file came from."
+  },
+  "folder": {
+    "label": "Your app's folder",
+    "choose": "Choose a folder",
+    "chooseAnother": "Choose another folder",
+    "help": "Pick the folder your app is in. node_modules, every .env file and whatever .gitignore lists stay on your computer.",
+    "files_one": "{{count}} file, {{size}}",
+    "files_other": "{{count}} files, {{size}}",
+    "leftOut_one": "{{count}} left out",
+    "leftOut_other": "{{count}} left out",
+    "dotenvRead": "The settings from your folder's .env are in the box below. The file itself is not uploaded: its values are saved as the app's variables, and anything that looks like a key or a password is stored as a secret. Clear the box to leave them out.",
+    "emptyTitle": "There is nothing to send in that folder",
+    "empty": "Every file in it is one that stays behind, such as node_modules or a .env. Pick the folder the app's own code is in.",
+    "tooLargeTitle": "That folder is too large to send",
+    "tooLarge": {
+      "entries": "It has more than {{entries}} files, which an app's own code almost never does. The largest parts are:",
+      "unpacked": "Its files add up to more than {{size}}. The largest parts are:",
+      "compressed": "Packed, it is more than {{size}}. The largest parts are:"
+    },
+    "tooLargeFix": "A dependency folder, build output or a data file is usually the cause. List it in a .skifityignore file in the folder and pick it again.",
+    "sendNew": "Send a new version",
+    "sending": "Sending…",
+    "sent": "Sent. Deployment #{{number}} is building.",
+    "sendFailed": "The app was created, but its code could not be sent. Send it again from the app's page.",
+    "terminalTitle": "Prefer a terminal?",
+    "terminalHelp": "Run these in the app's folder. The first time, skifity up creates the app, the database it uses and the link to the folder; after that, running it again sends and deploys the new version.",
+    "terminalPlatform": "This panel's binary is built for {{platform}}.",
+    "terminalAssistant": "An assistant that can run commands can do this for you, or connect to skifity mcp and use its deploy_folder tool."
   }
 }

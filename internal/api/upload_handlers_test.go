@@ -144,3 +144,62 @@ func TestUploadedCodeIsRefusedWhereItDoesNotBelong(t *testing.T) {
 		t.Fatalf("something that is not an archive gave %d %s", status, body)
 	}
 }
+
+// The form shows what a folder is before the app exists, from the archive the
+// browser packed, read the same way a repository is.
+func TestAFolderIsDetectedBeforeTheAppExists(t *testing.T) {
+	h := newHarness(t)
+	h.withUploads()
+	acme := h.newTenant("acme")
+
+	post := func(archive []byte) (int, string) {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
+			h.server.URL+"/api/teams/"+acme.team.ID+"/detect-upload", bytes.NewReader(archive))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+acme.token)
+		resp, err := h.server.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+
+	status, body := post(folder(t, map[string]string{
+		"package.json": `{"dependencies":{"next":"15","pg":"8"}}`,
+		".env.example": "DATABASE_URL=\nSTRIPE_KEY=\n",
+		"app/page.tsx": "export default function Page() {}",
+	}))
+	if status != http.StatusOK {
+		t.Fatalf("detect: %d %s", status, body)
+	}
+	var found struct {
+		Framework string `json:"framework"`
+		Files     int    `json:"files"`
+		Needs     []struct {
+			Kind   string `json:"kind"`
+			Engine string `json:"engine"`
+		} `json:"needs"`
+	}
+	if err := json.Unmarshal([]byte(body), &found); err != nil {
+		t.Fatal(err)
+	}
+	if found.Framework != "Next.js" || found.Files != 3 {
+		t.Fatalf("the folder was read as %+v", found)
+	}
+	postgres := false
+	for _, need := range found.Needs {
+		postgres = postgres || (need.Kind == "database" && need.Engine == "postgres")
+	}
+	if !postgres {
+		t.Fatalf("the folder's database was not found: %s", body)
+	}
+
+	if status, body := post(folder(t, map[string]string{".env": "X=1"})); status != http.StatusBadRequest ||
+		!strings.Contains(body, "upload.secrets_file") {
+		t.Fatalf("a folder with a .env was read rather than refused: %d %s", status, body)
+	}
+}

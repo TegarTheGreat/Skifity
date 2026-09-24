@@ -62,6 +62,12 @@ export function AppNeeds({
   // database that is about to be created and linked under that name.
   const covered = new Set([...pastedKeys, ...otherKeys, ...creating.map((n) => n.variable ?? "")])
   const missing = expected.filter((name) => !covered.has(name))
+  // A pasted name that a database about to be created will set. The pasted
+  // value is the address on the computer the .env came from, and the panel
+  // leaves it out rather than store it (see handleCreateApp).
+  const replaced = creating
+    .filter((n) => n.variable && pastedKeys.includes(n.variable))
+    .map((n) => ({ variable: n.variable!, engine: engine(n.engine) }))
 
   return (
     <div className="space-y-4">
@@ -164,6 +170,11 @@ export function AppNeeds({
               {t("needs.allSet")}
             </p>
           ))}
+        {replaced.map((r) => (
+          <p key={r.variable} className="text-xs text-muted-foreground">
+            {t("needs.pastedReplaced", { variable: r.variable, engine: r.engine })}
+          </p>
+        ))}
       </Field>
     </div>
   )

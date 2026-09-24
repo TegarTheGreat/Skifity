@@ -100,6 +100,9 @@ jobs:
       - name: Translations are complete in every language
         run: npm run check:i18n
 
+      - name: The browser and the CLI send the same files from a folder
+        run: npm run check:ignore
+
       - name: Known vulnerabilities
         # Dev dependencies do not ship, so only what reaches a browser counts.
         run: npm audit --omit=dev --audit-level=high

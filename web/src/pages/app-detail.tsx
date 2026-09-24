@@ -5,6 +5,7 @@ import { BoxIcon, ExternalLinkIcon, InfoIcon, RefreshCwIcon, RocketIcon } from "
 
 import { AdvancedTab } from "@/components/app/advanced-tab"
 import { DeployButton, DeploymentsTab } from "@/components/app/deployments-tab"
+import { SendFolderButton } from "@/components/folder-picker"
 import { DomainsTab } from "@/components/app/domains-tab"
 import { AppFirewall } from "@/components/app/firewall"
 import { ConsoleTab } from "@/components/app/console-tab"
@@ -153,6 +154,7 @@ export function AppDetailPage() {
               <RefreshCwIcon />
               {t("apps.restart")}
             </Button>
+            {current.source_type === "upload" && <SendFolderButton app={current} />}
             <DeployButton appId={appId} />
           </>
         }

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test"
-import { readFileSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 
 /**
  * One pass through the panel, against the real binary.
@@ -291,6 +292,63 @@ test("every page in the navigation renders", async ({ page }) => {
   }
 
   expect(crashes, "a page threw while rendering").toEqual([])
+})
+
+test("a folder on this computer becomes an app, with no terminal", async ({ page }) => {
+  await signIn(page)
+
+  // A folder the way an assistant leaves one: the code, a .env with a real
+  // key in it, node_modules, and build output .gitignore already names.
+  const folder = join(mkdtempSync(join(tmpdir(), "skifity-e2e-")), "notes-app")
+  const files: Record<string, string> = {
+    "package.json": JSON.stringify({ name: "notes", dependencies: { pg: "8.13.0" } }),
+    "index.js": "require('http').createServer((q, r) => r.end('hi')).listen(process.env.PORT)",
+    ".gitignore": "dist\n",
+    ".env": "STRIPE_SECRET_KEY=sk_test_e2e\n",
+    "dist/bundle.js": "left behind by .gitignore",
+    "node_modules/pg/index.js": "left behind always",
+  }
+  for (const [name, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(folder, name)), { recursive: true })
+    writeFileSync(join(folder, name), body)
+  }
+
+  const me = await (await page.request.get("/api/me")).json()
+  const projects = await (await page.request.get(`/api/teams/${me.teams[0].id}/projects`)).json()
+  const envs = await (
+    await page.request.get(`/api/projects/${projects.items[0].id}/environments`)
+  ).json()
+  await page.goto(`/environments/${envs.items[0].id}/apps/new`)
+
+  await page.getByRole("button", { name: "A folder on my computer" }).click()
+  await page.getByTestId("folder-input").setInputFiles(folder)
+
+  // Read by the panel, packed in the browser: three files go, and what stays
+  // behind is counted rather than silently dropped.
+  await expect(page.getByText(/3 files/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText(/3 left out/)).toBeVisible()
+  await expect(page.getByText(/PostgreSQL/).first()).toBeVisible()
+  // The .env is offered in the box, visibly, rather than uploaded.
+  await expect(page.getByLabel(/settings/i).last()).toHaveValue(/STRIPE_SECRET_KEY=sk_test_e2e/)
+
+  // No cluster here to make a database in.
+  await page.getByRole("checkbox", { name: /PostgreSQL/ }).uncheck()
+  await page.getByRole("button", { name: /^create$/i }).click()
+
+  await expect(page).toHaveURL(/\/apps\/app_/, { timeout: 30_000 })
+  await expect(page.getByText("An uploaded folder")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Send a new version" })).toBeVisible()
+
+  const appID = page.url().split("/apps/")[1].split(/[/?#]/)[0]
+  const variables = await (await page.request.get(`/api/apps/${appID}/variables`)).json()
+  const keys = variables.items.map((v: { key: string }) => v.key)
+  expect(keys, "the .env's value did not become a variable").toContain("STRIPE_SECRET_KEY")
+  expect(JSON.stringify(variables)).not.toContain("sk_test_e2e")
+
+  const deployments = await (await page.request.get(`/api/apps/${appID}/deployments`)).json()
+  expect(deployments.items[0]?.commit_sha, "the deploy does not name the upload").toMatch(
+    /^[a-f0-9]{64}$/,
+  )
 })
 
 /** Signs in, unless this context already has a session. */

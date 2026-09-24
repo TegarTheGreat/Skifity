@@ -113,6 +113,7 @@ GET    /api/environments/{env}/apps           apps
 POST   /api/environments/{env}/apps           create one
 GET    /api/apps/{app}                        an app
 GET    /api/apps/{app}/status                 live state and instances
+POST   /api/teams/{team}/detect-upload        what a folder (.tar.gz) is and needs, before any app exists
 PUT    /api/apps/{app}/source                 send an app's code as a .tar.gz, for an app with no repository
 POST   /api/apps/{app}/deploy                 deploy
 GET    /api/apps/{app}/deployments            deployment history

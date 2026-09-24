@@ -238,11 +238,21 @@ Nothing from the repository's own `.git` directory ever reaches a served image.
 ## Deploying a folder instead
 
 Not every app has a repository. One an assistant wrote is usually a folder on
-somebody's computer, and `skifity up` deploys it as it is: the CLI reads the
-folder with the same detection the panel uses on a repository, creates the app
-and the databases it needs, sends the folder without its `.env` or
-`node_modules`, and deploys. The next `skifity up` in that folder updates the
-same app. See [the CLI](/docs/cli#deploying-a-folder).
+somebody's computer, and there are two ways to deploy it as it is. In the panel,
+**New app → A folder on my computer** and pick the folder; later versions go up
+with **Send a new version** on the app's page. From a terminal, `skifity up` in
+the folder, and again for every version after. See
+[the CLI](/docs/cli#deploying-a-folder).
+
+Both read the folder with the same detection the panel uses on a repository,
+create the app with the databases it needs, and send the folder without its
+`.env`, `node_modules` or anything its `.gitignore` lists. They are two
+implementations of one rule about what is sent, and the build checks that they
+agree, case by case, so a folder never deploys differently depending on which
+one sent it. A `.env`'s values are offered as variables — shown in the form, or
+asked about in the terminal — and never uploaded as a file. A pasted address
+for a database the panel is creating with the app is left out: the new database
+sets it.
 
 From there it is an ordinary app. The build is the same four ways above, a
 rollback goes back to the image an earlier upload built, and the same code sent

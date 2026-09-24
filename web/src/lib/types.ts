@@ -441,6 +441,8 @@ export type Meta = {
   dev_mode: boolean
   sso: { enabled: boolean; label?: string }
   server_now: string
+  /** What the binary at /api/cli/download runs on, such as linux/amd64. */
+  cli_platform: string
 }
 
 export type CanvasNode = {

@@ -3999,6 +3999,37 @@ migrates, and checks they are all there and that the cascades work again after.
 It was proved by running the rebuild with foreign keys on and watching the
 deployments disappear.
 
+### Without a terminal either
+
+A CLI still assumes a terminal, and the panel only serves a Linux binary. So the
+new-app form has a third source, **A folder on my computer**: the browser packs
+the folder itself — a tar written in TypeScript, gzipped with the browser's own
+`CompressionStream` — and the panel detects from the archive
+(`POST /api/teams/{team}/detect-upload`, nothing stored) and shows the same
+detection, databases and settings a repository gets. The folder's `.env` is read
+into the settings box, where it can be seen and changed before anything is sent,
+and goes as variables. The app page of an uploaded app has **Send a new
+version**.
+
+What is sent is decided twice — Go for the CLI, TypeScript for the browser — so
+both are held to one fixture, `internal/cli/testdata/ignore-cases.json`: the Go
+test and `npm run check:ignore` read it, `make check` and CI run both. The
+third case's expected answer was checked against `git add --dry-run` rather
+than written from memory. The browser's archive was checked by feeding it to
+the panel's own Go reader: long names, non-ASCII names and the executable bit
+come through. A browser cannot see an executable bit, so `gradlew`, `mvnw`,
+`*.sh` and `bin/` are given one.
+
+The one browser test gained a step: a real folder picked in Chromium, the counts
+shown, the `.env` offered and not uploaded, the app created, its variable stored
+secret, and its deploy naming the upload's hash. Writing it found the one bug a
+reading would not have: the picker cleared its input straight after handing
+over the `FileList`, which is live, so every folder arrived empty.
+
+A database created with an app now owns the variable it is linked as: a pasted
+`DATABASE_URL` pointing at somebody's `localhost` is left out, by the API
+rather than by each client, and the form says so.
+
 ### Found on the way
 
 `test/cluster/verify.sh` read the created app's id with `pick id`, and the

@@ -55,8 +55,9 @@ more than the person who created it.
 
 ## Deploying a folder
 
-No repository, no Dockerfile, no settings. In the folder of an app — one you
-wrote, or one an assistant wrote for you:
+No repository, no Dockerfile, no settings. (The panel does the same without a
+terminal: **New app → A folder on my computer**.) In the folder of an app — one
+you wrote, or one an assistant wrote for you:
 
 ```sh
 skifity up

@@ -12,6 +12,7 @@
     "typecheck": "tsc -b",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "check:i18n": "node scripts/check-i18n.mjs",
+    "check:ignore": "node --experimental-strip-types --no-warnings scripts/check-ignore.mjs",
     "test:e2e": "playwright test",
     "clean": "node -e \"const fs=require('node:fs');fs.rmSync('dist/assets',{recursive:true,force:true});fs.copyFileSync('../llms.txt','public/llms.txt')\"",
     "check:destructive": "node scripts/check-destructive.mjs"

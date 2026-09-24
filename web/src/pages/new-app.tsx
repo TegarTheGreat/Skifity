@@ -2,19 +2,32 @@ import { useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { ChevronRightIcon, ContainerIcon, GitBranchIcon, SparklesIcon } from "lucide-react"
+import {
+  ChevronRightIcon,
+  ContainerIcon,
+  FolderIcon,
+  GitBranchIcon,
+  SparklesIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "cn"
 
 import { AppNeeds } from "@/components/app-needs"
 import { ErrorDisplay } from "@/components/error-display"
+import {
+  FolderPicker,
+  FolderProblem,
+  FolderSummary,
+  TerminalInstructions,
+} from "@/components/folder-picker"
 import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -26,6 +39,7 @@ import {
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
 import { parseDotEnv } from "@/lib/dotenv"
+import { packFolder } from "@/lib/folder"
 import { queryClient } from "@/lib/query"
 import type {
   App,
@@ -38,7 +52,7 @@ import type {
 } from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
 
-type SourceType = "git" | "image"
+type SourceType = "git" | "image" | "upload"
 
 /**
  * Creating an app asks for as little as possible.
@@ -102,37 +116,63 @@ export function NewAppPage() {
         root_dir: rootDir.trim(),
         git_source_id: gitSourceID,
       }),
-    onSuccess: (found) => {
-      // A different repository is a different set of needs; what was unticked
-      // for the last one says nothing about this one.
-      setDeclined([])
-      // Only fields nobody has filled in, and only when the guess is a
-      // statement rather than a question. Overwriting what somebody typed
-      // because a heuristic disagreed is the behaviour that makes people stop
-      // trusting a form.
-      if (found.compose && found.compose.length > 0) {
-        setComposeService("")
-        setVariables({})
-      }
-      if (found.confidence !== "high") return
-      if (!port && found.port) setPort(String(found.port))
-      if (!healthPath && found.health_path) setHealthPath(found.health_path)
-      if (!startCommand && found.start_command) setStartCommand(found.start_command)
-      // A front end is built and then served. These two say how, and until now
-      // the form read them and sent neither, so the build copied the
-      // repository into a web server and the page came up blank.
-      if (!buildCommand && found.build_command) setBuildCommand(found.build_command)
-      if (!staticDir && found.static_dir) setStaticDir(found.static_dir)
-      if (builder === "auto" && (found.builder === "dockerfile" || found.builder === "static")) {
-        setBuilder(found.builder)
-      }
-      if (!dockerfilePath && found.dockerfile_path) setDockerfilePath(found.dockerfile_path)
+    onSuccess: (found) => applyDetection(found),
+  })
+
+  // A folder picked on this computer: packed here, leaving out what
+  // .gitignore, node_modules and every .env are, and read by the panel the way
+  // a repository is. Nothing is kept until the app is created; the same
+  // archive is sent to it then.
+  const pick = useMutation({
+    mutationFn: async (files: File[]) => {
+      const folder = await packFolder(files)
+      const detection = await api.upload<Detection>(
+        `/api/teams/${team!.id}/detect-upload`,
+        folder.archive,
+        "POST",
+      )
+      return { folder, detection }
+    },
+    onSuccess: ({ folder, detection }) => {
+      applyDetection(detection)
+      // The .env is offered, in the box below, where it can be read and
+      // changed before anything is sent — and it is sent as variables, never
+      // as a file.
+      if (folder.dotenv && !pastedEnv.trim()) setPastedEnv(folder.dotenv)
     },
   })
-  const found = detect.data
+
+  function applyDetection(found: Detection) {
+    // A different repository is a different set of needs; what was unticked
+    // for the last one says nothing about this one.
+    setDeclined([])
+    // Only fields nobody has filled in, and only when the guess is a
+    // statement rather than a question. Overwriting what somebody typed
+    // because a heuristic disagreed is the behaviour that makes people stop
+    // trusting a form.
+    if (found.compose && found.compose.length > 0) {
+      setComposeService("")
+      setVariables({})
+    }
+    if (found.confidence !== "high") return
+    if (!port && found.port) setPort(String(found.port))
+    if (!healthPath && found.health_path) setHealthPath(found.health_path)
+    if (!startCommand && found.start_command) setStartCommand(found.start_command)
+    // A front end is built and then served. These two say how, and until now
+    // the form read them and sent neither, so the build copied the
+    // repository into a web server and the page came up blank.
+    if (!buildCommand && found.build_command) setBuildCommand(found.build_command)
+    if (!staticDir && found.static_dir) setStaticDir(found.static_dir)
+    if (builder === "auto" && (found.builder === "dockerfile" || found.builder === "static")) {
+      setBuilder(found.builder)
+    }
+    if (!dockerfilePath && found.dockerfile_path) setDockerfilePath(found.dockerfile_path)
+  }
+  const found = sourceType === "upload" ? pick.data?.detection : detect.data
+  const folder = sourceType === "upload" ? pick.data?.folder : undefined
 
   const pasted = parseDotEnv(pastedEnv)
-  const needs = sourceType === "git" ? (found?.needs ?? []) : []
+  const needs = sourceType === "image" ? [] : (found?.needs ?? [])
   const databases = needs
     .filter((n) => n.kind === "database" && n.provided && n.engine && !declined.includes(n.engine))
     .map((n) => ({ engine: n.engine!, variable: n.variable ?? "" }))
@@ -141,6 +181,7 @@ export function NewAppPage() {
   // user would have typed anyway.
   const suggestedName = (() => {
     if (sourceType === "image") return image.split("/").pop()?.split(":")[0] ?? ""
+    if (sourceType === "upload") return folder?.name ?? ""
     return (
       repoURL
         .replace(/\.git$/, "")
@@ -150,14 +191,15 @@ export function NewAppPage() {
     )
   })()
 
+  type Created = {
+    app: App
+    deployment?: Deployment
+    webhook?: WebhookStatus
+    databases?: InitialDatabaseResult[]
+  }
   const create = useMutation({
-    mutationFn: () =>
-      api.post<{
-        app: App
-        deployment?: Deployment
-        webhook?: WebhookStatus
-        databases?: InitialDatabaseResult[]
-      }>(`/api/environments/${envId}/apps`, {
+    mutationFn: async () => {
+      const result = await api.post<Created>(`/api/environments/${envId}/apps`, {
         name: (name.trim() || suggestedName).trim(),
         source_type: sourceType,
         repo_url: sourceType === "git" ? repoURL.trim() : "",
@@ -172,14 +214,39 @@ export function NewAppPage() {
         build_command: buildCommand.trim(),
         static_dir: staticDir.trim(),
         start_command: startCommand.trim(),
-        deploy: deployNow,
+        // An app from a folder has no code until the folder is sent, which
+        // happens below, once it exists.
+        deploy: sourceType === "upload" ? false : deployNow,
         // A pasted line wins over the same name from a Compose service:
         // it is what the person typed last, into the box in front of them.
         variables: { ...variables, ...pasted },
         // Created and linked before the first deploy, so its first start
         // finds the connection string there.
         databases,
-      }),
+      })
+      if (sourceType !== "upload" || !folder) return result
+
+      // The app exists now, so a failure from here on is not a failure to
+      // create it: it is said, and the app's page is where the folder can be
+      // sent again.
+      try {
+        const sent = await api.upload<{ sha256: string }>(
+          `/api/apps/${result.app.id}/source`,
+          folder.archive,
+        )
+        if (deployNow) {
+          result.deployment = await api.post<Deployment>(`/api/apps/${result.app.id}/deploy`, {
+            commit_sha: sent.sha256,
+          })
+        }
+      } catch (error) {
+        toast.error(t("folder.sendFailed"), {
+          description: error instanceof Error ? error.message : String(error),
+          duration: 15000,
+        })
+      }
+      return result
+    },
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["apps", envId] })
       // A database that could not be made does not undo the app, so it has to
@@ -211,7 +278,12 @@ export function NewAppPage() {
     },
   })
 
-  const ready = sourceType === "git" ? repoURL.trim() !== "" : image.trim() !== ""
+  const ready =
+    sourceType === "git"
+      ? repoURL.trim() !== ""
+      : sourceType === "image"
+        ? image.trim() !== ""
+        : folder !== undefined
 
   return (
     <Page width="narrow">
@@ -243,12 +315,18 @@ export function NewAppPage() {
             <CardTitle className="text-base">{t("apps.source")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <SourceChoice
                 active={sourceType === "git"}
                 icon={GitBranchIcon}
                 label={t("apps.sourceGit")}
                 onClick={() => setSourceType("git")}
+              />
+              <SourceChoice
+                active={sourceType === "upload"}
+                icon={FolderIcon}
+                label={t("apps.sourceFolder")}
+                onClick={() => setSourceType("upload")}
               />
               <SourceChoice
                 active={sourceType === "image"}
@@ -258,7 +336,45 @@ export function NewAppPage() {
               />
             </div>
 
-            {sourceType === "git" ? (
+            {sourceType === "upload" ? (
+              <>
+                <Field>
+                  <FieldLabel>{t("folder.label")}</FieldLabel>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <FolderPicker
+                      pending={pick.isPending}
+                      label={folder ? t("folder.chooseAnother") : t("folder.choose")}
+                      onPicked={(files) => pick.mutate(files)}
+                    />
+                    {folder && <FolderSummary folder={folder} />}
+                  </div>
+                  <FieldDescription>{t("folder.help")}</FieldDescription>
+                </Field>
+                {pick.error != null && <FolderProblem error={pick.error} />}
+                {found && <DetectionSummary detection={found} />}
+                {folder?.dotenv && pastedEnv === folder.dotenv && (
+                  <Alert variant="info">
+                    <AlertDescription>{t("folder.dotenvRead")}</AlertDescription>
+                  </Alert>
+                )}
+                {found && (
+                  <AppNeeds
+                    needs={needs}
+                    declined={declined}
+                    onToggle={(engine, create) =>
+                      setDeclined(
+                        create ? declined.filter((e) => e !== engine) : [...declined, engine],
+                      )
+                    }
+                    pasted={pastedEnv}
+                    onPaste={setPastedEnv}
+                    pastedKeys={Object.keys(pasted)}
+                    otherKeys={Object.keys(variables)}
+                  />
+                )}
+                <TerminalInstructions />
+              </>
+            ) : sourceType === "git" ? (
               <>
                 <Field>
                   <FieldLabel htmlFor="repo-url">{t("apps.repository")}</FieldLabel>
@@ -423,7 +539,7 @@ export function NewAppPage() {
                 <FieldDescription>{t("apps.healthPathHelp")}</FieldDescription>
               </Field>
 
-              {sourceType === "git" && (
+              {sourceType !== "image" && (
                 <>
                   <Field>
                     <FieldLabel htmlFor="root-dir">{t("apps.rootDirectory")}</FieldLabel>

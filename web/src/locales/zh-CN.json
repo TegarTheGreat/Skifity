@@ -313,7 +313,7 @@
   "apps": {
     "title": "应用",
     "newApp": "新建应用",
-    "newAppSubtitle": "从 Git 仓库部署，或运行你已有的容器镜像。",
+    "newAppSubtitle": "从 Git 仓库或你电脑上的文件夹部署，或运行你已有的容器镜像。",
     "startFromTemplate": "从模板开始",
     "appName": "应用名称",
     "source": "来源",
@@ -441,7 +441,8 @@
     "volumeRestoreWarning": "{{app}} 上的内容会被这个备份的内容全部覆盖，过程中应用会被停止。",
     "volumeStopsRollingDeploys": "有磁盘后部署不再无缝",
     "volumeStopsRollingDeploysHelp": "一块磁盘同一时间只能被一个实例写入，所以 Skifity 会先停掉旧实例再启动新的。每次部署都会有几秒钟无人响应，应用也无法运行多个实例。",
-    "sourceUpload": "通过 skifity up 发送的文件夹"
+    "sourceUpload": "上传的文件夹",
+    "sourceFolder": "我电脑上的文件夹"
   },
   "deploy": {
     "title": "部署记录",
@@ -1905,15 +1906,15 @@
       },
       "upload_none": {
         "title": "还没有可部署的代码",
-        "cause": "{{0}} 部署的是从某人电脑上发送来的文件夹，而目前还没有发送任何内容。",
+        "cause": "{{0}} 部署的是某人电脑上的文件夹，而目前还没有发送任何内容。",
         "impact": "没有构建或部署任何内容。",
-        "fix": "在应用的文件夹中打开终端并运行 `skifity up`。它会发送文件夹并完成部署。"
+        "fix": "在应用页面点击“发送新版本”并选择其文件夹，或在该文件夹中运行 `skifity up`。"
       },
       "upload_not_found": {
         "title": "面板上没有这次上传",
         "cause": "此应用没有哈希为 {{0}} 的上传。面板会为每个应用保留最近的十次上传。",
         "impact": "没有构建或部署任何内容。",
-        "fix": "再次运行 `skifity up`，发送文件夹的当前内容。"
+        "fix": "重新发送文件夹，可在应用页面操作或使用 `skifity up`。"
       },
       "upload_not_an_archive": {
         "title": "面板无法读取这次上传",
@@ -2194,6 +2195,33 @@
       "sqlserver": "SQL Server",
       "sqlite": "SQLite",
       "file": "数据文件"
-    }
+    },
+    "pastedReplaced": "粘贴内容中的 {{variable}} 不会保存：随应用创建的 {{engine}} 数据库会设置它，指向该数据库本身，而不是文件来源的那台电脑。"
+  },
+  "folder": {
+    "label": "应用所在的文件夹",
+    "choose": "选择文件夹",
+    "chooseAnother": "选择其他文件夹",
+    "help": "选择应用所在的文件夹。node_modules、所有 .env 文件以及 .gitignore 列出的内容都会留在你的电脑上。",
+    "files_other": "{{count}} 个文件，{{size}}",
+    "leftOut_other": "已排除 {{count}} 个",
+    "dotenvRead": "文件夹中 .env 的设置已填入下方的框中。文件本身不会上传：其中的值会保存为应用的变量，看起来像密钥或密码的内容会作为机密保存。清空该框即可不发送它们。",
+    "emptyTitle": "该文件夹中没有可发送的内容",
+    "empty": "其中的每个文件都属于不会发送的内容，例如 node_modules 或 .env。请选择应用自身代码所在的文件夹。",
+    "tooLargeTitle": "该文件夹太大，无法发送",
+    "tooLarge": {
+      "entries": "其中有超过 {{entries}} 个文件，应用自身的代码几乎不会有这么多。最大的部分是：",
+      "unpacked": "其中文件总计超过 {{size}}。最大的部分是：",
+      "compressed": "打包后超过 {{size}}。最大的部分是："
+    },
+    "tooLargeFix": "原因通常是依赖文件夹、构建产物或数据文件。把它写进文件夹中的 .skifityignore 文件后重新选择。",
+    "sendNew": "发送新版本",
+    "sending": "正在发送…",
+    "sent": "已发送。部署 #{{number}} 正在构建。",
+    "sendFailed": "应用已创建，但代码未能发送。请在应用页面重新发送。",
+    "terminalTitle": "更喜欢用终端？",
+    "terminalHelp": "在应用的文件夹中运行以下命令。第一次运行时，skifity up 会创建应用、它使用的数据库以及与该文件夹的关联；之后再次运行会发送并部署新版本。",
+    "terminalPlatform": "此面板的程序文件为 {{platform}} 构建。",
+    "terminalAssistant": "能运行命令的助手可以替你完成这些，或者连接 skifity mcp 并使用其 deploy_folder 工具。"
   }
 }

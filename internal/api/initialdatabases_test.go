@@ -230,3 +230,36 @@ func TestAFailedDatabaseDoesNotUndoTheApp(t *testing.T) {
 		}
 	}
 }
+
+// A pasted .env usually has the address of the database on the computer it was
+// written on. The database created with the app owns that name: the pasted one
+// is not stored, even when the database fails, because then it would be the
+// app's only DATABASE_URL and it would point at somebody's localhost.
+func TestADatabaseCreatedWithTheAppOwnsItsVariable(t *testing.T) {
+	h, _ := withDatabases(t, "postgres")
+	acme := h.newTenant("acme")
+
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name": "shop", "repo_url": "https://github.com/acme/shop",
+		"variables": map[string]string{"DATABASE_URL": "postgres://me@localhost/shop", "SITE_NAME": "Shop"},
+		"databases": []map[string]string{{"engine": "postgres", "variable": "DATABASE_URL"}},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create: %d %s", status, body)
+	}
+	var answer createAnswer
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := h.db.ListVariables(t.Context(), answer.App.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, row := range rows {
+		keys = append(keys, row.Key)
+	}
+	if strings.Join(keys, ",") != "SITE_NAME" {
+		t.Fatalf("the app has %v; the pasted DATABASE_URL should have been left to the database", keys)
+	}
+}

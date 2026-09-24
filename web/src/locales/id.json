@@ -313,7 +313,7 @@
   "apps": {
     "title": "Aplikasi",
     "newApp": "Aplikasi baru",
-    "newAppSubtitle": "Deploy dari repositori Git, atau jalankan image container yang sudah ada.",
+    "newAppSubtitle": "Deploy dari repositori Git atau folder di komputer Anda, atau jalankan image kontainer yang sudah Anda punya.",
     "startFromTemplate": "Mulai dari template",
     "appName": "Nama aplikasi",
     "source": "Sumber",
@@ -441,7 +441,8 @@
     "volumeRestoreWarning": "Semua isi {{app}} diganti dengan isi cadangan ini, dan aplikasi dihentikan selama proses itu.",
     "volumeStopsRollingDeploys": "Dengan disk, deploy tidak lagi mulus",
     "volumeStopsRollingDeploysHelp": "Satu disk hanya boleh ditulis satu instance dalam satu waktu, jadi Skifity menghentikan instance lama sebelum menjalankan yang baru. Setiap deploy punya jeda beberapa detik tanpa yang menjawab, dan aplikasi tidak bisa berjalan lebih dari satu instance.",
-    "sourceUpload": "Folder yang dikirim dengan skifity up"
+    "sourceUpload": "Folder yang diunggah",
+    "sourceFolder": "Folder di komputer saya"
   },
   "deploy": {
     "title": "Deployment",
@@ -1905,15 +1906,15 @@
       },
       "upload_none": {
         "title": "Belum ada kode untuk di-deploy",
-        "cause": "{{0}} men-deploy folder yang dikirim dari komputer seseorang, dan belum ada yang dikirim.",
+        "cause": "{{0}} men-deploy folder dari komputer seseorang, dan belum ada yang dikirim.",
         "impact": "Tidak ada yang di-build atau di-deploy.",
-        "fix": "Buka terminal di folder aplikasinya lalu jalankan `skifity up`. Perintah itu mengirim foldernya dan men-deploy-nya."
+        "fix": "Tekan Kirim versi baru di halaman aplikasinya lalu pilih foldernya, atau jalankan `skifity up` di folder itu."
       },
       "upload_not_found": {
         "title": "Unggahan itu tidak ada di panel",
         "cause": "Tidak ada unggahan dengan hash {{0}} milik aplikasi ini. Panel menyimpan sepuluh unggahan terbaru tiap aplikasi.",
         "impact": "Tidak ada yang di-build atau di-deploy.",
-        "fix": "Jalankan `skifity up` lagi untuk mengirim folder seperti keadaannya sekarang."
+        "fix": "Kirim foldernya lagi, dari halaman aplikasi atau dengan `skifity up`."
       },
       "upload_not_an_archive": {
         "title": "Panel tidak bisa membaca unggahan ini",
@@ -2194,6 +2195,33 @@
       "sqlserver": "SQL Server",
       "sqlite": "SQLite",
       "file": "berkas data"
-    }
+    },
+    "pastedReplaced": "{{variable}} dari yang Anda tempel tidak disertakan: database {{engine}} yang dibuat bersama aplikasi akan mengisinya, menunjuk ke dirinya sendiri, bukan ke komputer asal berkas itu."
+  },
+  "folder": {
+    "label": "Folder aplikasi Anda",
+    "choose": "Pilih folder",
+    "chooseAnother": "Pilih folder lain",
+    "help": "Pilih folder tempat aplikasi Anda berada. node_modules, semua berkas .env, dan apa pun yang tercantum di .gitignore tetap di komputer Anda.",
+    "files_other": "{{count}} berkas, {{size}}",
+    "leftOut_other": "{{count}} tidak disertakan",
+    "dotenvRead": "Pengaturan dari .env di folder Anda sudah ada di kotak di bawah. Berkasnya sendiri tidak diunggah: nilainya disimpan sebagai variabel aplikasi, dan apa pun yang terlihat seperti kunci atau kata sandi disimpan sebagai rahasia. Kosongkan kotaknya untuk tidak menyertakannya.",
+    "emptyTitle": "Tidak ada yang bisa dikirim dari folder itu",
+    "empty": "Semua berkas di dalamnya termasuk yang tidak ikut dikirim, seperti node_modules atau .env. Pilih folder tempat kode aplikasinya sendiri berada.",
+    "tooLargeTitle": "Folder itu terlalu besar untuk dikirim",
+    "tooLarge": {
+      "entries": "Isinya lebih dari {{entries}} berkas, padahal kode aplikasi hampir tidak pernah sebanyak itu. Bagian terbesarnya:",
+      "unpacked": "Total berkasnya lebih dari {{size}}. Bagian terbesarnya:",
+      "compressed": "Setelah dikemas, ukurannya lebih dari {{size}}. Bagian terbesarnya:"
+    },
+    "tooLargeFix": "Biasanya penyebabnya folder dependensi, hasil build, atau berkas data. Tulis di berkas .skifityignore di folder itu lalu pilih lagi.",
+    "sendNew": "Kirim versi baru",
+    "sending": "Mengirim…",
+    "sent": "Terkirim. Deployment #{{number}} sedang di-build.",
+    "sendFailed": "Aplikasinya sudah dibuat, tetapi kodenya gagal dikirim. Kirim lagi dari halaman aplikasinya.",
+    "terminalTitle": "Lebih suka terminal?",
+    "terminalHelp": "Jalankan ini di folder aplikasinya. Pertama kali, skifity up membuat aplikasinya, database yang dipakainya, dan tautan ke folder itu; setelah itu, menjalankannya lagi akan mengirim dan men-deploy versi baru.",
+    "terminalPlatform": "Berkas program panel ini dibuat untuk {{platform}}.",
+    "terminalAssistant": "Asisten yang bisa menjalankan perintah bisa melakukannya untuk Anda, atau hubungkan ke skifity mcp dan pakai alat deploy_folder-nya."
   }
 }

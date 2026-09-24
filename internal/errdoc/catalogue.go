@@ -300,9 +300,9 @@ func CrashLoop(app string, restarts int, logTail string) *Problem {
 // any code was sent.
 func NoUpload(app string) *Problem {
 	return New("upload.none", "There is no code to deploy yet").
-		WithCause("%s deploys a folder sent from somebody's computer, and nothing has been sent yet.", app).
+		WithCause("%s deploys a folder from somebody's computer, and nothing has been sent yet.", app).
 		WithImpact("Nothing was built or deployed.").
-		WithFix("Open a terminal in the app's folder and run `skifity up`. It sends the folder and deploys it.").
+		WithFix("Press Send a new version on the app's page and pick its folder, or run `skifity up` in the folder.").
 		WithDocs("/docs/cli#deploying-a-folder").
 		WithStatus(http.StatusConflict).
 		With("app", app)
@@ -313,7 +313,7 @@ func UploadNotFound(sha string) *Problem {
 	return New("upload.not_found", "That upload is not on the panel").
 		WithCause("No upload with the hash %s belongs to this app. The panel keeps each app's ten newest uploads.", sha).
 		WithImpact("Nothing was built or deployed.").
-		WithFix("Run `skifity up` again to send the folder as it is now.").
+		WithFix("Send the folder again, from the app's page or with `skifity up`.").
 		WithDocs("/docs/cli#deploying-a-folder").
 		WithStatus(http.StatusNotFound).
 		With("sha", sha)

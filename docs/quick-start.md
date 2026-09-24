@@ -136,17 +136,15 @@ happens.
 When it finishes, the app has a working address. Press it.
 
 **No repository?** If the app is a folder on your computer — which it is, when
-an assistant wrote it — [get the CLI](/docs/cli#getting-it) and run this in the
-folder:
+an assistant wrote it — choose **A folder on my computer** instead and pick the
+folder. The panel reads it the way it reads a repository: what the app is, the
+database it uses, and the settings in its `.env`, which it puts in the form for
+you to see rather than uploading the file. `node_modules`, every `.env` and
+whatever your `.gitignore` lists stay on your computer. Later versions go up
+with **Send a new version** on the app's page.
 
-```sh
-skifity login
-skifity up
-```
-
-It does what the form does, from the folder: works out what the app is, creates
-it with the database it uses, sends the code without your `.env`, and prints the
-address. See [the CLI](/docs/cli#deploying-a-folder).
+From a terminal, `skifity up` in the folder does the same thing. See
+[the CLI](/docs/cli#deploying-a-folder).
 
 That first address looks like `web.203-0-113-10.sslip.io`, and it is **plain
 HTTP, on purpose**. sslip.io resolves any name under it to the IP in the name,

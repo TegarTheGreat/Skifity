@@ -237,6 +237,7 @@ func TestOneTeamCannotReachAnother(t *testing.T) {
 		{http.MethodPost, "/api/apps/" + theirApp.ID + "/domains", map[string]any{"hostname": "x.example.test"}},
 		{http.MethodPost, "/api/environments/" + other.env.ID + "/apps", map[string]any{"name": "sneaky", "image": "nginx"}},
 		{http.MethodPost, "/api/teams/" + other.team.ID + "/detect", map[string]any{"repo_url": "https://github.com/a/b"}},
+		{http.MethodPost, "/api/teams/" + other.team.ID + "/detect-upload", map[string]any{}},
 		{http.MethodDelete, "/api/environments/" + other.env.ID, nil},
 	} {
 		if status, body := h.do(acme, w.method, w.path, w.body); status != http.StatusNotFound {

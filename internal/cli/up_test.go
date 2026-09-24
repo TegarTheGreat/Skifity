@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"crypto/sha256"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -67,54 +68,36 @@ func packNames(t *testing.T, root string) []string {
 	return names
 }
 
-func TestUpSendsTheAppAndNotWhatIsAroundIt(t *testing.T) {
-	root := t.TempDir()
-	write(t, root, map[string]string{
-		"package.json":                "{}",
-		"src/index.js":                "1",
-		".env":                        "STRIPE_KEY=sk_live_x",
-		".env.local":                  "X=1",
-		"api/.env.production":         "X=1",
-		".env.example":                "STRIPE_KEY=",
-		"node_modules/react/index.js": "x",
-		".git/config":                 "x",
-		".next/cache/a":               "x",
-		"skifity.toml":                `app = "app_1"`,
-		".gitignore":                  "dist\n*.sqlite\n/secret.txt\n!keep.sqlite\nlogs/\n",
-		"dist/bundle.js":              "x",
-		"data/app.sqlite":             "x",
-		"keep.sqlite":                 "x",
-		"secret.txt":                  "x",
-		"sub/secret.txt":              "kept: the rule is anchored to the root",
-		"logs/today":                  "x",
-		"sub/.gitignore":              "local.txt\n",
-		"sub/local.txt":               "x",
-		"local.txt":                   "kept: the rule is only for sub/",
-		".skifityignore":              "fixtures/\n",
-		"fixtures/big.json":           "x",
-	})
-	got := packNames(t, root)
-	want := []string{
-		".env.example", ".gitignore", ".skifityignore", "keep.sqlite", "local.txt",
-		"package.json", "src/index.js", "sub/.gitignore", "sub/secret.txt",
-	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("sent %v\nwant %v", got, want)
-	}
+// ignoreCases is testdata/ignore-cases.json, which the browser's packer is
+// held to as well (web/scripts/check-ignore.mjs).
+type ignoreCases struct {
+	Cases []struct {
+		Name  string            `json:"name"`
+		Files map[string]string `json:"files"`
+		Sent  []string          `json:"sent"`
+	} `json:"cases"`
 }
 
-// A .env is never sent, whatever an ignore file says. The panel refuses one
-// too, but this is the line that keeps it off the network at all.
-func TestAnIgnoreFileCannotBringBackTheSecrets(t *testing.T) {
-	root := t.TempDir()
-	write(t, root, map[string]string{
-		"index.html":              "x",
-		".env":                    "KEY=1",
-		".gitignore":              "!.env\n!node_modules/\n",
-		"node_modules/x/index.js": "x",
-	})
-	if got := packNames(t, root); !slices.Equal(got, []string{".gitignore", "index.html"}) {
-		t.Fatalf("sent %v", got)
+func TestUpSendsWhatTheSharedCasesSay(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "ignore-cases.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases ignoreCases
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	if len(cases.Cases) < 3 {
+		t.Fatalf("only %d cases were read", len(cases.Cases))
+	}
+	for _, c := range cases.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			root := t.TempDir()
+			write(t, root, c.Files)
+			if got := packNames(t, root); !slices.Equal(got, c.Sent) {
+				t.Fatalf("sent %v\nwant %v", got, c.Sent)
+			}
+		})
 	}
 }
 

@@ -116,6 +116,44 @@ func (r *Refusal) Error() string {
 // Inspect reads a gzipped tar from start to end and refuses anything that would
 // not be safe to unpack. Nothing is written.
 func Inspect(r io.Reader, limits Limits) (files int, unpacked int64, err error) {
+	return walk(r, limits, nil)
+}
+
+// ReadTree reads an archive the way Inspect does, refusing the same things,
+// and returns every file's path and the contents of the ones named in
+// readable — which is what the build detector reads from a repository, so an
+// uploaded folder is detected exactly as the same code in a repository would
+// be. A file larger than maxRead is listed and not read.
+func ReadTree(r io.Reader, limits Limits, readable []string, maxRead int64) ([]string, map[string]string, error) {
+	wanted := map[string]bool{}
+	for _, name := range readable {
+		wanted[name] = true
+	}
+	var paths []string
+	contents := map[string]string{}
+	_, _, err := walk(r, limits, func(name string, size int64, body io.Reader) error {
+		name = strings.TrimPrefix(name, "./")
+		paths = append(paths, name)
+		if !wanted[name] || size > maxRead {
+			return nil
+		}
+		data, err := io.ReadAll(io.LimitReader(body, maxRead))
+		if err != nil {
+			return err
+		}
+		contents[name] = string(data)
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	sort.Strings(paths)
+	return paths, contents, nil
+}
+
+// walk reads an archive from start to end, refusing anything unsafe, and
+// hands each regular file to visit when there is one.
+func walk(r io.Reader, limits Limits, visit func(name string, size int64, body io.Reader) error) (files int, unpacked int64, err error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return 0, 0, &Refusal{Kind: NotAnArchive, Reason: "this is not a gzipped tar archive"}
@@ -156,8 +194,14 @@ func Inspect(r io.Reader, limits Limits) (files int, unpacked int64, err error) 
 					"it unpacks to more than %d MB; a build output or a dependency folder is probably in it",
 					limits.Unpacked>>20)}
 			}
-			// Next reads past the body, so an archive cut off halfway fails
-			// there, as damaged, rather than half-unpacked by the build.
+			// Next reads past whatever of the body visit left, so an archive
+			// cut off halfway fails there, as damaged, rather than
+			// half-unpacked by the build.
+			if visit != nil {
+				if err := visit(name, header.Size, reader); err != nil {
+					return 0, 0, &Refusal{Kind: NotAnArchive, Entry: name, Reason: "the archive is damaged: " + err.Error()}
+				}
+			}
 		case tar.TypeDir:
 			// A directory is fine; its name was checked above.
 		case tar.TypeSymlink, tar.TypeLink:

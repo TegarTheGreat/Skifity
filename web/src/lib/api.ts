@@ -120,7 +120,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const method = options.method ?? "GET"
   const headers: Record<string, string> = { Accept: "application/json" }
 
-  if (options.body !== undefined) headers["Content-Type"] = "application/json"
+  const raw = options.body instanceof Blob
+  if (options.body !== undefined) {
+    headers["Content-Type"] = raw ? "application/gzip" : "application/json"
+  }
   if (method !== "GET" && method !== "HEAD") {
     // Double-submit: the cookie is readable by the frontend on purpose so it
     // can be echoed here, which a cross-site request cannot do.
@@ -132,7 +135,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers,
     credentials: "same-origin",
     signal: options.signal,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body:
+      options.body === undefined
+        ? undefined
+        : raw
+          ? (options.body as Blob)
+          : JSON.stringify(options.body),
   })
 
   if (response.status === 401 && !options.allowAnonymous) {
@@ -184,6 +192,9 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  /** Sends a packed folder as it is: the one request whose body is not JSON. */
+  upload: <T>(path: string, archive: Blob, method: "POST" | "PUT" = "PUT") =>
+    request<T>(path, { method, body: archive }),
   /** Used by the sign-in and setup screens, where a 401 is an expected answer. */
   anonymous: <T>(path: string, options: RequestOptions = {}) =>
     request<T>(path, { ...options, allowAnonymous: true }),

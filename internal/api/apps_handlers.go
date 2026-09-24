@@ -318,6 +318,14 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A database created with the app owns the variable it is linked as. The
+	// same name in a pasted .env is the address of the one on the computer the
+	// file came from — localhost, usually — and would be stored first and then
+	// overwritten, or, if the link failed, left pointing at nothing.
+	for _, db := range databases {
+		delete(req.Variables, db.Variable)
+	}
+
 	// Before the first deploy, so the app never starts once without them.
 	if err := s.setInitialVariables(r, app, req.Variables); err != nil {
 		writeError(w, r, err)

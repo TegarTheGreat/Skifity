@@ -747,3 +747,83 @@ func TestTheSettingProtectsThePanelToo(t *testing.T) {
 		t.Errorf("the configured panel address was claimable: %d %s", status, body)
 	}
 }
+
+// A secret variable's value never leaves this panel.
+//
+// The promise is made in three places — the API's own comment, the note the MCP
+// server returns to a model, and the interface — and it was kept by one line in
+// one handler with nothing pinning it. A secret handed to a browser is bad; the
+// same secret handed to a language model is somebody else's log file.
+//
+// The value used here is distinctive on purpose: the check is that it appears
+// nowhere in the answer, not that one field happens to be empty.
+func TestASecretVariablesValueNeverLeavesThePanel(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	const secret = "s3cr3t-value-nothing-else-would-produce"
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name": "shop", "repo_url": "https://github.com/acme/shop",
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create app: %d %s", status, body)
+	}
+	var answer struct {
+		App store.App `json:"app"`
+	}
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatalf("decode app: %v", err)
+	}
+	app := answer.App
+
+	status, body = h.do(acme, http.MethodPut, "/api/apps/"+app.ID+"/variables", map[string]any{
+		"key": "STRIPE_KEY", "value": secret, "is_secret": true,
+	})
+	if status >= 300 {
+		t.Fatalf("set the secret: %d %s", status, body)
+	}
+
+	// Reading them back, which is what the interface and the MCP server do.
+	status, body = h.do(acme, http.MethodGet, "/api/apps/"+app.ID+"/variables", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list variables: %d %s", status, body)
+	}
+	if strings.Contains(body, secret) {
+		t.Fatalf("the secret's value came back from the API:\n%s", body)
+	}
+	if !strings.Contains(body, "STRIPE_KEY") {
+		t.Fatalf("the variable is not listed at all, so this test proves nothing:\n%s", body)
+	}
+
+	// And nowhere else a person or a model can reach it either.
+	for _, path := range []string{
+		"/api/apps/" + app.ID,
+		"/api/environments/" + acme.env.ID + "/apps",
+		"/api/teams/" + acme.team.ID + "/export",
+	} {
+		status, body := h.do(acme, http.MethodGet, path, nil)
+		if status >= 300 {
+			continue
+		}
+		if strings.Contains(body, secret) {
+			t.Errorf("the secret's value came back from %s:\n%s", path, body)
+		}
+	}
+
+	// It is still there, sealed, so this is a promise about what is shown and
+	// not a variable that was quietly dropped.
+	rows, err := h.db.ListVariables(t.Context(), app.ID)
+	if err != nil {
+		t.Fatalf("list variables: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("%d variables stored, want 1", len(rows))
+	}
+	plaintext, err := h.keyring.Open(rows[0].Sealed, variableContext(app.ID, rows[0].Key))
+	if err != nil {
+		t.Fatalf("open the secret: %v", err)
+	}
+	if string(plaintext) != secret {
+		t.Errorf("the stored value is %q", plaintext)
+	}
+}

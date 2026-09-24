@@ -69,6 +69,30 @@ func VerifyGitHubSignature(secret string, body []byte, header string) error {
 	return nil
 }
 
+// VerifyGiteaSignature checks the X-Gitea-Signature header.
+//
+// It is an HMAC-SHA256 of the body in hex, like GitHub's, but with no
+// "sha256=" in front of it. That distinction matters: this header used to be
+// checked with VerifyGitLabToken, which compares the header against the secret
+// itself — so it was comparing a secret with a digest, two things that can
+// never be equal, and every push from a Gitea that sends only this header was
+// rejected as unverified.
+func VerifyGiteaSignature(secret string, body []byte, header string) error {
+	if secret == "" {
+		return errors.New("this Git connection has no webhook secret, so pushes cannot be verified")
+	}
+	if header == "" {
+		return ErrBadSignature
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	want := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(want), []byte(strings.TrimPrefix(header, "sha256="))) {
+		return ErrBadSignature
+	}
+	return nil
+}
+
 // VerifyGitLabToken checks the X-Gitlab-Token header, which is a shared secret
 // rather than a signature.
 func VerifyGitLabToken(secret, header string) error {

@@ -74,14 +74,21 @@ func (s *Server) verifyWebhook(r *http.Request, source store.GitSource, body []b
 	if err != nil {
 		return err
 	}
-	switch {
-	case r.Header.Get("X-Gitlab-Event") != "":
+	// How a push is verified is decided by the connection somebody set up, not
+	// by a header on the request. The headers say which host *claims* to have
+	// sent it, and the sender chooses them: a GitHub connection should be
+	// checked the GitHub way whatever arrives, so that the rule cannot be
+	// picked by the person being checked.
+	switch source.Kind {
+	case "gitlab":
 		return gitsrc.VerifyGitLabToken(secret, r.Header.Get("X-Gitlab-Token"))
-	case r.Header.Get("X-Gitea-Event") != "":
+	case "gitea":
+		// Gitea sends GitHub's header too on recent versions, and its own on
+		// older ones. Both are an HMAC of the body; only the prefix differs.
 		if sig := r.Header.Get("X-Hub-Signature-256"); sig != "" {
 			return gitsrc.VerifyGitHubSignature(secret, body, sig)
 		}
-		return gitsrc.VerifyGitLabToken(secret, r.Header.Get("X-Gitea-Signature"))
+		return gitsrc.VerifyGiteaSignature(secret, body, r.Header.Get("X-Gitea-Signature"))
 	default:
 		return gitsrc.VerifyGitHubSignature(secret, body, r.Header.Get("X-Hub-Signature-256"))
 	}

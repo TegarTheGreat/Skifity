@@ -1,6 +1,9 @@
 package gitsrc
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"testing"
@@ -89,5 +92,62 @@ func TestAGitLabForkIsRecognised(t *testing.T) {
 	}
 	if !fork.Fork {
 		t.Fatal("a merge request from another project was not treated as a fork")
+	}
+
+	// A payload with the project ids missing has to count as a fork. The code
+	// says so and nothing held it: this is the shape an odd GitLab version, or
+	// somebody probing, would send, and reading it as "not a fork" hands the
+	// project's secrets to whoever opened the merge request.
+	for _, missing := range []string{
+		`"action": "open", "iid": 4, "source_branch": "feature", "target_project_id": 12`,
+		`"action": "open", "iid": 4, "source_branch": "feature", "source_project_id": 12`,
+		`"action": "open", "iid": 4, "source_branch": "feature"`,
+	} {
+		raw := []byte(`{"object_attributes": {` + missing + `},
+			"project": {"git_http_url": "https://gitlab.example.com/acme/shop.git"},
+			"user": {"name": "someone"}}`)
+		event, err := ParseWebhook(header, raw)
+		if err != nil {
+			t.Fatalf("ParseWebhook: %v", err)
+		}
+		if !event.Fork {
+			t.Errorf("a merge request with %s was not treated as a fork", missing)
+		}
+	}
+}
+
+// Gitea's own header is a digest, not the secret.
+//
+// It used to be checked against the secret itself — comparing a secret with an
+// HMAC, two things that can never be equal — so a push from a Gitea that sends
+// only this header was always rejected as unverified, and the message blamed
+// the operator's secret.
+func TestAGiteaSignatureIsADigestAndNotTheSecret(t *testing.T) {
+	const secret = "not-a-real-webhook-secret"
+	body := []byte(`{"ref":"refs/heads/main"}`)
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	digest := hex.EncodeToString(mac.Sum(nil))
+
+	if err := VerifyGiteaSignature(secret, body, digest); err != nil {
+		t.Fatalf("a real Gitea signature was rejected: %v", err)
+	}
+	// Recent Gitea sends GitHub's spelling as well, and both are accepted.
+	if err := VerifyGiteaSignature(secret, body, "sha256="+digest); err != nil {
+		t.Errorf("the prefixed spelling was rejected: %v", err)
+	}
+	// The secret itself is not a signature, which is exactly what was wrong.
+	if err := VerifyGiteaSignature(secret, body, secret); err == nil {
+		t.Error("the secret was accepted in place of a signature")
+	}
+	if err := VerifyGiteaSignature(secret, body, ""); err == nil {
+		t.Error("an empty signature was accepted")
+	}
+	if err := VerifyGiteaSignature(secret, []byte("a different body"), digest); err == nil {
+		t.Error("a signature for a different body was accepted")
+	}
+	if err := VerifyGiteaSignature("", body, digest); err == nil {
+		t.Error("a connection with no secret verified a push")
 	}
 }

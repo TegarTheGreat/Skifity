@@ -29,6 +29,7 @@ import {
   newTest,
   operatorsFor,
   withGroupKind,
+  withoutCondition,
   type Firewall,
   type FirewallAction,
   type FirewallExpr,
@@ -144,9 +145,7 @@ export function AppFirewall({ appId }: { appId: string }) {
             <RuleCard
               key={rule.id}
               rule={rule}
-              onChange={(next) =>
-                updateRules(rules.map((r, i) => (i === index ? next : r)))
-              }
+              onChange={(next) => updateRules(rules.map((r, i) => (i === index ? next : r)))}
               onRemove={() => updateRules(rules.filter((_, i) => i !== index))}
             />
           ))}
@@ -301,7 +300,9 @@ function ExprEditor({
   const group = groupOf(expr)
 
   if (!group) {
-    return <TestEditor test={expr.test ?? newTest().test!} onChange={(test) => onChange({ test })} />
+    return (
+      <TestEditor test={expr.test ?? newTest().test!} onChange={(test) => onChange({ test })} />
+    )
   }
 
   return (
@@ -341,11 +342,7 @@ function ExprEditor({
             variant="ghost"
             size="icon"
             aria-label={t("common.delete")}
-            onClick={() =>
-              onChange(
-                withGroupKind({ all: group.children.filter((_, i) => i !== index) }, group.kind),
-              )
-            }
+            onClick={() => onChange(withoutCondition(expr, index))}
           >
             <Trash2Icon className="size-4" />
           </Button>
@@ -431,7 +428,10 @@ function TestEditor({
         />
       )}
 
-      <Select value={op} onValueChange={(value) => onChange({ ...test, op: value as FirewallOperator })}>
+      <Select
+        value={op}
+        onValueChange={(value) => onChange({ ...test, op: value as FirewallOperator })}
+      >
         <SelectTrigger className="w-36" aria-label={t("firewall.operator")}>
           <SelectValue />
         </SelectTrigger>

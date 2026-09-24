@@ -19,12 +19,7 @@ export type FirewallField =
   | "http.header"
 
 export type FirewallOperator =
-  | "in"
-  | "not_in"
-  | "contains"
-  | "starts_with"
-  | "ends_with"
-  | "matches"
+  "in" | "not_in" | "contains" | "starts_with" | "ends_with" | "matches"
 
 export type FirewallTest = {
   field: FirewallField
@@ -123,7 +118,9 @@ export function newGroup(): FirewallExpr {
 }
 
 /** Reads a group's kind and children, whichever of the two it is. */
-export function groupOf(expr: FirewallExpr): { kind: "all" | "any"; children: FirewallExpr[] } | null {
+export function groupOf(
+  expr: FirewallExpr,
+): { kind: "all" | "any"; children: FirewallExpr[] } | null {
   if (expr.all) return { kind: "all", children: expr.all }
   if (expr.any) return { kind: "any", children: expr.any }
   return null
@@ -134,4 +131,21 @@ export function withGroupKind(expr: FirewallExpr, kind: "all" | "any"): Firewall
   const group = groupOf(expr)
   const children = group?.children ?? []
   return kind === "all" ? { all: children } : { any: children }
+}
+
+/**
+ * Removes one condition from a group, and never leaves the group empty.
+ *
+ * A group that is there and holds nothing is not "no conditions": the panel
+ * refuses to save it, because reading it as true would make a half-finished
+ * block rule match every request and lock everybody out. Deleting the last
+ * condition therefore clears it back to a fresh one rather than removing it —
+ * a rule that should apply to everybody is written by deleting the rule and
+ * setting the set's default action.
+ */
+export function withoutCondition(expr: FirewallExpr, index: number): FirewallExpr {
+  const group = groupOf(expr)
+  if (!group) return expr
+  const children = group.children.filter((_, i) => i !== index)
+  return withGroupKind({ all: children.length > 0 ? children : [newTest()] }, group.kind)
 }

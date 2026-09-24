@@ -1,7 +1,9 @@
 package edgerules
 
 import (
+	"encoding/json"
 	"net/netip"
+	"strings"
 	"testing"
 )
 
@@ -252,5 +254,87 @@ func TestNeedsReportsTheDatabasesARuleSetCannotWorkWithout(t *testing.T) {
 	none := RuleSet{Rules: []Rule{{Name: "n", Action: ActionBlock, Expr: test(FieldPath, OpContains, "/x")}}}
 	if c, a := none.Needs(); c || a {
 		t.Error("a set of ordinary HTTP tests asked for a geo database")
+	}
+}
+
+// A group whose conditions were all deleted must not become a rule that
+// matches everything.
+//
+// It is what the interface produces when somebody removes the last condition
+// from an "all of" group, and reading it as "no conditions, so true" turned a
+// half-finished block rule into everybody locked out of the app — or out of
+// this panel, which the same engine protects.
+func TestAGroupWithNothingInItIsRefused(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		expr Expr
+	}{
+		{"an empty all-of", Expr{All: []Expr{}}},
+		{"an empty any-of", Expr{Any: []Expr{}}},
+		{"an empty group inside another", Expr{All: []Expr{{Any: []Expr{}}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			set := RuleSet{Default: ActionAllow, Rules: []Rule{
+				{ID: "r1", Name: "half-finished", Action: ActionBlock, Enabled: true, Expr: tc.expr},
+			}}
+			err := set.Validate()
+			if err == nil {
+				t.Fatal("it was accepted, so a half-finished rule could be saved")
+			}
+			if !strings.Contains(err.Error(), "nothing in it") {
+				t.Errorf("the message does not say what is wrong: %v", err)
+			}
+		})
+	}
+}
+
+// The backstop, for a set stored before that check existed: an empty group
+// does not decide, and the skip is named where somebody can see it.
+func TestAnEmptyGroupDoesNotDecide(t *testing.T) {
+	set := RuleSet{Default: ActionAllow, Rules: []Rule{
+		{ID: "r1", Name: "half-finished", Action: ActionBlock, Enabled: true, Expr: Expr{All: []Expr{}}},
+	}}
+	decision := set.Evaluate(Request{Host: "example.test", Path: "/"})
+	if decision.Action != ActionAllow {
+		t.Fatalf("a rule with no conditions in its group blocked the request")
+	}
+	if decision.RuleID != "" {
+		t.Errorf("it decided, as rule %q", decision.RuleID)
+	}
+	if len(decision.Skipped) != 1 || decision.Skipped[0] != "half-finished" {
+		t.Errorf("the skip was not reported by name: %v", decision.Skipped)
+	}
+}
+
+// The deliberate shape stays: a rule with no conditions at all applies to
+// everybody, which is how "block everyone except" is written.
+func TestARuleWithNoConditionsAtAllStillMatchesEverything(t *testing.T) {
+	set := RuleSet{Default: ActionAllow, Rules: []Rule{
+		{ID: "allow-office", Name: "the office", Action: ActionAllow, Enabled: true,
+			Expr: Expr{Test: &Test{Field: FieldIP, Op: OpIn, Values: []string{"203.0.113.0/24"}}}},
+		{ID: "block-rest", Name: "everybody else", Action: ActionBlock, Enabled: true, Expr: Expr{}},
+	}}
+	if err := set.Validate(); err != nil {
+		t.Fatalf("the block-everyone-except shape was refused: %v", err)
+	}
+	if got := set.Evaluate(Request{IP: netip.MustParseAddr("203.0.113.7")}); got.Action != ActionAllow {
+		t.Errorf("the office was not allowed: %+v", got)
+	}
+	if got := set.Evaluate(Request{IP: netip.MustParseAddr("198.51.100.4")}); got.Action != ActionBlock {
+		t.Errorf("everybody else was not blocked: %+v", got)
+	}
+}
+
+// An empty group surviving a round trip through the stored JSON is the path
+// that actually happens: the interface sends {"all":[]}.
+func TestAnEmptyGroupIsRefusedWhenItArrivesAsJSON(t *testing.T) {
+	var set RuleSet
+	if err := json.Unmarshal([]byte(
+		`{"default":"allow","rules":[{"id":"r1","name":"half-finished","action":"block","enabled":true,"expr":{"all":[]}}]}`,
+	), &set); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if err := set.Validate(); err == nil {
+		t.Fatal("the shape the interface sends when the last condition is deleted was accepted")
 	}
 }

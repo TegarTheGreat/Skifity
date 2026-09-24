@@ -26,6 +26,20 @@
 // The real fix is upstream: the panel refuses to save a rule about a country
 // when no country database is configured. This is the backstop for the case
 // where the database is configured and then goes away.
+//
+// # A group with nothing in it
+//
+// A rule with no conditions at all matches every request. That is deliberate,
+// and it is how a set says "this action, to everybody".
+//
+// A group that is present and empty is not the same thing and never means it.
+// It is what the interface produces when somebody deletes the last condition
+// out of an "all of" group, and reading it as "no conditions, so true" turned a
+// half-finished rule into one that matched every request — a block rule that
+// locked everybody out of the app, or out of this panel, with nothing on the
+// screen to say so. So it is refused when the set is saved, and at evaluation
+// time it is unknown rather than true: it does not decide, and it is named
+// among the skipped rules where somebody can see it.
 package edgerules
 
 import (
@@ -125,11 +139,14 @@ type Test struct {
 // than a tagged union keeps the stored JSON readable — `{"all":[...]}` says what
 // it is without a type field to cross-reference.
 type Expr struct {
-	// All is true when every condition in it is true. An empty All is true,
-	// which is what "no conditions" should mean for a rule that matches
-	// everything.
+	// All is true when every condition in it is true.
+	//
+	// Present and empty is refused rather than read as true; see the package
+	// comment. A rule that is meant to match everything has no All, no Any, no
+	// Not and no Test at all.
 	All []Expr `json:"all,omitempty"`
-	// Any is true when at least one condition is true. An empty Any is false.
+	// Any is true when at least one condition is true. Present and empty is
+	// refused, for the same reason as All.
 	Any  []Expr `json:"any,omitempty"`
 	Not  *Expr  `json:"not,omitempty"`
 	Test *Test  `json:"test,omitempty"`
@@ -273,9 +290,15 @@ func (e Expr) evaluate(req Request) truth {
 			return isUnknown
 		}
 		return isTrue
+	case e.All != nil || e.Any != nil:
+		// A group that is present and holds nothing. Refused when the set is
+		// saved, so reaching this means a set stored before that check
+		// existed, or one written straight into the database. It does not
+		// decide: "the conditions were deleted" is not "every request".
+		return isUnknown
 	default:
-		// An empty group. All of nothing is true, which makes a rule with no
-		// conditions match everything — the shape of "block everyone except".
+		// No conditions at all, which is how a rule says it applies to
+		// everybody — the shape of "block everyone except".
 		return isTrue
 	}
 }
@@ -486,6 +509,13 @@ func (e Expr) validate(depth int) error {
 	}
 	if set > 1 {
 		return fmt.Errorf("a condition is one of a test, a negation, all-of or any-of, and this is several at once")
+	}
+	// A group that is there and empty is what the interface produces when the
+	// last condition is deleted out of it. Read as "no conditions", it would
+	// match every request, which for a block rule is everybody locked out.
+	if set == 0 && (e.All != nil || e.Any != nil) {
+		return fmt.Errorf(
+			"a group of conditions has nothing in it; add a condition, or remove the rule and set the default action instead")
 	}
 	switch {
 	case e.Test != nil:

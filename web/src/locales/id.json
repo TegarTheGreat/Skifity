@@ -266,7 +266,8 @@
       "volume.deleted": "Volume dihapus",
       "auth.reauthenticated": "Membuktikan identitasnya kembali",
       "auth.sessions_revoked": "Mengeluarkan semua perangkat lain",
-      "git_source.webhook_registered": "Webhook didaftarkan di repositori"
+      "git_source.webhook_registered": "Webhook didaftarkan di repositori",
+      "app.source_uploaded": "Mengunggah kode aplikasi"
     }
   },
   "projects": {
@@ -439,7 +440,8 @@
     "volumeRestoreStarted": "Pemulihan dimulai. Aplikasi berhenti selama proses berjalan dan dijalankan lagi setelahnya.",
     "volumeRestoreWarning": "Semua isi {{app}} diganti dengan isi cadangan ini, dan aplikasi dihentikan selama proses itu.",
     "volumeStopsRollingDeploys": "Dengan disk, deploy tidak lagi mulus",
-    "volumeStopsRollingDeploysHelp": "Satu disk hanya boleh ditulis satu instance dalam satu waktu, jadi Skifity menghentikan instance lama sebelum menjalankan yang baru. Setiap deploy punya jeda beberapa detik tanpa yang menjawab, dan aplikasi tidak bisa berjalan lebih dari satu instance."
+    "volumeStopsRollingDeploysHelp": "Satu disk hanya boleh ditulis satu instance dalam satu waktu, jadi Skifity menghentikan instance lama sebelum menjalankan yang baru. Setiap deploy punya jeda beberapa detik tanpa yang menjawab, dan aplikasi tidak bisa berjalan lebih dari satu instance.",
+    "sourceUpload": "Folder yang dikirim dengan skifity up"
   },
   "deploy": {
     "title": "Deployment",
@@ -1899,7 +1901,73 @@
         "title": "Panel tidak menyebutkan aplikasi mana yang dibuat",
         "cause": "Balasan saat membuat aplikasi tidak memuat aplikasinya.",
         "impact": "Berkas proyek tidak ditulis, jadi `skifity deploy` di sini tidak tahu apa yang harus di-deploy.",
-        "fix": "Periksa daftar aplikasi dengan `skifity apps`, lalu jalankan `skifity link` bila ada di sana."
+        "fix": "Cari dengan `skifity apps`, lalu tulis id-nya di skifity.toml sebagai app = \"<id>\"."
+      },
+      "upload_none": {
+        "title": "Belum ada kode untuk di-deploy",
+        "cause": "{{0}} men-deploy folder yang dikirim dari komputer seseorang, dan belum ada yang dikirim.",
+        "impact": "Tidak ada yang di-build atau di-deploy.",
+        "fix": "Buka terminal di folder aplikasinya lalu jalankan `skifity up`. Perintah itu mengirim foldernya dan men-deploy-nya."
+      },
+      "upload_not_found": {
+        "title": "Unggahan itu tidak ada di panel",
+        "cause": "Tidak ada unggahan dengan hash {{0}} milik aplikasi ini. Panel menyimpan sepuluh unggahan terbaru tiap aplikasi.",
+        "impact": "Tidak ada yang di-build atau di-deploy.",
+        "fix": "Jalankan `skifity up` lagi untuk mengirim folder seperti keadaannya sekarang."
+      },
+      "upload_not_an_archive": {
+        "title": "Panel tidak bisa membaca unggahan ini",
+        "cause": "Yang dikirim bukan arsip tar ber-gzip yang utuh.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Kirim foldernya dengan `skifity up`, yang mengemasnya dengan cara yang dibaca panel. Kalau sudah begitu, kemungkinan pengirimannya terputus, jadi jalankan lagi."
+      },
+      "upload_unsafe_entry": {
+        "title": "Unggahan berisi berkas yang tidak akan dibongkar panel",
+        "cause": "{{0}} adalah tautan, berkas khusus, atau jalur yang mengarah ke luar folder, dan membongkarnya bisa menulis ke tempat yang tidak semestinya.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Hapus dari foldernya, atau tulis di .skifityignore supaya tidak ikut dikirim."
+      },
+      "upload_secrets_file": {
+        "title": "Unggahan berisi berkas .env",
+        "cause": "{{0}} menyimpan pengaturan asli aplikasi. Build memasukkan setiap berkas yang diterimanya ke dalam image, dan siapa pun yang bisa menarik image itu bisa membacanya.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Isi nilai-nilai itu di Variabel aplikasi. `skifity up` otomatis tidak menyertakan berkas .env, jadi berkas ini dikirim dengan cara lain."
+      },
+      "upload_too_many_files": {
+        "title": "Unggahan berisi terlalu banyak berkas",
+        "cause": "Isinya lebih dari {{0}} berkas, padahal kode sumber hampir tidak pernah sebanyak itu.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Kemungkinan ada folder dependensi seperti node_modules atau virtualenv di dalamnya. Tulis di .skifityignore: build akan memasang dependensinya sendiri."
+      },
+      "upload_unpacks_too_large": {
+        "title": "Unggahan terlalu besar setelah dibongkar",
+        "cause": "Total isinya lebih dari {{0}} MB.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Kemungkinan ada hasil build, folder dependensi, atau berkas data di dalamnya. Tulis di .skifityignore lalu kirim lagi."
+      },
+      "upload_empty": {
+        "title": "Unggahan tidak berisi berkas apa pun",
+        "cause": "Arsipnya sudah dibaca sampai habis dan paling banyak hanya berisi folder.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Jalankan `skifity up` dari dalam folder aplikasinya, atau sebut foldernya: `skifity up ./aplikasi-saya`."
+      },
+      "upload_too_large": {
+        "title": "Unggahan terlalu besar",
+        "cause": "Panel menerima kode terkompresi paling besar {{0}} MB, dan ini lebih dari itu.",
+        "impact": "Tidak ada yang disimpan, di-build, atau di-deploy.",
+        "fix": "Kemungkinan ada sesuatu yang bukan kode sumber di folder itu, seperti folder dependensi, hasil build, atau berkas database. Tulis di .skifityignore lalu kirim lagi."
+      },
+      "upload_wrong_source": {
+        "title": "Aplikasi ini tidak men-deploy kode unggahan",
+        "cause": "{{0}} di-build dari repositori atau image, jadi kode yang dikirim ke sana tidak akan pernah dipakai.",
+        "impact": "Tidak ada yang disimpan.",
+        "fix": "Push ke repositorinya saja, atau buat aplikasi baru untuk folder ini dengan `skifity up --new`."
+      },
+      "upload_delivery_failed": {
+        "title": "Kode tidak bisa diserahkan ke build",
+        "cause": "Panel tidak bisa mengirim kode unggahan ke dalam build: {{0}}",
+        "impact": "Tidak ada yang di-build atau di-deploy. Versi sebelumnya masih berjalan.",
+        "fix": "Tekan Coba lagi. Kalau gagal lagi, pastikan panel bisa menjangkau API cluster dan pod build-nya sudah berjalan."
       }
     }
   },

@@ -21,6 +21,7 @@ import (
 	"skifity/internal/plugins"
 	"skifity/internal/runsafe"
 	"skifity/internal/store"
+	"skifity/internal/upload"
 )
 
 // Server is the panel's HTTP API.
@@ -57,6 +58,10 @@ type Server struct {
 	// configuration and means only the built-in kinds exist.
 	channels notify.Provider
 
+	// uploads keeps the code of apps that have no repository. Nil means this
+	// panel does not accept uploaded folders.
+	uploads *upload.Store
+
 	// frontend serves the embedded UI.
 	frontend http.Handler
 
@@ -79,7 +84,9 @@ type Options struct {
 	Plugins     plugins.Dispatcher
 	// Channels is the installed plugins that provide a notification channel.
 	// Nil is a panel with no plugins, and every built-in channel still works.
-	Channels   notify.Provider
+	Channels notify.Provider
+	// Uploads is where the code of apps with no repository is kept.
+	Uploads    *upload.Store
 	Frontend   http.Handler
 	SetupToken string
 	// Metrics is shared with the orchestrators, so a deployment counted there
@@ -104,6 +111,7 @@ func New(opts Options) *Server {
 		backups:     opts.Backups,
 		plugins:     opts.Plugins,
 		channels:    opts.Channels,
+		uploads:     opts.Uploads,
 		frontend:    opts.Frontend,
 		setup:       newSetupState(opts.SetupToken),
 		metrics:     opts.Metrics,
@@ -268,6 +276,8 @@ func (s *Server) routes() chi.Router {
 				app.Get("/firewall", s.handleGetFirewall)
 				app.Put("/firewall", s.handleSetFirewall)
 				app.Post("/deploy", s.handleDeployApp)
+				// The code of an app with no repository, from `skifity up`.
+				app.Put("/source", s.handleUploadSource)
 				app.Get("/deployments", s.handleListDeployments)
 				app.Get("/deployments/{deploymentID}", s.handleGetDeployment)
 				app.Get("/deployments/{deploymentID}/logs", s.handleDeploymentLogs)

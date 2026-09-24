@@ -16,8 +16,9 @@ than click through a panel. Everything below is true of the current version.
 - A **team** owns servers and projects.
 - A **project** groups things that belong together and has one or more
   **environments** (Production by default). An environment is a namespace.
-- An **app** lives in an environment. It comes from a Git repository or a
-  container image, and has variables, domains, scaling and storage.
+- An **app** lives in an environment. It comes from a Git repository, a
+  container image, or a folder sent with `skifity up`, and has variables,
+  domains, scaling and storage.
 - An **instance** is one running copy of an app.
 - A **database** is a managed PostgreSQL, Redis or MySQL that apps connect to.
 - A **deployment** is one attempt to run a new version of an app.
@@ -31,6 +32,7 @@ can do, because they all call the same endpoints.
 
 ```
 skifity login                     Sign in and store an API token
+skifity up                        Deploy this folder, no repository needed
 skifity init                      Write a skifity.toml in this directory
 skifity deploy                    Deploy this directory's app
 skifity status                    Is it running, and on what
@@ -75,6 +77,7 @@ Tools, in the order they are usually needed:
 | Tool | What it does |
 |---|---|
 | `list_projects` | Projects and the environments inside them. Where an app goes. |
+| `deploy_folder` | Deploys a folder on this computer, no repository needed. Creates the app and its databases the first time, and leaves out `.env` and `node_modules`. |
 | `create_app` | Creates an app from a repository or an image, and optionally deploys it. |
 | `list_apps` | Lists apps with their ids. Call this first: everything else takes an app id. |
 | `get_app_status` | Whether an app is running, how many instances are ready, its URLs. |
@@ -110,6 +113,7 @@ GET    /api/environments/{env}/apps           apps
 POST   /api/environments/{env}/apps           create one
 GET    /api/apps/{app}                        an app
 GET    /api/apps/{app}/status                 live state and instances
+PUT    /api/apps/{app}/source                 send an app's code as a .tar.gz, for an app with no repository
 POST   /api/apps/{app}/deploy                 deploy
 GET    /api/apps/{app}/deployments            deployment history
 POST   /api/apps/{app}/rollback/{deployment}  roll back

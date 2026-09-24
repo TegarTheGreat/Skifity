@@ -413,7 +413,11 @@ function AppRow({ app }: { app: App }) {
         <ItemContent>
           <ItemTitle>{app.name}</ItemTitle>
           <ItemDescription className="font-mono">
-            {app.source_type === "image" ? app.image : repoName(app.repo_url) || app.repo_url}
+            {app.source_type === "image"
+              ? app.image
+              : app.source_type === "upload"
+                ? t("apps.sourceUpload")
+                : repoName(app.repo_url) || app.repo_url}
             {app.branch ? ` · ${app.branch}` : ""}
           </ItemDescription>
         </ItemContent>

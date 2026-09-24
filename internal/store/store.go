@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"encoding/base32"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -51,13 +53,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		}
 	}
 
-	// WAL keeps readers from blocking the writer, busy_timeout absorbs the
-	// remaining contention, and foreign_keys makes the schema's ON DELETE
-	// CASCADE rules actually run.
-	dsn := path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)" +
-		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_time_format=sqlite"
-
-	sqlDB, err := sql.Open("sqlite", dsn)
+	sqlDB, err := sql.Open("sqlite", fileDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open database %s: %w", path, err)
 	}
@@ -77,6 +73,15 @@ func Open(ctx context.Context, path string) (*DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// fileDSN is how every file-backed database is opened.
+func fileDSN(path string) string {
+	// WAL keeps readers from blocking the writer, busy_timeout absorbs the
+	// remaining contention, and foreign_keys makes the schema's ON DELETE
+	// CASCADE rules actually run.
+	return path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)" +
+		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_time_format=sqlite"
 }
 
 // OpenMemory opens a private in-memory database. Used by tests.
@@ -102,6 +107,12 @@ func (db *DB) Path() string { return db.path }
 // Migrate applies every migration that has not run yet, in order, each in its own
 // transaction so a failure leaves the database on the last good version.
 func (db *DB) Migrate(ctx context.Context) error {
+	return db.migrateUpTo(ctx, math.MaxInt)
+}
+
+// migrateUpTo applies migrations up to and including a version, so a test can
+// put rows into an older schema and watch a later migration carry them.
+func (db *DB) migrateUpTo(ctx context.Context, last int) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,
 		name    TEXT NOT NULL,
@@ -133,7 +144,7 @@ func (db *DB) Migrate(ctx context.Context) error {
 		return err
 	}
 	for _, m := range migrations {
-		if applied[m.version] {
+		if applied[m.version] || m.version > last {
 			continue
 		}
 		if err := db.applyMigration(ctx, m); err != nil {
@@ -192,9 +203,26 @@ func loadMigrations() ([]migration, error) {
 	return out, nil
 }
 
+// rebuildMarker opts a migration into SQLite's procedure for changing a table
+// in a way ALTER TABLE cannot, such as a CHECK constraint: make a new table,
+// copy the rows, drop the old one, rename the new one into its place.
+//
+// That procedure needs foreign keys off, and not as a nicety. With them on,
+// dropping the old table is a DELETE of every row in it, and every ON DELETE
+// CASCADE in the schema fires: rebuilding apps would take every deployment,
+// domain, variable and volume record with it, inside a migration that then
+// reports success. foreign_keys cannot change inside a transaction, so it is
+// switched off on one connection, around the transaction, and the rows are
+// checked with foreign_key_check before anything commits.
+const rebuildMarker = "-- migrate: rebuilds a table"
+
 func (db *DB) applyMigration(ctx context.Context, m migration) error {
 	db.writeMu.Lock()
 	defer db.writeMu.Unlock()
+
+	if strings.HasPrefix(m.sql, rebuildMarker) {
+		return db.applyRebuild(ctx, m)
+	}
 
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -204,6 +232,63 @@ func (db *DB) applyMigration(ctx context.Context, m migration) error {
 
 	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
 		return fmt.Errorf("execute: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,
+		m.version, m.name, Now()); err != nil {
+		return fmt.Errorf("record: %w", err)
+	}
+	return tx.Commit()
+}
+
+// applyRebuild runs a migration marked with rebuildMarker. The caller holds
+// writeMu.
+func (db *DB) applyRebuild(ctx context.Context, m migration) (err error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("take a connection: %w", err)
+	}
+	// Returning it to the pool cannot fail in a way that changes the outcome.
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("switch foreign keys off: %w", err)
+	}
+	defer func() {
+		// Back on before the connection returns to the pool, where every other
+		// query relies on the cascades. A connection that cannot be put back
+		// is not returned at all.
+		if _, onErr := conn.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`); onErr != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+			if err == nil {
+				err = fmt.Errorf("switch foreign keys back on: %w", onErr)
+			}
+		}
+	}()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
+		return fmt.Errorf("execute: %w", err)
+	}
+	// With the checks off, nothing stopped a row from pointing at nothing.
+	// This is where that would be found, before it is committed.
+	rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		return fmt.Errorf("check foreign keys: %w", err)
+	}
+	broken := rows.Next()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("check foreign keys: %w", err)
+	}
+	rows.Close()
+	if broken {
+		return errors.New("the rebuilt table leaves rows pointing at nothing")
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)`,

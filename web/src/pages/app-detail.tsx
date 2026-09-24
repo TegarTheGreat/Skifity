@@ -286,7 +286,11 @@ function Overview({ app, status, loading }: { app: App; status?: AppStatus; load
             </CardTitle>
           </CardHeader>
           <CardContent className="truncate font-mono text-sm">
-            {app.source_type === "image" ? app.image : app.repo_url || "—"}
+            {app.source_type === "image"
+              ? app.image
+              : app.source_type === "upload"
+                ? t("apps.sourceUpload")
+                : app.repo_url || "—"}
           </CardContent>
         </Card>
         <Card>

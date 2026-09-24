@@ -56,6 +56,10 @@ var readableFiles = []string{
 	".env.example", ".env.sample", ".env.template",
 }
 
+// ReadableFiles is the same list, for a detector reading a folder on disk
+// instead of a repository: `skifity up` reads exactly what the panel would.
+func ReadableFiles() []string { return append([]string(nil), readableFiles...) }
+
 // TreeRequest is a repository to look at.
 type TreeRequest struct {
 	// RepoURL is the browser address of the repository.

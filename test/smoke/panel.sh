@@ -226,6 +226,51 @@ pass "skifity apps works"
 "$BINARY" servers --json | grep -q '\[' || fail "skifity servers did not return a list"
 pass "skifity servers works"
 
+# --- a folder with no repository ---------------------------------------------
+#
+# `skifity up` is the way in for somebody whose app an assistant wrote: no
+# repository, no settings. There is no cluster here, so the build itself cannot
+# run; everything before it can, and that is what this checks — the app is
+# made, the folder is sent without its .env or node_modules, the .env's values
+# become variables, and sending the same folder again is the same upload.
+APPDIR="$WORKDIR/My Notes"
+mkdir -p "$APPDIR/node_modules/left-out" "$APPDIR/src"
+printf '{"name":"notes","scripts":{"start":"node src/index.js"}}\n' > "$APPDIR/package.json"
+printf 'console.log("hi")\n' > "$APPDIR/src/index.js"
+printf 'STRIPE_SECRET_KEY=sk_test_smokevalue\n' > "$APPDIR/.env"
+printf 'STRIPE_SECRET_KEY=\n' > "$APPDIR/.env.example"
+printf 'x\n' > "$APPDIR/node_modules/left-out/index.js"
+
+# The binary's path is relative to the repository, and these run elsewhere.
+BINARY_PATH=$(cd "$(dirname "$BINARY")" && pwd)/$(basename "$BINARY")
+UP=$(cd "$APPDIR" && "$BINARY_PATH" up --dotenv --follow=false 2>&1) || fail "skifity up failed: $UP"
+[ -f "$APPDIR/skifity.toml" ] || fail "skifity up did not link the folder to its app"
+UP_APP=$(sed -n 's/^app = "\(app_[^"]*\)"/\1/p' "$APPDIR/skifity.toml")
+curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/apps/$UP_APP" | grep -q '"source_type":"upload"' ||
+  fail "skifity up did not make an app that deploys uploaded code"
+curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/apps/$UP_APP" | grep -q '"name":"my-notes"' ||
+  fail "the app was not named after the folder"
+pass "skifity up makes an app from a folder, named after it, and links the folder"
+
+UPLOADS="$WORKDIR/uploads/$UP_APP"
+uploads_kept() { find "$UPLOADS" -name '*.tar.gz' | wc -l; }
+[ "$(uploads_kept)" -eq 1 ] || fail "skifity up did not leave exactly one upload, but $(uploads_kept)"
+LISTING=$(tar -tzf "$UPLOADS"/*.tar.gz)
+echo "$LISTING" | grep -q '^src/index.js$' || fail "the upload is missing the code: $LISTING"
+echo "$LISTING" | grep -q '^\.env$' && fail "the .env file was uploaded"
+echo "$LISTING" | grep -q 'node_modules' && fail "node_modules was uploaded"
+echo "$LISTING" | grep -q '^\.env\.example$' || fail "the .env.example template was left out"
+pass "the folder is sent without its .env or node_modules"
+
+VARS=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/apps/$UP_APP/variables")
+echo "$VARS" | grep -q '"STRIPE_SECRET_KEY"' || fail "the .env's value did not become a variable: $VARS"
+echo "$VARS" | grep -q 'sk_test_smokevalue' && fail "a secret from .env came back from the API"
+pass "the .env's values become variables, and a secret one stays secret"
+
+UP2=$(cd "$APPDIR/src" && "$BINARY_PATH" up --follow=false 2>&1) || fail "a second skifity up failed: $UP2"
+[ "$(uploads_kept)" -eq 1 ] || fail "the same folder sent again made a second upload"
+pass "skifity up from a subfolder sends the whole app, and the same code is the same upload"
+
 # Create an app through the API and check the CLI sees it.
 PROJECT_ID=$(curl -fsS -H "Authorization: Bearer $API_TOKEN" "$BASE/api/teams/$TEAM_ID/projects" \
   | sed -n 's/.*"id":"\(prj_[^"]*\)".*/\1/p')

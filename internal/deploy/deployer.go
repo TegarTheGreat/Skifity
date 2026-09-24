@@ -24,6 +24,7 @@ import (
 	"skifity/internal/runsafe"
 	"skifity/internal/settings"
 	"skifity/internal/store"
+	"skifity/internal/upload"
 )
 
 // Deployer implements api.Deployer.
@@ -40,6 +41,9 @@ type Deployer struct {
 	// blocking hook, get to stop it. The zero value sends nothing and refuses
 	// nothing, which is what a deployer in a test wants.
 	Plugins plugins.Dispatcher
+	// Uploads is where the code of an app with no repository is kept. Nil
+	// means this panel does not deploy uploaded folders.
+	Uploads *upload.Store
 	log     *slog.Logger
 
 	mu      sync.Mutex
@@ -74,6 +78,13 @@ func (d *Deployer) Deploy(ctx context.Context, req api.DeployRequest) (store.Dep
 	// Empty means the build clones the branch tip, and the image is tagged with
 	// the deployment number instead of a commit.
 	commit := req.CommitSHA
+	if app.SourceType == "upload" {
+		// An upload's hash stands where a commit would, so the fingerprint
+		// changes exactly when the code does.
+		if commit, err = d.uploadToDeploy(app, req.CommitSHA); err != nil {
+			return store.Deployment{}, err
+		}
+	}
 
 	buildArgs, err := d.buildTimeVariables(ctx, app)
 	if err != nil {
@@ -134,6 +145,27 @@ func (d *Deployer) Deploy(ctx context.Context, req api.DeployRequest) (store.Dep
 		d.run(runCtx, deployment.ID)
 	})
 	return deployment, nil
+}
+
+// uploadToDeploy decides which upload a deploy builds: the one asked for, or
+// the newest one there is.
+func (d *Deployer) uploadToDeploy(app store.App, requested string) (string, error) {
+	if d.Uploads == nil {
+		return "", errdoc.NotConfigured("Deploying uploaded code", "the panel's data directory")
+	}
+	if requested == "" {
+		latest, err := d.Uploads.Latest(app.ID)
+		if err != nil {
+			return "", errdoc.NoUpload(app.Name)
+		}
+		return latest, nil
+	}
+	// Checked here as well as by the store, because it is about to be a tag,
+	// a fingerprint and a file name.
+	if !upload.ValidSHA(requested) || !d.Uploads.Has(app.ID, requested) {
+		return "", errdoc.UploadNotFound(requested)
+	}
+	return requested, nil
 }
 
 // run executes a deployment from start to finish.

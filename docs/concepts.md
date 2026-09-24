@@ -235,6 +235,21 @@ the app's **Settings**.
 
 Nothing from the repository's own `.git` directory ever reaches a served image.
 
+## Deploying a folder instead
+
+Not every app has a repository. One an assistant wrote is usually a folder on
+somebody's computer, and `skifity up` deploys it as it is: the CLI reads the
+folder with the same detection the panel uses on a repository, creates the app
+and the databases it needs, sends the folder without its `.env` or
+`node_modules`, and deploys. The next `skifity up` in that folder updates the
+same app. See [the CLI](/docs/cli#deploying-a-folder).
+
+From there it is an ordinary app. The build is the same four ways above, a
+rollback goes back to the image an earlier upload built, and the same code sent
+twice builds once. What it does not have is anything that needs a repository: a
+branch, deploy on push, or previews for pull requests. When the app outgrows a
+folder on a laptop, push it to a Git host and create an app from the repository.
+
 ## Deploying when you push
 
 Connect a Git account under **Settings → Git**, and when you create an app from

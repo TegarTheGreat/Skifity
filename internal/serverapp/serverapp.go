@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"skifity/internal/runsafe"
 	"skifity/internal/settings"
 	"skifity/internal/store"
+	"skifity/internal/upload"
 	"skifity/internal/version"
 	"skifity/internal/watch"
 )
@@ -126,9 +128,14 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 		dispatcher.SetProvider(pluginChannels)
 	}
 
+	// Uploaded code sits beside the database, so it is on the same volume and
+	// goes wherever the panel's data goes.
+	uploads := &upload.Store{Dir: filepath.Join(filepath.Dir(cfg.DatabasePath), "uploads")}
+
 	deployer := deploy.New(db, keyring, hub, clusterAdapter, dispatcher, log)
 	deployer.Metrics = registry
 	deployer.Plugins = pluginEvents
+	deployer.Uploads = uploads
 	provisioner := provision.New(provision.Options{
 		DB: db, Keyring: keyring, Hub: hub, Cluster: clusterAdapter,
 		Notifier: dispatcher, Plugins: pluginEvents,
@@ -150,6 +157,7 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 		Cluster: nilIfNil(clusterAdapter), Provisioner: provisioner, Deployer: deployer,
 		Databases: databases, Backups: backups, Plugins: pluginEvents,
 		Frontend: frontend, SetupToken: setupToken, Metrics: registry,
+		Uploads: uploads,
 	})
 
 	// Anything left running when the panel stopped is marked failed with an
@@ -167,7 +175,8 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 	go server.Background(background)
-	go runScheduler(background, db, backups, clusterAdapter, log)
+	sweepUploads(ctx, db, uploads, log)
+	go runScheduler(background, db, backups, clusterAdapter, uploads, log)
 	go watcher.Run(background)
 
 	httpServer := &http.Server{
@@ -387,7 +396,7 @@ func markInterruptedDeployments(ctx context.Context, db *store.DB, log *slog.Log
 }
 
 // runScheduler fires scheduled backups once a minute.
-func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c *cluster.Cluster, log *slog.Logger) {
+func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c *cluster.Cluster, uploads *upload.Store, log *slog.Logger) {
 	// Align to the start of the next minute so a schedule of "0 3 * * *" fires
 	// at 03:00 rather than at whatever second the panel happened to start.
 	timer := time.NewTimer(time.Until(time.Now().Truncate(time.Minute).Add(time.Minute)))
@@ -419,6 +428,9 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 			last = now
 
 			pruneHistory(ctx, db, log)
+			if now.Minute() == 0 {
+				sweepUploads(ctx, db, uploads, log)
+			}
 			// Maintenance is on the same minute tick rather than a timer of its
 			// own, because "due" has to survive a restart: a panel restarted
 			// daily would never reach a weekly timer, and the disk would fill
@@ -438,6 +450,24 @@ func runScheduler(ctx context.Context, db *store.DB, backups *backup.Manager, c 
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+// sweepUploads removes the code of apps that no longer exist.
+//
+// Deleting an app removes its uploads there and then. Deleting its project or
+// environment takes the app with it in one cascade inside the database, and
+// nothing in that path knows there were files beside it — so this finds them.
+func sweepUploads(ctx context.Context, db *store.DB, uploads *upload.Store, log *slog.Logger) {
+	for _, appID := range uploads.AppIDs() {
+		if _, err := db.GetApp(ctx, appID); !errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err := uploads.Remove(appID); err != nil {
+			log.Warn("could not remove the code of a deleted app", "app", appID, "error", err)
+			continue
+		}
+		log.Info("removed the uploaded code of an app that no longer exists", "app", appID)
 	}
 }
 

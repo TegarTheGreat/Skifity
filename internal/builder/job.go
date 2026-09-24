@@ -43,6 +43,10 @@ type JobSpec struct {
 	RootDir string
 	// CloneSecret holds credentials for a private repository.
 	CloneSecret string
+	// SourceUpload means there is no repository: the code was uploaded to the
+	// panel, and the panel hands it to the build once the pod is running. See
+	// ReceiveCommand. CommitSHA is then the upload's hash.
+	SourceUpload bool
 
 	// Strategy
 	Builder        Builder
@@ -146,7 +150,16 @@ func (s JobSpec) Validate() error {
 	default:
 		return fmt.Errorf("%q is not a builder that can produce an image", s.Builder)
 	}
-	if s.Builder != BuilderStatic && s.RepoURL == "" {
+	if s.SourceUpload {
+		// The code comes from the panel, not from an address, and knowing
+		// exactly which upload is the whole point of the fingerprint.
+		if s.RepoURL != "" || s.CloneSecret != "" {
+			return fmt.Errorf("a build from an upload has no repository")
+		}
+		if s.CommitSHA == "" {
+			return fmt.Errorf("a build from an upload needs to know which upload")
+		}
+	} else if s.Builder != BuilderStatic && s.RepoURL == "" {
 		return fmt.Errorf("a build needs a repository to build from")
 	}
 	// The address and the ref reach the build pod through the environment, not
@@ -252,12 +265,22 @@ func BuildJob(s JobSpec) (*batchv1.Job, error) {
 	}, nil
 }
 
+// SourceContainer is the first container of every build, the one that puts the
+// code in the workspace: by cloning it, or by receiving an upload.
+const SourceContainer = "clone"
+
 func cloneContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
+	script := cloneScript(s)
+	if s.SourceUpload {
+		script = receiveScript()
+	}
 	container := corev1.Container{
-		Name:         "clone",
+		// The same name either way, so the log a person reads and the stage a
+		// failure is blamed on do not depend on where the code came from.
+		Name:         SourceContainer,
 		Image:        s.GitImage,
 		Command:      []string{"/bin/sh", "-c"},
-		Args:         []string{cloneScript(s)},
+		Args:         []string{script},
 		VolumeMounts: mounts,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -266,6 +289,9 @@ func cloneContainer(s JobSpec, mounts []corev1.VolumeMount) corev1.Container {
 			},
 			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
 		},
+	}
+	if s.SourceUpload {
+		return container
 	}
 	container.Env = append(container.Env,
 		corev1.EnvVar{Name: "REPO_URL", Value: s.RepoURL},
@@ -338,6 +364,63 @@ func cloneScript(s JobSpec) string {
 	// Submodules are common enough that failing on them would be surprising.
 	b.WriteString(`authed_git submodule update --init --recursive --depth 1 -q 2>/dev/null || true` + "\n")
 	b.WriteString(`echo "==> Checked out $(git rev-parse --short HEAD)"` + "\n")
+	return b.String()
+}
+
+// Receiving an upload.
+//
+// The build cannot fetch the code from the panel: the build namespace's
+// network policy stops a build reaching the panel at all, on purpose, because
+// a build runs somebody's install scripts and the panel holds every secret.
+// So the panel brings the code to the build instead. The first container waits;
+// the panel, which may reach into the build namespace, opens an exec into it
+// and streams the archive to ReceiveCommand's standard input.
+//
+// The markers live outside the workspace, so neither ends up in the image.
+const (
+	sourceReady  = "/tmp/skifity-source-ready"
+	sourceFailed = "/tmp/skifity-source-failed"
+	// receiveWaitSeconds is how long the container waits for the panel. A
+	// pod pulling a large image for the first time on a slow line is the
+	// longest honest wait; past that, something is wrong and saying so beats
+	// holding the build's slot.
+	receiveWaitSeconds = 900
+)
+
+// ReceiveCommand is what the panel runs inside the waiting container, with the
+// archive on its standard input. The archive was checked before it was stored
+// (see internal/upload), which is why an ordinary tar may unpack it.
+//
+// Either marker is written, never neither: a stream cut halfway is a tar
+// failure, and the waiting script stops at once instead of timing out.
+func ReceiveCommand() []string {
+	return []string{"/bin/sh", "-c", receiveCommandScript()}
+}
+
+func receiveCommandScript() string {
+	return "if tar -xzf - -C " + workspace + "; then touch " + sourceReady +
+		"; else touch " + sourceFailed + "; exit 1; fi\n"
+}
+
+// receiveScript waits for the panel to deliver the code.
+func receiveScript() string {
+	var b strings.Builder
+	b.WriteString("set -e\n")
+	b.WriteString("echo '==> Waiting for the uploaded code'\n")
+	b.WriteString("waited=0\n")
+	fmt.Fprintf(&b, "while [ ! -e %s ]; do\n", sourceReady)
+	fmt.Fprintf(&b, "  if [ -e %s ]; then\n", sourceFailed)
+	b.WriteString("    echo 'The upload could not be unpacked into the build.' >&2\n")
+	b.WriteString("    exit 1\n")
+	b.WriteString("  fi\n")
+	fmt.Fprintf(&b, "  if [ \"$waited\" -ge %d ]; then\n", receiveWaitSeconds)
+	b.WriteString("    echo 'The panel never delivered the uploaded code to this build.' >&2\n")
+	b.WriteString("    exit 1\n")
+	b.WriteString("  fi\n")
+	b.WriteString("  sleep 1\n")
+	b.WriteString("  waited=$((waited + 1))\n")
+	b.WriteString("done\n")
+	fmt.Fprintf(&b, "echo \"==> Received $(find %s -type f | wc -l) files\"\n", workspace)
 	return b.String()
 }
 

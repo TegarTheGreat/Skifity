@@ -124,7 +124,7 @@ export type App = {
   environment_id: string
   name: string
   slug: string
-  source_type: "git" | "image"
+  source_type: "git" | "image" | "upload"
   git_source_id?: string
   repo_url: string
   branch: string

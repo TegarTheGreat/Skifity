@@ -246,6 +246,14 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, errdoc.BadRequest("Enter the image to run, for example nginx:1.27."))
 			return
 		}
+	case "upload":
+		// The code arrives afterwards, from `skifity up`, and nothing from a
+		// repository or an image applies to it.
+		repoURL = ""
+		req.GitSourceID = ""
+		req.Branch = ""
+		req.Image = ""
+		req.Deploy = false
 	case "compose":
 		// A Compose file describes several services and an app runs one, so
 		// "compose" was never a source an app could have: it was accepted,
@@ -258,7 +266,7 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 				"offers the services it found."))
 		return
 	default:
-		writeError(w, r, errdoc.BadRequest("Source must be git or image."))
+		writeError(w, r, errdoc.BadRequest("Source must be git, image or upload."))
 		return
 	}
 
@@ -573,6 +581,12 @@ func (s *Server) handleDeleteApp(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.DeleteApp(r.Context(), app.ID); err != nil {
 		writeError(w, r, err)
 		return
+	}
+	if s.uploads != nil {
+		// After the row, so an app that could not be deleted keeps its code.
+		if err := s.uploads.Remove(app.ID); err != nil {
+			s.log.Warn("could not remove an app's uploaded code", "app", app.ID, "error", err)
+		}
 	}
 	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
 	s.audit(r, teamID, "app.deleted", "app", app.ID, app.Name)

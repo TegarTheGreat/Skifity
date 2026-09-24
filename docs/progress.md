@@ -3924,6 +3924,99 @@ And source-scanning tests, which found two faults nobody was looking for.
 Every fix was proved by breaking it again and watching the test name the
 failure. That is also how the shellcheck threshold was found to be wrong.
 
+## Phase 73 — somebody who has never deployed anything
+
+The question this phase started from: somebody built an app with an assistant,
+and has never deployed anything. What happens when they try? Two answers, and
+neither was good.
+
+### The first deploy crashed on a setting nothing had set
+
+Detection said "Next.js" and nothing about what the app would reach for. An app
+that uses PostgreSQL started, read an empty `DATABASE_URL` and crashed, and
+making a database, linking it and deploying again were three screens in an
+order nobody new would guess. Data kept in SQLite or a JSON file worked — for an
+hour, until the next deploy replaced the container and the file with it,
+silently.
+
+Detection now reads what the app needs as well as how to build it
+(`internal/builder/needs.go`): database drivers per ecosystem, a Prisma schema's
+provider and the variable it reads, Django's default SQLite, Laravel's
+`DB_CONNECTION`, a committed `.sqlite` file, and the names in `.env.example`.
+Each finding carries the package and the file it came from, so the form can say
+*why*. The form ticks the databases the panel can make, and creating the app
+creates and links them **before** the first deploy, so the first start finds
+them. A database it cannot make (MongoDB) is named rather than dropped, and data
+in a file is a warning in amber. A test checks the panel's list of engines it
+can make against `internal/dbsvc`, so the form never offers one it cannot.
+
+The real `.env` is never read from a repository — a test holds that line — and a
+pasted one goes through the same rule as every variable. That rule changed too:
+saying nothing about whether a value is secret used to mean "not a secret", so
+a pasted `STRIPE_SECRET_KEY` was stored in the clear. Silence now means "decide
+from the key and the value", with the same `logging.LooksSecret` the log
+redaction uses.
+
+### There was no way in without a repository
+
+Every way into the panel started with a repository URL, and the app is a folder.
+`skifity up` deploys the folder: it reads it with the same detector, creates
+the app the first time with its databases made and linked, offers to set the
+`.env`'s values as variables (never sending the file), sends the folder, deploys
+and prints the address. `skifity.toml` links the folder to the app, and running
+it again only sends and deploys. The MCP server has the same thing as
+`deploy_folder`, which tells an assistant to ask before sending somebody's
+`.env`.
+
+What is sent follows `.gitignore`, read the way git reads it, per directory,
+with negation; `.skifityignore` adds to it. `.git`, `node_modules`, every real
+`.env` and the project file are left out whatever an ignore file says. The
+archive is deterministic — sorted, fixed times — because its hash is the
+deployment's "commit" and part of the build fingerprint (ADR-0007): a file that
+was only touched must not rebuild. Run from a subfolder, it sends the whole app
+rather than replacing the app with the corner the terminal was in.
+
+On the panel, `internal/upload` refuses everything unsafe to unpack before a
+byte is stored: absolute paths, `..`, links, device files, a `.env`, and bounds
+on entries and on unpacked size. A refusal says which rule, in the reader's own
+language, rather than one English sentence passed through. Uploads live beside
+the panel's database, ten per app, removed with the app, and swept hourly for
+apps that went with a deleted project in one cascade.
+
+The build cannot fetch the code — the build namespace may not reach the panel,
+on purpose — so the panel brings it (ADR-0022): an upload build's first
+container waits, and the panel execs into it and streams the archive to `tar`.
+Its readiness is read from the init container's own state, because a pod stays
+`Pending` while an init container runs, and waiting for `Running` would be two
+things waiting for each other.
+
+`apps.source_type` had a `CHECK` naming three sources, and SQLite cannot change
+one in place. The migrator learned SQLite's documented table rebuild, with
+foreign keys off on one connection around the transaction — without which
+dropping the old table cascades into every deployment, variable and domain,
+inside a migration that reports success. A test puts rows into the old schema,
+migrates, and checks they are all there and that the cascades work again after.
+It was proved by running the rebuild with foreign keys on and watching the
+deployments disappear.
+
+### Found on the way
+
+`test/cluster/verify.sh` read the created app's id with `pick id`, and the
+answer is `{"app": {...}}`. `make verify` would have died at its first step,
+and the check that a failing app sends a notification silently skipped itself.
+It has never been run, which is why nobody knew; it now also deploys a folder,
+so the exec delivery is exercised there the next time it is.
+
+A CLI error said "run `skifity link`", a command that does not exist.
+
+### Not executed
+
+The exec stream into a build pod needs an API server. Both scripts at either
+end are run against each other in tests (delivery, a stream cut halfway, a
+build nobody delivers to), the pod-state logic is tested from pod statuses, and
+the smoke test drives `skifity up` against the real binary up to the build.
+The build itself from an upload is phase 1 of `make verify`, and has not run.
+
 ## Idle resource usage
 
 `docs/performance.md`. The panel is measured: 34 MiB resident idle, 38 MiB after

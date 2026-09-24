@@ -53,7 +53,75 @@ CLI works it out.
 Create tokens in the panel under **Account → API tokens**. A token cannot do
 more than the person who created it.
 
-## Deploying
+## Deploying a folder
+
+No repository, no Dockerfile, no settings. In the folder of an app — one you
+wrote, or one an assistant wrote for you:
+
+```sh
+skifity up
+```
+
+The first time, that:
+
+1. reads the folder the way the panel reads a repository, and says what it is:
+   the framework, whether it is a website that has to be built first, and what
+   it needs — a PostgreSQL, MySQL or Redis database, or data kept in a file
+   that every deploy would erase;
+2. creates the app, named after the folder, with the databases it needs already
+   made and connected, so its first start finds them;
+3. offers to set the values in your `.env` on the app. The file itself is never
+   sent; its values are stored the way every variable is, and anything that
+   looks like a key or a password is stored as a secret;
+4. sends the folder, deploys it, shows the build as it happens, and prints the
+   address.
+
+It writes `skifity.toml` in the folder, so the next `skifity up` there updates the
+same app. That one only sends and deploys. The same code sent twice is the same
+upload, and the panel uses the image it already built instead of building again.
+Running it from a subfolder sends the whole app, not the corner of it you are in.
+
+### What is sent, and what is not
+
+Left out, always: `.git`, `node_modules`, every `.env` file except the templates
+(`.env.example`, `.env.sample`, `.env.template`), and `skifity.toml` itself.
+Left out unless you say otherwise: caches and build environments such as
+`.next`, `__pycache__`, `.venv` and `.cache`. Then whatever your `.gitignore`
+lists, read the way git reads it, in every folder. A `.skifityignore` beside it
+adds to it, for what is in git but should not be deployed:
+
+```
+# .skifityignore
+fixtures/
+*.psd
+```
+
+A line starting with `!` brings something back, except the ones that are always
+left out. Links are never sent, and are named when they are skipped.
+
+The panel takes up to 100 MB compressed and 1 GB unpacked. Source code is almost
+never close; when a folder is, the command names its largest parts, which is
+usually where a dependency folder or a database file is hiding.
+
+### Options
+
+```sh
+skifity up ./my-app          # a folder other than this one
+skifity up --dry-run         # say what would be sent and created, send nothing
+skifity up --dotenv          # set the .env's values without asking
+skifity up --dotenv=false    # and never offer
+skifity up --no-database     # do not create the databases it seems to need
+skifity up --name shop       # the app's name, the first time
+skifity up --new             # a new app, even if this folder has one
+skifity up --follow=false    # start the deploy and return
+```
+
+Without a terminal — in CI, or when an assistant runs it — nothing is asked, and
+the `.env` is only sent with `--dotenv`. Assistants connected through
+`skifity mcp` have the same thing as the `deploy_folder` tool, which tells them
+to ask you before sending your `.env`.
+
+## Deploying from a repository
 
 In the directory of the thing you want to deploy:
 

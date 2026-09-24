@@ -54,6 +54,8 @@ func New(cfg cli.Config) *Server {
 		Instructions: strings.TrimSpace(`
 ` + version.Name + ` runs applications on a Kubernetes cluster the user owns.
 
+To put a folder on this computer online, with no repository, use
+deploy_folder: it creates the app the first time and updates it after.
 Use list_apps to find an app's id before calling anything that takes one.
 Deploys are asynchronous: deploy_app returns immediately, and get_app_status
 tells you what happened. When something fails, the error carries a cause, an
@@ -155,6 +157,16 @@ type deployInput struct {
 	AppID     string `json:"app_id" jsonschema:"the app's id"`
 	CommitSHA string `json:"commit_sha,omitempty" jsonschema:"a specific commit; omitted means the tip of the configured branch"`
 	Force     bool   `json:"force,omitempty" jsonschema:"rebuild even when nothing about the build has changed"`
+}
+
+type deployFolderInput struct {
+	Path          string `json:"path,omitempty" jsonschema:"the folder to deploy; omitted means the current working directory"`
+	AppID         string `json:"app_id,omitempty" jsonschema:"deploy to this app instead of the one the folder is linked to"`
+	Name          string `json:"name,omitempty" jsonschema:"the app's name, when a new app is created; defaults to the folder's name"`
+	EnvironmentID string `json:"environment_id,omitempty" jsonschema:"where a new app goes; omitted means the first project's production environment"`
+	New           bool   `json:"new,omitempty" jsonschema:"create a new app even when the folder is linked to one"`
+	NoDatabase    bool   `json:"no_database,omitempty" jsonschema:"do not create the databases the code looks like it needs"`
+	DotEnv        *bool  `json:"dotenv,omitempty" jsonschema:"set the values in the folder's .env as the app's variables. Ask the person first: those are their keys"`
 }
 
 type deployOutput struct {
@@ -322,6 +334,15 @@ func (s *Server) register() {
 		Name:        "deploy_app",
 		Description: "Start a deployment. This returns immediately; the build takes minutes. Poll get_app_status or call get_deployment_history to see the outcome.",
 	}, s.deployApp)
+
+	addTool(s, &mcp.Tool{
+		Name: "deploy_folder",
+		Description: "Deploy a folder on this computer, with no Git repository needed: the way to put an app you have just written online. " +
+			"The first time, it creates the app, and the databases the code uses, and links the folder so later calls update the same app. " +
+			"It leaves out .env files, node_modules and whatever .gitignore lists. " +
+			"It returns when the deploy has started; call get_app_status for the outcome and the URL. " +
+			"If the answer names a dotenv_file that was not sent, ask the person whether to send its values, then call again with dotenv=true.",
+	}, s.deployFolder)
 
 	addTool(s, &mcp.Tool{
 		Name: "run_command",
@@ -542,6 +563,47 @@ func (s *Server) deployApp(ctx context.Context, _ *mcp.CallToolRequest, in deplo
 		Status: string(deployment.Status), Note: note,
 	}
 	return textResult(fmt.Sprintf("Deployment #%d started. %s", deployment.Number, note)), out, nil
+}
+
+func (s *Server) deployFolder(ctx context.Context, _ *mcp.CallToolRequest, in deployFolderInput) (*mcp.CallToolResult, cli.FolderResult, error) {
+	result, err := cli.DeployFolder(ctx, s.client, s.config, cli.FolderOptions{
+		Dir: in.Path, App: in.AppID, Name: in.Name, Environment: in.EnvironmentID,
+		New: in.New, NoDatabase: in.NoDatabase, DotEnv: in.DotEnv,
+	})
+	if err != nil {
+		return errorResult(err), cli.FolderResult{}, nil
+	}
+
+	var b strings.Builder
+	if result.Created {
+		fmt.Fprintf(&b, "Created the app %s (%s) and linked the folder to it. ", result.App.Name, result.App.ID)
+	}
+	fmt.Fprintf(&b, "Sent %d files and started deployment #%d. The build takes a few minutes; "+
+		"call get_app_status with app_id %s for the outcome and the URL.",
+		result.Files, result.Deployment.Number, result.App.ID)
+	if len(result.Missing) > 0 {
+		fmt.Fprintf(&b, "\n\nThe app's .env.example lists settings the app does not have: %s. "+
+			"It will probably fail to start without them; ask the person for the values and set them with set_variable.",
+			strings.Join(result.Missing, ", "))
+	}
+	if result.DotEnvFile != "" && !result.DotEnvSent {
+		fmt.Fprintf(&b, "\n\nThe folder's %s has values that were not sent. Ask the person whether to set them "+
+			"on the app, and if so call deploy_folder again with dotenv=true.", result.DotEnvFile)
+	}
+	for _, need := range result.Detection.Needs {
+		if need.Kind == "ephemeral" {
+			fmt.Fprintf(&b, "\n\nThe app keeps data in %s (%s), which every deploy erases. Tell the person, "+
+				"and suggest a database or a volume.", orNone(need.Source), need.Evidence)
+		}
+	}
+	return textResult(b.String()), result, nil
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "a file"
+	}
+	return s
 }
 
 func (s *Server) runCommand(ctx context.Context, _ *mcp.CallToolRequest, in runCommandInput) (*mcp.CallToolResult, runCommandOutput, error) {

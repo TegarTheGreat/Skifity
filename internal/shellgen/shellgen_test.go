@@ -102,6 +102,16 @@ func generatedScripts(t *testing.T) map[string]string {
 	job, err = builder.BuildJob(builderSpec())
 	add("build-public", job, err)
 
+	// A build from an uploaded folder: the first container waits for the
+	// panel, and the panel runs a command of its own inside it.
+	uploaded := builderSpec()
+	uploaded.RepoURL = ""
+	uploaded.SourceUpload = true
+	uploaded.CommitSHA = strings.Repeat("ab", 32)
+	job, err = builder.BuildJob(uploaded)
+	add("build-upload", job, err)
+	out["build-upload/deliver"] = builder.ReceiveCommand()[2]
+
 	// A static site, whose Dockerfile is written by the script itself.
 	static := builderSpec()
 	static.Builder = builder.BuilderStatic

@@ -39,6 +39,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = cmdWhoami(ctx, rest, stdout)
 	case "init":
 		err = cmdInit(ctx, rest, stdout)
+	case "up":
+		err = cmdUp(ctx, rest, stdout)
 	case "deploy":
 		err = cmdDeploy(ctx, rest, stdout)
 	case "logs":
@@ -102,6 +104,7 @@ Usage:
 
 Getting started:
   login                 Sign in to a panel and store an API token
+  up                    Deploy this folder: no repository or settings needed
   init                  Create a %s.toml in this directory
   whoami                Show who you are signed in as
 

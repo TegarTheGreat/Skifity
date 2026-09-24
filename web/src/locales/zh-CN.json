@@ -266,7 +266,8 @@
       "volume.deleted": "已删除存储卷",
       "auth.reauthenticated": "再次确认了身份",
       "auth.sessions_revoked": "退出了其他所有设备",
-      "git_source.webhook_registered": "已在仓库上注册 webhook"
+      "git_source.webhook_registered": "已在仓库上注册 webhook",
+      "app.source_uploaded": "上传了应用代码"
     }
   },
   "projects": {
@@ -439,7 +440,8 @@
     "volumeRestoreStarted": "还原已开始。过程中应用会停止，结束后自动重新启动。",
     "volumeRestoreWarning": "{{app}} 上的内容会被这个备份的内容全部覆盖，过程中应用会被停止。",
     "volumeStopsRollingDeploys": "有磁盘后部署不再无缝",
-    "volumeStopsRollingDeploysHelp": "一块磁盘同一时间只能被一个实例写入，所以 Skifity 会先停掉旧实例再启动新的。每次部署都会有几秒钟无人响应，应用也无法运行多个实例。"
+    "volumeStopsRollingDeploysHelp": "一块磁盘同一时间只能被一个实例写入，所以 Skifity 会先停掉旧实例再启动新的。每次部署都会有几秒钟无人响应，应用也无法运行多个实例。",
+    "sourceUpload": "通过 skifity up 发送的文件夹"
   },
   "deploy": {
     "title": "部署记录",
@@ -1899,7 +1901,73 @@
         "title": "面板没有说明它创建了哪个应用",
         "cause": "创建应用的响应里没有应用。",
         "impact": "项目文件没有写入，所以这里的 `skifity deploy` 不知道要部署什么。",
-        "fix": "用 `skifity apps` 查看应用列表，若已存在则运行 `skifity link`。"
+        "fix": "用 `skifity apps` 找到它，并在 skifity.toml 中写入 app = \"<id>\"。"
+      },
+      "upload_none": {
+        "title": "还没有可部署的代码",
+        "cause": "{{0}} 部署的是从某人电脑上发送来的文件夹，而目前还没有发送任何内容。",
+        "impact": "没有构建或部署任何内容。",
+        "fix": "在应用的文件夹中打开终端并运行 `skifity up`。它会发送文件夹并完成部署。"
+      },
+      "upload_not_found": {
+        "title": "面板上没有这次上传",
+        "cause": "此应用没有哈希为 {{0}} 的上传。面板会为每个应用保留最近的十次上传。",
+        "impact": "没有构建或部署任何内容。",
+        "fix": "再次运行 `skifity up`，发送文件夹的当前内容。"
+      },
+      "upload_not_an_archive": {
+        "title": "面板无法读取这次上传",
+        "cause": "发送的内容不是完整的 gzip 压缩 tar 归档。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "请用 `skifity up` 发送文件夹，它会按面板能读取的方式打包。如果你就是这样做的，传输可能中途断开了，请再运行一次。"
+      },
+      "upload_unsafe_entry": {
+        "title": "上传中有面板不会解包的文件",
+        "cause": "{{0}} 是链接、特殊文件或指向文件夹外部的路径，解包它可能会写入不该写的位置。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "把它从文件夹中移除，或写进 .skifityignore，使其不被发送。"
+      },
+      "upload_secrets_file": {
+        "title": "上传中包含 .env 文件",
+        "cause": "{{0}} 保存着应用的真实配置。构建会把收到的每个文件都放进镜像，任何能拉取镜像的人都能读到它们。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "请改在应用的变量中设置这些值。`skifity up` 会自动排除 .env 文件，所以这个文件是通过其他方式发送的。"
+      },
+      "upload_too_many_files": {
+        "title": "上传的文件太多",
+        "cause": "其中有超过 {{0}} 个文件，源代码几乎不会有这么多。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "里面很可能有 node_modules 或 virtualenv 之类的依赖文件夹。把它写进 .skifityignore：构建会自行安装依赖。"
+      },
+      "upload_unpacks_too_large": {
+        "title": "上传解包后太大",
+        "cause": "其内容总计超过 {{0}} MB。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "里面很可能有构建产物、依赖文件夹或数据文件。把它写进 .skifityignore 后重新发送。"
+      },
+      "upload_empty": {
+        "title": "上传中没有任何文件",
+        "cause": "归档已读到末尾，里面最多只有文件夹。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "在应用的文件夹内运行 `skifity up`，或指定文件夹：`skifity up ./my-app`。"
+      },
+      "upload_too_large": {
+        "title": "上传太大",
+        "cause": "面板最多接受 {{0}} MB 的压缩代码，而这次超出了。",
+        "impact": "没有保存、构建或部署任何内容。",
+        "fix": "文件夹里很可能有非源代码的内容，例如依赖文件夹、构建产物或数据库文件。把它加入 .skifityignore 后重新发送。"
+      },
+      "upload_wrong_source": {
+        "title": "此应用不部署上传的代码",
+        "cause": "{{0}} 从仓库或镜像构建，因此发送给它的代码永远不会被使用。",
+        "impact": "没有保存任何内容。",
+        "fix": "请改为推送到仓库，或用 `skifity up --new` 为这个文件夹创建一个新应用。"
+      },
+      "upload_delivery_failed": {
+        "title": "无法把代码交给构建",
+        "cause": "面板无法把上传的代码发送到构建中：{{0}}",
+        "impact": "没有构建或部署任何内容。之前的版本仍在运行。",
+        "fix": "点击重试。如果仍然失败，请检查面板能否访问集群的 API，以及构建 Pod 是否已启动。"
       }
     }
   },

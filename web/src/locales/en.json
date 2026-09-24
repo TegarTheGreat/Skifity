@@ -274,7 +274,8 @@
       "volume.deleted": "Volume deleted",
       "auth.reauthenticated": "Confirmed who they are",
       "auth.sessions_revoked": "Signed out every other device",
-      "git_source.webhook_registered": "Webhook registered on the repository"
+      "git_source.webhook_registered": "Webhook registered on the repository",
+      "app.source_uploaded": "Uploaded the app's code"
     }
   },
   "projects": {
@@ -447,7 +448,8 @@
     "volumeRestoreStarted": "The restore has started. The app stops while it runs and starts again afterwards.",
     "volumeRestoreWarning": "Everything on {{app}} is replaced by what was in this backup, and the app is stopped while that happens.",
     "volumeStopsRollingDeploys": "A disk means deploys are no longer seamless",
-    "volumeStopsRollingDeploysHelp": "One disk can only be written by one instance at a time, so Skifity stops the old instance before starting the new one. Each deploy has a few seconds with nothing answering, and the app cannot run more than one instance."
+    "volumeStopsRollingDeploysHelp": "One disk can only be written by one instance at a time, so Skifity stops the old instance before starting the new one. Each deploy has a few seconds with nothing answering, and the app cannot run more than one instance.",
+    "sourceUpload": "A folder sent with skifity up"
   },
   "deploy": {
     "title": "Deployments",
@@ -1911,7 +1913,73 @@
         "title": "The panel did not say which app it created",
         "cause": "The reply to creating an app had no app in it.",
         "impact": "The project file was not written, so `skifity deploy` here would not know what to deploy.",
-        "fix": "Check the app list with `skifity apps`, and run `skifity link` if it is there."
+        "fix": "Find it with `skifity apps`, and put its id in skifity.toml as app = \"<id>\"."
+      },
+      "upload_none": {
+        "title": "There is no code to deploy yet",
+        "cause": "{{0}} deploys a folder sent from somebody's computer, and nothing has been sent yet.",
+        "impact": "Nothing was built or deployed.",
+        "fix": "Open a terminal in the app's folder and run `skifity up`. It sends the folder and deploys it."
+      },
+      "upload_not_found": {
+        "title": "That upload is not on the panel",
+        "cause": "No upload with the hash {{0}} belongs to this app. The panel keeps each app's ten newest uploads.",
+        "impact": "Nothing was built or deployed.",
+        "fix": "Run `skifity up` again to send the folder as it is now."
+      },
+      "upload_not_an_archive": {
+        "title": "The panel could not read this upload",
+        "cause": "What was sent is not a whole gzipped tar archive.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Send the folder with `skifity up`, which packs it the way the panel reads it. If you did, the transfer was probably cut off, so run it again."
+      },
+      "upload_unsafe_entry": {
+        "title": "The upload has a file the panel will not unpack",
+        "cause": "{{0}} is a link, a special file or a path that leads outside the folder, and unpacking it could write somewhere it should not.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Remove it from the folder, or list it in .skifityignore so it is not sent."
+      },
+      "upload_secrets_file": {
+        "title": "The upload has a .env file in it",
+        "cause": "{{0}} holds the app's real settings. A build puts every file it is given into the image, where anyone who can pull the image could read them.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Set those values under the app's Variables instead. `skifity up` leaves .env files out by itself, so this one was sent some other way."
+      },
+      "upload_too_many_files": {
+        "title": "The upload has too many files",
+        "cause": "It holds more than {{0}} files, which source code almost never does.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "A dependency folder such as node_modules or a virtualenv is probably in it. List it in .skifityignore: the build installs dependencies itself."
+      },
+      "upload_unpacks_too_large": {
+        "title": "The upload is too large once unpacked",
+        "cause": "Its contents add up to more than {{0}} MB.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Build output, a dependency folder or a data file is probably in it. List it in .skifityignore and send it again."
+      },
+      "upload_empty": {
+        "title": "The upload has no files in it",
+        "cause": "The archive was read to the end and held folders at most.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Run `skifity up` from inside the app's folder, or name the folder: `skifity up ./my-app`."
+      },
+      "upload_too_large": {
+        "title": "The upload is too large",
+        "cause": "The panel accepts up to {{0}} MB of compressed code, and this was more.",
+        "impact": "Nothing was stored, built or deployed.",
+        "fix": "Something that is not source code is probably in the folder, such as a dependency folder, build output or a database file. Add it to .skifityignore and send it again."
+      },
+      "upload_wrong_source": {
+        "title": "This app does not deploy uploaded code",
+        "cause": "{{0}} builds from a repository or an image, so code sent to it would never be used.",
+        "impact": "Nothing was stored.",
+        "fix": "Push to the repository instead, or create a new app for the folder with `skifity up --new`."
+      },
+      "upload_delivery_failed": {
+        "title": "The code could not be handed to the build",
+        "cause": "The panel could not send the uploaded code into the build: {{0}}",
+        "impact": "Nothing was built or deployed. The previous version is still running.",
+        "fix": "Press Retry. If it fails again, check that the panel can reach the cluster's API and that the build pod started."
       }
     }
   },

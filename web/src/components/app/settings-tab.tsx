@@ -95,15 +95,18 @@ export function SettingsTab({ app }: { app: App }) {
             </Field>
           ) : (
             <>
-              <Field>
-                <FieldLabel htmlFor="settings-branch">{t("apps.branch")}</FieldLabel>
-                <Input
-                  id="settings-branch"
-                  value={branch}
-                  onChange={(event) => setBranch(event.target.value)}
-                  className="font-mono"
-                />
-              </Field>
+              {/* A folder sent with `skifity up` has no branch to follow. */}
+              {app.source_type === "git" && (
+                <Field>
+                  <FieldLabel htmlFor="settings-branch">{t("apps.branch")}</FieldLabel>
+                  <Input
+                    id="settings-branch"
+                    value={branch}
+                    onChange={(event) => setBranch(event.target.value)}
+                    className="font-mono"
+                  />
+                </Field>
+              )}
               <Field>
                 <FieldLabel htmlFor="settings-root">{t("apps.rootDirectory")}</FieldLabel>
                 <Input

@@ -41,6 +41,11 @@ func LoadProjectFile() (ProjectFile, string, error) {
 	if err != nil {
 		return ProjectFile{}, "", fmt.Errorf("find the current directory: %w", err)
 	}
+	return loadProjectFileFrom(dir)
+}
+
+// loadProjectFileFrom looks for the file in a directory and then its parents.
+func loadProjectFileFrom(dir string) (ProjectFile, string, error) {
 	for {
 		path := filepath.Join(dir, ProjectFileName)
 		data, err := os.ReadFile(path)
@@ -91,6 +96,11 @@ func parseProjectFile(content string) (ProjectFile, error) {
 
 // SaveProjectFile writes the file to the current directory.
 func SaveProjectFile(file ProjectFile) (string, error) {
+	return saveProjectFileIn(".", file)
+}
+
+// saveProjectFileIn writes the file to a directory.
+func saveProjectFileIn(dir string, file ProjectFile) (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s project settings.\n", version.Name)
 	fmt.Fprintf(&b, "# Safe to commit: it contains no credentials.\n\n")
@@ -105,7 +115,7 @@ func SaveProjectFile(file ProjectFile) (string, error) {
 		fmt.Fprintf(&b, "panel = %q\n", file.Panel)
 	}
 
-	path := ProjectFileName
+	path := filepath.Join(dir, ProjectFileName)
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
@@ -198,10 +208,7 @@ func cmdInit(ctx context.Context, args []string, out io.Writer) error {
 	}
 	app := created.App
 	if app.ID == "" {
-		return errdoc.New("cli.app_not_created", "The panel did not say which app it created").
-			WithCause("The reply to creating an app had no app in it.").
-			WithImpact("The project file was not written, so `skifity deploy` here would not know what to deploy.").
-			WithFix("Check the app list with `skifity apps`, and run `skifity link` if it is there.")
+		return appNotCreated()
 	}
 
 	if created.Webhook != nil && created.Webhook.URL != "" {
@@ -228,6 +235,16 @@ func cmdInit(ctx context.Context, args []string, out io.Writer) error {
 	fmt.Fprintf(out, "\nCreated the app %s.\nWrote %s.\n\nDeploy it with: %s deploy\n\n",
 		app.Name, path, version.Binary)
 	return nil
+}
+
+// appNotCreated is a create that answered without the app it made.
+//
+// It used to say "run `skifity link`", a command that does not exist.
+func appNotCreated() *errdoc.Problem {
+	return errdoc.New("cli.app_not_created", "The panel did not say which app it created").
+		WithCause("The reply to creating an app had no app in it.").
+		WithImpact("The project file was not written, so `skifity deploy` here would not know what to deploy.").
+		WithFix("Find it with `skifity apps`, and put its id in skifity.toml as app = \"<id>\".")
 }
 
 // resolveApp works out which app a command is about.

@@ -582,3 +582,58 @@ panel asking for it first. That order is the whole point of the gate.
 
 It also leaves the ideas that failed the test above where they belong: in the
 panel's own roadmap, as features, not as plugins that were never going to work.
+
+## ADR-0022 - An uploaded folder is pushed into the build, not fetched by it
+
+**Context.** Every way into the panel started with a repository URL. The people
+who most need a panel that hides Kubernetes are the people who have never
+deployed anything, and more and more of them have an app an assistant wrote,
+in a folder, with no repository behind it. For them the product did not start.
+
+The obvious design — upload the code to the panel, and have the build fetch it
+from there — runs into a decision that is right and should stay. The build
+namespace has a default-deny network policy with no route to the panel (see
+`cluster.EnsureBuildNamespace`): a build runs somebody's install scripts, and
+the panel holds the master key and every secret. Opening that route so a build
+can download its code would open it to everything the build runs. Putting the
+code in a Secret or a ConfigMap would bound it at one megabyte and put
+somebody's source into etcd.
+
+**Decision.** The panel keeps the upload on its own volume, next to its
+database, and **brings it to the build**. An upload build's first container
+does not clone: it waits. Once it is running, the panel opens an exec into it —
+the panel may reach into the build namespace; the build may not reach out — and
+streams the archive to `tar -xz` on its standard input. The waiting script
+watches for one of two markers the delivery command writes, outside the
+workspace so neither ends up in the image: one for success, one for a failed
+unpack, so a stream cut halfway stops the build at once instead of at its
+fifteen-minute timeout.
+
+Four things are part of the decision:
+
+* **Everything unsafe is refused in Go, before anything is stored.** No
+  absolute paths, no `..`, no links, no device files, a bound on entries and on
+  the unpacked size, and no `.env`. The build then unpacks with an ordinary
+  tar, which is safe precisely because nothing unsafe was ever kept for it.
+* **The upload's hash stands where a commit would.** It is the deployment's
+  commit, its image tag and part of its build fingerprint (ADR-0007), so
+  unchanged code reuses the image and changed code builds. `skifity up` makes
+  the archive deterministic — sorted, with fixed times — so a file that was
+  only touched does not rebuild.
+* **The first container keeps its name.** It is `clone` whether it clones or
+  receives, so the log, the failed-stage message and every place that follows
+  a build do not need to know where the code came from.
+* **An upload app has no branch, no webhook and no Git token.** The create
+  request clears them, the build refuses a spec that has both a repository and
+  an upload, and pushing code to such an app is `skifity up` again.
+
+**Consequences.** `skifity up` deploys a folder with nothing set up first, and
+the MCP server's `deploy_folder` gives an assistant the same thing. The panel's
+volume holds the ten newest uploads per app; they go with the app, and a sweep
+removes those left behind by a project or environment deleted in one cascade.
+
+The exec delivery is the one piece that has not run against a real cluster:
+the scripts on both ends are run against each other in tests, and the pod-state
+logic that decides when to deliver is tested from pod statuses, but the
+WebSocket/SPDY stream itself needs an API server. It is on the list of things
+`make verify` has to exercise before a release.

@@ -8,7 +8,8 @@
 # six phases:
 #
 #   1  Git to build to deploy, live build logs, a domain, a variable change,
-#      a rollback, and a deploy that drops no requests.
+#      a rollback, a deploy that drops no requests, and a folder with no
+#      repository behind it built the same way.
 #   2  A volume that survives a restart, a managed database, a backup that
 #      restores, and an export you could leave with.
 #   3  One team cannot see another's, one namespace cannot reach another's,
@@ -296,7 +297,7 @@ APP_ID=$(api POST "/api/environments/$ENV_ID/apps" "$(cat <<JSON
 {"name":"hello","source_type":"git","repo_url":"$VERIFY_GIT_REPO","branch":"$VERIFY_GIT_BRANCH",
  "root_dir":"$VERIFY_GIT_ROOT","port":$VERIFY_APP_PORT,"health_path":"/healthz","deploy":true}
 JSON
-)" | pick id) || die "the app could not be created from Git"
+)" | pick app.id) || die "the app could not be created from Git"
 ok "an app was created from $VERIFY_GIT_REPO and a build started"
 
 DEPLOY_ID=$(api GET "/api/apps/$APP_ID/deployments" | pick items.0.id)
@@ -440,6 +441,48 @@ if [ "${MISSES:-1}" -eq 0 ]; then
 	ok "a rolling restart under continuous traffic dropped nothing"
 else
 	no "$MISSES of $((HITS + MISSES)) requests failed during a rolling restart. maxUnavailable: 0 keeps the capacity; the preStop pause is what stops a proxy sending to a pod that has begun shutting down. $(sort /tmp/skifity-zero-downtime.txt | uniq -c | tr '\n' ' ')"
+fi
+
+step "A folder with no repository (ADR-0022)"
+
+# The same sample app, sent as `skifity up` sends it rather than cloned. The
+# build cannot reach the panel, so the panel execs into the waiting build and
+# streams the archive in; this is the one place that stream runs for real.
+FOLDER_TAR=$(mktemp)
+tar -czf "$FOLDER_TAR" -C "$(cd "$(dirname "$0")" && pwd)/sample-app" .
+FOLDER_ID=$(api POST "/api/environments/$ENV_ID/apps" \
+	"{\"name\":\"folder\",\"source_type\":\"upload\",\"builder\":\"dockerfile\",\"dockerfile_path\":\"Dockerfile\",\"port\":$VERIFY_APP_PORT,\"health_path\":\"/healthz\"}" \
+	| pick app.id 2>/dev/null || echo "")
+UPLOAD_SHA=""
+if [ -n "$FOLDER_ID" ]; then
+	UPLOAD_SHA=$(curl -fsS -X PUT "$PANEL/api/apps/$FOLDER_ID/source" -H "Authorization: Bearer $TOKEN" \
+		-H 'Content-Type: application/gzip' --data-binary "@$FOLDER_TAR" | pick sha256 2>/dev/null || echo "")
+fi
+rm -f "$FOLDER_TAR"
+if [ -z "$UPLOAD_SHA" ]; then
+	no "an app could not be made from an uploaded folder, or the folder was refused"
+else
+	ok "a folder was accepted as an app's code"
+	FOLDER_DEPLOY=$(api POST "/api/apps/$FOLDER_ID/deploy" "{\"commit_sha\":\"$UPLOAD_SHA\"}" | pick id)
+	for _ in $(seq 1 90); do
+		STATE=$(api GET "/api/apps/$FOLDER_ID/deployments/$FOLDER_DEPLOY" | pick status 2>/dev/null || echo "")
+		case "$STATE" in succeeded|failed) break ;; esac
+		sleep 10
+	done
+	if [ "$STATE" = "succeeded" ]; then
+		ok "the panel handed the folder to the build, and it was built and deployed"
+		FOLDER_HOST=$(api GET "/api/apps/$FOLDER_ID/domains" | pick items.0.hostname 2>/dev/null || echo "")
+		[ -n "$FOLDER_HOST" ] && [ "$(through_ingress "$FOLDER_HOST" 30)" = "200" ] \
+			&& ok "the app built from a folder answers through the ingress" \
+			|| no "the app built from a folder does not answer at ${FOLDER_HOST:-no address}"
+		AGAIN=$(api POST "/api/apps/$FOLDER_ID/deploy" "{\"commit_sha\":\"$UPLOAD_SHA\"}" | pick image 2>/dev/null || echo "")
+		[ -n "$AGAIN" ] \
+			&& ok "the same folder again reuses the image instead of building (ADR-0007)" \
+			|| no "deploying the same upload again started a build"
+	else
+		api GET "/api/apps/$FOLDER_ID/deployments/$FOLDER_DEPLOY/logs" >>"$REPORT" 2>&1 || true
+		no "the deployment from a folder ended as '${STATE:-unknown}'; the log is in $REPORT. If it says the code could not be handed to the build, the exec from the panel into the build namespace is what failed."
+	fi
 fi
 fi
 
@@ -835,7 +878,7 @@ JSON
 		: >"$HOOK_LOG"
 		BROKEN=$(api POST "/api/environments/$ENV_ID/apps" \
 			'{"name":"broken","source_type":"image","image":"example.invalid/nothing:0","port":8080,"deploy":true}' \
-			| pick id 2>/dev/null || echo "")
+			| pick app.id 2>/dev/null || echo "")
 		if [ -n "$BROKEN" ]; then
 			for _ in $(seq 1 60); do
 				[ -s "$HOOK_LOG" ] && break

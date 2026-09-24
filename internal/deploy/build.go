@@ -91,7 +91,11 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 		BuildArgs:        buildArgs,
 		BuildKitAddress:  d.buildKitAddress(),
 	}
-	if app.GitSourceID != "" {
+	if app.SourceType == "upload" {
+		spec.SourceUpload = true
+		spec.RepoURL = ""
+		spec.Branch = ""
+	} else if app.GitSourceID != "" {
 		attached, err := d.attachCloneSecret(ctx, app, &spec)
 		if err != nil {
 			return "", err
@@ -120,6 +124,17 @@ func (d *Deployer) build(ctx context.Context, deployment *store.Deployment, app 
 	d.appendLog(ctx, deployment.ID, fmt.Sprintf("Building %s with the %s builder.", app.Name, chosen))
 	if err := d.cluster.Client().Applier().Apply(ctx, job); err != nil {
 		return "", fmt.Errorf("start the build: %w", err)
+	}
+
+	if spec.SourceUpload {
+		if err := d.deliverUpload(ctx, deployment, app, spec.Namespace, spec.Name); err != nil {
+			// The build is waiting for code that is not coming. Stopping it
+			// frees its slot now instead of after the wait runs out.
+			if delErr := d.cluster.Client().Applier().Delete(ctx, "batch/v1", "Job", spec.Namespace, spec.Name); delErr != nil {
+				d.log.Warn("could not stop a build that never got its code", "job", spec.Name, "error", delErr)
+			}
+			return "", err
+		}
 	}
 
 	if err := d.streamBuild(ctx, deployment, spec.Namespace, spec.Name, chosen); err != nil {
@@ -242,11 +257,7 @@ func (d *Deployer) waitForBuildPod(ctx context.Context, namespace, jobName strin
 			}
 		}
 		if time.Now().After(deadline) {
-			return "", errdoc.New("build.pod_not_started", "The build did not start").
-				WithCause("No build pod became ready within five minutes.").
-				WithImpact("Nothing was built or deployed.").
-				WithFix("Check that the cluster has free CPU and memory, and that the builder component is running.").
-				Retry()
+			return "", buildNotStarted()
 		}
 		select {
 		case <-ctx.Done():
@@ -254,6 +265,15 @@ func (d *Deployer) waitForBuildPod(ctx context.Context, namespace, jobName strin
 		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+// buildNotStarted is a build pod that never got going.
+func buildNotStarted() *errdoc.Problem {
+	return errdoc.New("build.pod_not_started", "The build did not start").
+		WithCause("No build pod became ready within five minutes.").
+		WithImpact("Nothing was built or deployed.").
+		WithFix("Check that the cluster has free CPU and memory, and that the builder component is running.").
+		Retry()
 }
 
 // streamContainer follows one container's logs into the deployment's log.

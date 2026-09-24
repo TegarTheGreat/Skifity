@@ -413,11 +413,12 @@ func (c *Cluster) SpecFor(ctx context.Context, app store.App, env store.Environm
 		// costs nothing when there is one.
 		SpreadAcrossServers: true,
 		PodSecurity:         kube.NormalizePodSecurity(env.PodSecurity),
-		// An app whose source is a Git repository runs an image this panel's
-		// own builder produced, so what is inside it is known. Anything else is
+		// An app whose source is a Git repository or an uploaded folder runs
+		// an image this panel's own builder produced, so what is inside it is
+		// known. Anything else is
 		// an image reference somebody typed or a template chose, and the only
 		// honest thing to say about its user is what the image itself says.
-		ImageBuiltHere: app.SourceType == "git",
+		ImageBuiltHere: app.SourceType == "git" || app.SourceType == "upload",
 	}
 
 	// An image in somebody's own registry needs a credential to pull, and the

@@ -294,6 +294,129 @@ func CrashLoop(app string, restarts int, logTail string) *Problem {
 		With("app", app).With("restarts", itoa(restarts)).With("log_tail", tail(logTail, 4000))
 }
 
+// --- deploying a folder ---
+
+// NoUpload reports a deploy of an app whose code comes from uploads, before
+// any code was sent.
+func NoUpload(app string) *Problem {
+	return New("upload.none", "There is no code to deploy yet").
+		WithCause("%s deploys a folder sent from somebody's computer, and nothing has been sent yet.", app).
+		WithImpact("Nothing was built or deployed.").
+		WithFix("Open a terminal in the app's folder and run `skifity up`. It sends the folder and deploys it.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusConflict).
+		With("app", app)
+}
+
+// UploadNotFound reports a deploy that names an upload the panel does not have.
+func UploadNotFound(sha string) *Problem {
+	return New("upload.not_found", "That upload is not on the panel").
+		WithCause("No upload with the hash %s belongs to this app. The panel keeps each app's ten newest uploads.", sha).
+		WithImpact("Nothing was built or deployed.").
+		WithFix("Run `skifity up` again to send the folder as it is now.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusNotFound).
+		With("sha", sha)
+}
+
+// The ways an upload is refused once it has been read. Each is its own entry,
+// rather than one entry with the reason as an argument, so the reason can be
+// read in the language of whoever sent it.
+
+// UploadNotAnArchive reports something that is not a whole gzipped tar.
+func UploadNotAnArchive() *Problem {
+	return New("upload.not_an_archive", "The panel could not read this upload").
+		WithCause("What was sent is not a whole gzipped tar archive.").
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Send the folder with `skifity up`, which packs it the way the panel reads it. If you did, the transfer was probably cut off, so run it again.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusBadRequest)
+}
+
+// UploadUnsafeEntry reports an entry that could be unpacked outside its folder.
+func UploadUnsafeEntry(entry string) *Problem {
+	return New("upload.unsafe_entry", "The upload has a file the panel will not unpack").
+		WithCause("%s is a link, a special file or a path that leads outside the folder, and unpacking it could write somewhere it should not.", entry).
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Remove it from the folder, or list it in .skifityignore so it is not sent.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusBadRequest).
+		With("entry", entry)
+}
+
+// UploadSecretsFile reports a .env with real values in an upload.
+func UploadSecretsFile(entry string) *Problem {
+	return New("upload.secrets_file", "The upload has a .env file in it").
+		WithCause("%s holds the app's real settings. A build puts every file it is given into the image, where anyone who can pull the image could read them.", entry).
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Set those values under the app's Variables instead. `skifity up` leaves .env files out by itself, so this one was sent some other way.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusBadRequest).
+		With("entry", entry)
+}
+
+// UploadTooManyFiles reports an upload with more files than source code has.
+func UploadTooManyFiles(limit int) *Problem {
+	return New("upload.too_many_files", "The upload has too many files").
+		WithCause("It holds more than %d files, which source code almost never does.", limit).
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("A dependency folder such as node_modules or a virtualenv is probably in it. List it in .skifityignore: the build installs dependencies itself.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusRequestEntityTooLarge)
+}
+
+// UploadUnpacksTooLarge reports a small archive that expands into a lot.
+func UploadUnpacksTooLarge(limitMB int64) *Problem {
+	return New("upload.unpacks_too_large", "The upload is too large once unpacked").
+		WithCause("Its contents add up to more than %d MB.", limitMB).
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Build output, a dependency folder or a data file is probably in it. List it in .skifityignore and send it again.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusRequestEntityTooLarge)
+}
+
+// UploadEmpty reports an archive with no files in it.
+func UploadEmpty() *Problem {
+	return New("upload.empty", "The upload has no files in it").
+		WithCause("The archive was read to the end and held folders at most.").
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Run `skifity up` from inside the app's folder, or name the folder: `skifity up ./my-app`.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusBadRequest)
+}
+
+// UploadTooLarge reports an archive over the size the panel accepts.
+func UploadTooLarge(limitMB int64) *Problem {
+	return New("upload.too_large", "The upload is too large").
+		WithCause("The panel accepts up to %d MB of compressed code, and this was more.", limitMB).
+		WithImpact("Nothing was stored, built or deployed.").
+		WithFix("Something that is not source code is probably in the folder, such as a dependency folder, build output or a database file. Add it to .skifityignore and send it again.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusRequestEntityTooLarge)
+}
+
+// NotAnUploadApp reports code sent to an app that builds from somewhere else.
+func NotAnUploadApp(app string) *Problem {
+	return New("upload.wrong_source", "This app does not deploy uploaded code").
+		WithCause("%s builds from a repository or an image, so code sent to it would never be used.", app).
+		WithImpact("Nothing was stored.").
+		WithFix("Push to the repository instead, or create a new app for the folder with `skifity up --new`.").
+		WithDocs("/docs/cli#deploying-a-folder").
+		WithStatus(http.StatusConflict).
+		With("app", app)
+}
+
+// UploadDeliveryFailed reports code that could not be handed to the build.
+func UploadDeliveryFailed(detail string) *Problem {
+	return New("upload.delivery_failed", "The code could not be handed to the build").
+		WithCause("The panel could not send the uploaded code into the build: %s", detail).
+		WithImpact("Nothing was built or deployed. The previous version is still running.").
+		WithFix("Press Retry. If it fails again, check that the panel can reach the cluster's API and that the build pod started.").
+		WithDocs("/docs/troubleshooting#a-deployment-failed").
+		WithStatus(http.StatusBadGateway).
+		Retry()
+}
+
 // --- domains and TLS ---
 
 // DNSNotPointing reports a custom domain whose DNS does not resolve to us.

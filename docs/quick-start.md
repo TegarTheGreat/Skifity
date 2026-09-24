@@ -135,6 +135,19 @@ happens.
 
 When it finishes, the app has a working address. Press it.
 
+**No repository?** If the app is a folder on your computer — which it is, when
+an assistant wrote it — [get the CLI](/docs/cli#getting-it) and run this in the
+folder:
+
+```sh
+skifity login
+skifity up
+```
+
+It does what the form does, from the folder: works out what the app is, creates
+it with the database it uses, sends the code without your `.env`, and prints the
+address. See [the CLI](/docs/cli#deploying-a-folder).
+
 That first address looks like `web.203-0-113-10.sslip.io`, and it is **plain
 HTTP, on purpose**. sslip.io resolves any name under it to the IP in the name,
 so there is no DNS to set up — but every Skifity install in the world shares

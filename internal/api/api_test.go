@@ -229,6 +229,7 @@ func TestOneTeamCannotReachAnother(t *testing.T) {
 		{http.MethodPatch, "/api/apps/" + theirApp.ID, map[string]any{"name": "taken"}},
 		{http.MethodDelete, "/api/apps/" + theirApp.ID, nil},
 		{http.MethodPost, "/api/apps/" + theirApp.ID + "/deploy", map[string]any{}},
+		{http.MethodPut, "/api/apps/" + theirApp.ID + "/source", map[string]any{}},
 		{http.MethodPost, "/api/apps/" + theirApp.ID + "/restart", nil},
 		{http.MethodPost, "/api/apps/" + theirApp.ID + "/run", map[string]any{"command": "id"}},
 		{http.MethodPut, "/api/apps/" + theirApp.ID + "/variables", map[string]any{"key": "X", "value": "1"}},

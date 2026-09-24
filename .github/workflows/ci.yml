@@ -48,6 +48,19 @@ jobs:
           LINT_STRICT: "1"
         run: ./scripts/lint-go.sh
 
+      # The panel writes shell programs and runs them in other people's
+      # clusters. Nothing checked any of them until a quoting mistake broke
+      # every build from a private repository — one shellcheck would have named
+      # it. LINT_STRICT=1 for the same reason as above: a linter that quietly
+      # does not run is not one.
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell
+        env:
+          LINT_STRICT: "1"
+        run: ./scripts/lint-shell.sh
+
       - name: Test
         run: go test ./...
 

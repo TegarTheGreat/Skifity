@@ -92,6 +92,9 @@ fi
 if [ "$DRY_RUN" = "1" ]; then
 	REMOTE_ARCH="x86_64"
 else
+	# SSH_OPTS holds several options and has to split into several words.
+	# Quoting it would pass the lot as one argument, which ssh rejects.
+	# shellcheck disable=SC2086
 	REMOTE_ARCH="$(ssh $SSH_OPTS "$HOST" 'uname -m')"
 fi
 case "$REMOTE_ARCH" in

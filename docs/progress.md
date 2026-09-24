@@ -3726,7 +3726,7 @@ plugin server, not against a container in a cluster. See ADR-0010.
 
 ## Phase 72 — an audit of the parts nothing had swept
 
-Seven faults, in the packages no earlier phase had read end to end.
+Ten faults, in the packages no earlier phase had read end to end.
 
 ### A scheduled command could break the app it belongs to
 
@@ -3802,15 +3802,74 @@ but it is a violated contract in the one place that decides which images are
 deleted, and the failure it sets up is an image removed while an app is still
 running it.
 
+### Building from a private repository was broken outright
+
+The clone script built the credential into a variable and expanded it unquoted,
+under a comment saying it held "the two -c words this script built itself". It
+held four: the header's value is `Authorization: Basic <token>`, which has two
+spaces in it, so git was handed a word of the header where it expects a
+subcommand. Every build from a private repository failed, with an error that
+says nothing about credentials.
+
+The test covering that line asserted the broken text verbatim, which is how it
+survived. Reading a shell script can only confirm its text.
+
+### A dump that produced nothing was uploaded as a backup
+
+The check that a backup was worth keeping happened after gzip, and compressing
+an empty file gives about twenty bytes — which every "is this file non-empty"
+test accepts. A dump tool that produced nothing while reporting success left a
+backup that was uploaded, recorded, listed as available, and found to be
+worthless on the day somebody needed it.
+
+### A corrupt backup half-restored and reported success
+
+The restore was `gzip -dc backup.gz | psql`. `set -e` reads only the last
+command in a pipeline, so psql succeeded on whatever little reached it. With a
+dump taken `--clean --if-exists`, part of a restore is tables dropped and not
+put back: data lost, reported as success, by the one operation somebody runs
+precisely because they cannot afford to lose any.
+
+The backup side spells this exact rule out in a comment and avoids the
+pipeline. The restore side did not follow it.
+
+### Nothing was checking any of the shell
+
+That is the thread through the last three. The panel writes shell programs and
+runs them in other people's clusters, and no linter had ever read one — while
+the clone script carried `# shellcheck disable=SC2086`, silencing precisely the
+warning that names its bug, for a tool that was not installed anywhere in the
+repository or in CI.
+
+`make lint-shell` now checks the scripts that are files, and CI installs
+shellcheck and may not skip it. `internal/shellgen` checks the twenty-five
+scripts that are not files, by rendering every job through its exported builder
+and reading the scripts back out of the containers.
+
+Its threshold is `style`, which is everything, and that is not fussiness: SC2086
+is reported at `info`, so a threshold of `warning` — which sounds like the
+sensible middle, and was the first thing written here — lets through the one
+finding the check exists for. That was not reasoned out; it was found by putting
+the broken script back and watching the check pass.
+
 ### How they were found
 
-Two gates and one habit. Reading each unswept package against its own comments,
-which is where four of the seven announced themselves: the code did not do what
-the paragraph above it said. And two source-scanning tests — every goroutine
-recovers, every provider kind is asked for — which found two faults nobody was
-looking for.
+Three habits, no cleverness.
 
-Every fix was proved by breaking it and watching the test name the failure.
+Reading each unswept package against its own comments, which is where five of
+the ten announced themselves: the code did not do what the paragraph above it
+said. The restore pipeline is the clearest — the rule it breaks is written out,
+in full, forty lines higher up.
+
+Running things instead of reading them. A shell script's behaviour is not in its
+text: the clone and the restore both read correctly and both were wrong. They
+are tested now by running them against a stub `git` and a stub `psql` and
+reading what those were actually given.
+
+And source-scanning tests, which found two faults nobody was looking for.
+
+Every fix was proved by breaking it again and watching the test name the
+failure. That is also how the shellcheck threshold was found to be wrong.
 
 ## Idle resource usage
 

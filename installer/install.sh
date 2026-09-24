@@ -716,6 +716,11 @@ finish() {
 # and stops here, so the smoke test can exercise them without installing
 # anything. Nothing else reads this variable.
 if [ "${SKIFITY_INSTALLER_LIB:-}" = "1" ]; then
+	# `return` works when this file is sourced, which is exactly what the
+	# smoke test does; `exit` is the fallback when it is run instead. A linter
+	# reading one file cannot see the sourcing, so it reports the second half
+	# as unreachable.
+	# shellcheck disable=SC2317
 	return 0 2>/dev/null || exit 0
 fi
 

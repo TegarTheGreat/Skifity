@@ -29,7 +29,7 @@ export CGO_ENABLED := 0
 
 .DEFAULT_GOAL := build
 .PHONY: help build frontend backend dev dev-api test test-go test-race lint lint-go \
-	lint-web fmt check i18n home smoke e2e screenshots image audit clean deps tidy release install-hooks ui
+	lint-web lint-shell fmt check i18n home smoke e2e screenshots image audit clean deps tidy release install-hooks ui
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*##" } /^[a-zA-Z0-9_-]+:.*##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -73,11 +73,14 @@ test-go: ## Run the Go tests
 test-race: ## Run the Go tests with the race detector
 	go test -race ./...
 
-lint: lint-go lint-web i18n destructive home ## Run every linter
+lint: lint-go lint-web lint-shell i18n destructive home ## Run every linter
 
 lint-go: ## Vet the Go code, and run golangci-lint when it can read this module
 	go vet ./...
 	@./scripts/lint-go.sh
+
+lint-shell: ## Lint the shell this repository ships
+	@./scripts/lint-shell.sh
 
 lint-web: ## Lint and type-check the frontend
 	npm --prefix web run lint

@@ -33,7 +33,7 @@ done
 
 # --- the remote runner refuses to guess -------------------------------------
 
-out=$(HOST= DRY_RUN=1 bash "$ROOT/test/cluster/verify-remote.sh" 2>&1 || true)
+out=$(HOST='' DRY_RUN=1 bash "$ROOT/test/cluster/verify-remote.sh" 2>&1 || true)
 case "$out" in
 *"Set HOST"*) t_pass "it refuses without a server to run on" ;;
 *) t_fail "running it with no HOST should say what to set, got: $out" ;;

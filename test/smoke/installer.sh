@@ -198,6 +198,9 @@ POD_NETWORK=""
 
 # And the choice itself: WireGuard when the kernel can do it, vxlan when it
 # cannot, never a silent default that half the cluster disagrees with.
+# The single quotes are the point: what is searched for is the literal text
+# ${POD_NETWORK} as it appears in the installer, not its value here.
+# shellcheck disable=SC2016
 if grep -q 'flannel-backend=${POD_NETWORK}' "$ROOT/installer/install.sh" &&
   grep -q 'POD_NETWORK="wireguard-native"' "$ROOT/installer/install.sh" &&
   grep -q 'POD_NETWORK="vxlan"' "$ROOT/installer/install.sh"; then

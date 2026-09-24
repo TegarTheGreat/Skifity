@@ -10,7 +10,7 @@ require (
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/yuin/goldmark v1.8.6
 	golang.org/x/crypto v0.57.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/term v0.46.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0

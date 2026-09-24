@@ -3726,7 +3726,8 @@ plugin server, not against a container in a cluster. See ADR-0010.
 
 ## Phase 72 — an audit of the parts nothing had swept
 
-Ten faults, in the packages no earlier phase had read end to end.
+Eleven faults, in the packages no earlier phase had read end to end, and a
+note on what was read and found sound.
 
 ### A scheduled command could break the app it belongs to
 
@@ -3851,6 +3852,58 @@ is reported at `info`, so a threshold of `warning` — which sounds like the
 sensible middle, and was the first thing written here — lets through the one
 finding the check exists for. That was not reasoned out; it was found by putting
 the broken script back and watching the check pass.
+
+### Gitea's signature was checked against the secret itself
+
+`X-Gitea-Signature` is an HMAC-SHA256 of the body in hex. It was checked with
+the function that compares a header against the webhook secret — a secret
+against a digest, two values that can never be equal — so a push from a Gitea
+that sends only that header was always rejected, and the message sent the
+operator to check a secret that was correct.
+
+Which rule verified a push was also chosen by a header on the request, and the
+sender chooses the headers. No bypass followed, because every path still needs
+the secret, but the rule that applies to a connection should not be selectable
+by the person being checked. It comes from the connection's own kind now.
+
+### What was read and found sound
+
+An audit that only lists faults reads as if everything else was skipped. These
+were read as closely as the rest and are right:
+
+* **The plugin store.** The index is verified before it is parsed, an empty key
+  means the catalogue comes back marked unsigned rather than silently trusted,
+  and the interface says which it was in two places. The promise is kept end to
+  end.
+* **Fork detection.** Whether a preview environment is handed the project's
+  secrets turns on it, and both parsers fail safe: anything missing counts as a
+  fork. The GitLab side had no test for that case, which is the shape somebody
+  probing would send, so it has one now.
+* **The MCP server.** It goes through the API rather than the store, so
+  authorization is where it should be, and it exposes nothing destructive — no
+  delete, no server removal. A deliberate line, and the right one.
+* **Scale to zero.** The HPA stands down when KEDA is in charge, the interceptor
+  Service names the port the interceptor actually listens on, and the target
+  port matches the app's own Service.
+* **The geo databases.** Bounded download, atomic rename, no archive extraction,
+  and the only names it writes are this panel's own.
+* **The template catalogue.** 283 templates behind ten gates, including one that
+  checks the catalogue is what the README says ships. Phase 20.2's claim holds.
+* **The export.** Secret values are left out and the rendered Kubernetes objects
+  do not include the environment Secret, so the note at the top of the file is
+  true.
+
+### Left alone on purpose
+
+An app that flaps — a readiness probe on the edge — gets a notification each
+time it crosses, both ways, once a minute. The state in the database stops a
+repeated *same* state being sent twice, which is what it was built for, but
+there is no hysteresis. The result is a channel somebody mutes, and a muted
+channel is the failure notifications exist to prevent.
+
+It is not changed here because how many minutes of quiet make a recovery real
+is a product decision, not a bug fix, and guessing at it would replace a known
+gap with an unknown one. Written down rather than silently patched.
 
 ### How they were found
 

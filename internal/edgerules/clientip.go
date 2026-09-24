@@ -52,6 +52,46 @@ type Headers interface {
 	Get(name string) string
 }
 
+// MultiHeaders is a Headers whose every value can be read.
+//
+// A header can arrive more than once, and Get answers with the first one. For
+// a header a client is also free to send, the first one is the client's:
+// anything a proxy added afterwards sits behind it, unread. A proxy that
+// appends a second X-Forwarded-For line rather than extending the first would
+// therefore have its chain ignored in favour of the one the attacker wrote,
+// and every address rule would judge an address the attacker chose — the exact
+// failure the top of this file warns about.
+//
+// So where a caller can offer every value, it is asked for every value.
+// http.Header can.
+type MultiHeaders interface {
+	Headers
+	Values(name string) []string
+}
+
+func headerValues(headers Headers, name string) []string {
+	if multi, ok := headers.(MultiHeaders); ok {
+		return multi.Values(name)
+	}
+	if value := headers.Get(name); value != "" {
+		return []string{value}
+	}
+	return nil
+}
+
+// LastHeaderValue is the value the hop nearest to us set.
+//
+// The last, not the first: header lines arrive in the order they were added,
+// so the client's own is in front and the proxy's is behind it. A caller must
+// still decide whether that hop is trusted; this only says which line is theirs.
+func LastHeaderValue(headers Headers, name string) string {
+	values := headerValues(headers, name)
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[len(values)-1])
+}
+
 // ClientIP is the address the rules should judge.
 //
 // peer is the address the connection came from, which is the only thing nobody
@@ -68,13 +108,16 @@ func ClientIP(peer netip.Addr, headers Headers, trust Trust) netip.Addr {
 	// a client cannot set it: whatever it sends is overwritten. We only believe
 	// it because the hop that handed it to us is ours.
 	if trust.Cloudflare {
-		if ip, err := netip.ParseAddr(strings.TrimSpace(headers.Get("CF-Connecting-IP"))); err == nil {
+		if ip, err := netip.ParseAddr(LastHeaderValue(headers, "CF-Connecting-IP")); err == nil {
 			return ip.Unmap()
 		}
 	}
 
-	forwarded := headers.Get("X-Forwarded-For")
-	if forwarded == "" {
+	// Every line, in the order they arrived, read as one chain. A proxy that
+	// adds its own line instead of extending the client's would otherwise have
+	// its entry hidden behind the client's — see MultiHeaders.
+	forwarded := strings.Join(headerValues(headers, "X-Forwarded-For"), ",")
+	if strings.TrimSpace(forwarded) == "" {
 		return peer
 	}
 	parts := strings.Split(forwarded, ",")
@@ -112,7 +155,7 @@ func ClientCountry(peer netip.Addr, headers Headers, trust Trust) string {
 	if headers == nil || !trust.Cloudflare || !trust.Contains(peer.Unmap()) {
 		return ""
 	}
-	country := strings.ToUpper(strings.TrimSpace(headers.Get("CF-IPCountry")))
+	country := strings.ToUpper(LastHeaderValue(headers, "CF-IPCountry"))
 	// Cloudflare sends XX for an address it cannot place and T1 for Tor. Both
 	// are honest answers and neither is a country, so they are no answer here
 	// rather than a country code that matches nothing.

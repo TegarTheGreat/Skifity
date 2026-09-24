@@ -184,35 +184,48 @@ func (g *Guard) RefreshGeo(ctx context.Context, client *http.Client, now time.Ti
 // Traefik sends the original request's method, host and path in X-Forwarded-*
 // headers and the original headers as themselves, which is what makes a rule on
 // a header or a user agent work at all.
-func (g *Guard) Decide(r *http.Request) (edgerules.Decision, bool) {
+// It returns the request as it judged it, so that what is logged is what the
+// rules actually saw. Logging the raw header instead said one thing while the
+// rules used another, which is the worst possible state for a record somebody
+// consults after being blocked.
+func (g *Guard) Decide(r *http.Request) (edgerules.Decision, edgerules.Request, bool) {
 	g.mu.RLock()
 	config, trust, loaded := g.config, g.trust, g.loaded
 	g.mu.RUnlock()
 
-	host := hostname(firstNonEmpty(r.Header.Get("X-Forwarded-Host"), r.Host))
+	// The peer first, because everything below is decided by whether the hop
+	// that sent these headers is one of ours.
+	peer := peerAddr(r)
+
+	// X-Forwarded-Host chooses which rule set applies, and a host with no set
+	// is allowed through. Believing it from anybody was therefore a way past
+	// the whole firewall with one header: name a hostname nobody protects and
+	// there are no rules to fail. ClientIP has always asked whether the hop is
+	// trusted before believing what it says; every other forwarded header now
+	// asks the same question.
+	host := hostname(firstNonEmpty(forwardedByAProxy(r, "X-Forwarded-Host", peer, trust), r.Host))
 	protected, found := config.Sets[host]
 	if !loaded {
 		// Nothing has ever been loaded, so nothing can be said about this
 		// request. Refusing is the only honest answer for a process whose whole
 		// purpose is to refuse.
-		return edgerules.Decision{Action: edgerules.ActionBlock}, false
+		return edgerules.Decision{Action: edgerules.ActionBlock}, edgerules.Request{}, false
 	}
 	if !found {
 		// A hostname with no rules is a hostname nobody asked to protect. It
 		// should not be reaching the guard at all, and letting it through is
 		// better than breaking a site because a middleware outlived its rules.
-		return edgerules.Decision{Action: edgerules.ActionAllow}, true
+		return edgerules.Decision{Action: edgerules.ActionAllow}, edgerules.Request{Host: host}, true
 	}
 
-	peer := peerAddr(r)
 	ip := edgerules.ClientIP(peer, r.Header, trust)
 
 	request := edgerules.Request{
 		IP:        ip,
 		Country:   edgerules.ClientCountry(peer, r.Header, trust),
 		Host:      host,
-		Path:      pathOf(r),
-		Method:    firstNonEmpty(r.Header.Get("X-Forwarded-Method"), r.Method),
+		Path:      pathOf(r, peer, trust),
+		Method:    firstNonEmpty(forwardedByAProxy(r, "X-Forwarded-Method", peer, trust), r.Method),
 		UserAgent: r.Header.Get("User-Agent"),
 		Header:    r.Header.Get,
 	}
@@ -227,7 +240,7 @@ func (g *Guard) Decide(r *http.Request) (edgerules.Decision, bool) {
 		request.ASN = result.ASN
 	}
 
-	return protected.RuleSet.Evaluate(request), true
+	return protected.RuleSet.Evaluate(request), request, true
 }
 
 // Handler is what Traefik talks to.
@@ -249,7 +262,7 @@ func (g *Guard) Handler() http.Handler {
 	})
 
 	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
-		decision, decided := g.Decide(r)
+		decision, judged, decided := g.Decide(r)
 		if !decided {
 			// No rules have ever been loaded, so nothing can be said about this
 			// request. The readiness probe reports the same thing, so this
@@ -260,9 +273,9 @@ func (g *Guard) Handler() http.Handler {
 		}
 		if decision.Action == edgerules.ActionBlock {
 			g.log.Info("blocked",
-				"host", r.Header.Get("X-Forwarded-Host"),
+				"host", judged.Host,
 				"rule", decision.RuleName,
-				"path", pathOf(r))
+				"path", judged.Path)
 			// No detail in the body. Telling somebody which rule stopped them
 			// is telling them what to change.
 			http.Error(w, "Forbidden", http.StatusForbidden)
@@ -272,7 +285,7 @@ func (g *Guard) Handler() http.Handler {
 			// Loud, because a rule that cannot be evaluated is a rule that is
 			// not protecting anything and the operator has to find out.
 			g.log.Warn("rules were skipped because something they test is not known",
-				"host", r.Header.Get("X-Forwarded-Host"), "rules", strings.Join(decision.Skipped, ", "))
+				"host", judged.Host, "rules", strings.Join(decision.Skipped, ", "))
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -363,8 +376,8 @@ func hostname(value string) string {
 // Traefik sends it in X-Forwarded-Uri, which includes the query; a rule is
 // written about the path, and a rule on "/admin" that a "?next=/admin" could
 // satisfy would be a rule that means nothing.
-func pathOf(r *http.Request) string {
-	uri := firstNonEmpty(r.Header.Get("X-Forwarded-Uri"), r.URL.Path)
+func pathOf(r *http.Request, peer netip.Addr, trust edgerules.Trust) string {
+	uri := firstNonEmpty(forwardedByAProxy(r, "X-Forwarded-Uri", peer, trust), r.URL.Path)
 	if i := strings.IndexByte(uri, '?'); i >= 0 {
 		uri = uri[:i]
 	}
@@ -372,6 +385,21 @@ func pathOf(r *http.Request) string {
 		return "/"
 	}
 	return uri
+}
+
+// forwardedByAProxy reads an X-Forwarded-* header, and only from a hop we
+// trust to have written it.
+//
+// Two rules in one place. A header that says what the original request was is
+// only worth anything when something of ours put it there, or a client can
+// describe its own request however it likes and be judged on the description.
+// And when the header arrived more than once it is the last line that the
+// nearest hop added; the first is whatever the client sent.
+func forwardedByAProxy(r *http.Request, name string, peer netip.Addr, trust edgerules.Trust) string {
+	if !trust.Contains(peer) {
+		return ""
+	}
+	return edgerules.LastHeaderValue(r.Header, name)
 }
 
 func firstNonEmpty(values ...string) string {

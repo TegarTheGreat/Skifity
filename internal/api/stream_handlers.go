@@ -13,6 +13,7 @@ import (
 
 	"skifity/internal/errdoc"
 	"skifity/internal/logging"
+	"skifity/internal/runsafe"
 	"skifity/internal/store"
 )
 
@@ -218,7 +219,12 @@ func (s *Server) handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	lines := make(chan string, 64)
 	readErr := make(chan error, 1)
 	go func() {
+		// close(lines) is deferred first so it runs last: whatever happens,
+		// the reader sees the stream end rather than waiting for ever.
 		defer close(lines)
+		// This scrubs an app's own output, which is the least trustworthy text
+		// the panel handles. A panic in it must not end every other session.
+		defer runsafe.Recover(s.log, "streaming an app's logs", nil)
 		scanner := bufio.NewScanner(stream)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {

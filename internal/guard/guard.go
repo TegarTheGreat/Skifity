@@ -47,6 +47,7 @@ import (
 
 	"skifity/internal/edgerules"
 	"skifity/internal/geoip"
+	"skifity/internal/runsafe"
 )
 
 // Config is what the panel writes and the guard reads.
@@ -311,6 +312,9 @@ func (g *Guard) Run(ctx context.Context, address string) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
+		// The guard is the only thing standing in front of an app. A panic in
+		// it is that app unreachable, so even the shutdown watcher recovers.
+		defer runsafe.Recover(g.log, "shutting the guard down", nil)
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()

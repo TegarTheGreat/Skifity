@@ -12,6 +12,24 @@
 // with its stack, and the one operation it was running is reported as failed.
 // The cost of not continuing is every other deployment, backup and login on
 // that panel.
+//
+// # The list above was written by hand, and was wrong
+//
+// Those are the goroutines somebody remembered. Six others were not: an app's
+// own log output being scrubbed on its way to a browser, the fan-out to every
+// open tab, an event posted to somebody else's plugin container, the two SSH
+// readers during provisioning, the guard in front of an app, and the panel's
+// own listener. Each of them could end the process.
+//
+// A test in this package now reads every goroutine in internal/ and fails the
+// build when one has nothing to catch a panic, so the list is computed rather
+// than remembered.
+//
+// It cannot check that recovering is the right thing to do, and sometimes it is
+// not enough on its own: a goroutine whose only job is to send on a channel
+// turns a crash into a wait that never ends if it merely recovers. Those send
+// the failure instead, so whoever is waiting is released. That judgement is the
+// author's; the test only makes sure it was made.
 package runsafe
 
 import (

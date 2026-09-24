@@ -9,12 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"skifity/internal/runsafe"
 )
 
 // Credentials are what the user typed into the Add Server form.
@@ -224,7 +227,18 @@ func (c *Client) Run(ctx context.Context, command string) (Result, error) {
 	session.Stderr = &stderr
 
 	done := make(chan error, 1)
-	go func() { done <- session.Run(command) }()
+	go func() {
+		// A panic here would take the panel down, and simply recovering would
+		// leave whoever is waiting on this channel with nothing to wait for.
+		// So it becomes the command's failure, which is what a caller can act
+		// on. The channel is local and never closed, so this send is safe.
+		defer func() {
+			if rec := recover(); rec != nil {
+				done <- fmt.Errorf("running the command panicked: %v", rec)
+			}
+		}()
+		done <- session.Run(command)
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -280,23 +294,38 @@ func (c *Client) RunStreaming(ctx context.Context, command string, onLine func(s
 
 	var readers sync.WaitGroup
 	readers.Add(2)
+	// readers.Done is deferred before the recover, so a panic while reading a
+	// stream still releases the wait: the command finishes reporting what it
+	// managed to read rather than hanging or ending the process.
 	go func() {
 		defer readers.Done()
+		defer runsafe.Recover(slog.Default(), "reading the command's output", nil)
 		readStream("stdout", stdout, &mu, &outBuf, lines, quit)
 	}()
 	go func() {
 		defer readers.Done()
+		defer runsafe.Recover(slog.Default(), "reading the command's errors", nil)
 		readStream("stderr", stderr, &mu, &errBuf, lines, quit)
 	}()
 
 	readersDone := make(chan struct{})
 	go func() {
+		defer runsafe.Recover(slog.Default(), "waiting for the command's output", nil)
 		readers.Wait()
 		close(readersDone)
 	}()
 
 	waitErr := make(chan error, 1)
-	go func() { waitErr <- session.Wait() }()
+	go func() {
+		// As above: a panic becomes the command's failure rather than a wait
+		// that never ends.
+		defer func() {
+			if rec := recover(); rec != nil {
+				waitErr <- fmt.Errorf("waiting for the command panicked: %v", rec)
+			}
+		}()
+		waitErr <- session.Wait()
+	}()
 
 	// The command is finished only when the process has exited *and* both
 	// streams have reached EOF. Returning on the exit status alone loses

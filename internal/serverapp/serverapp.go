@@ -183,6 +183,14 @@ func Run(ctx context.Context, cfg config.Config, frontend http.Handler) error {
 
 	errCh := make(chan error, 1)
 	go func() {
+		// A panic here is the panel unable to serve, so it becomes a reported
+		// serve failure and an orderly shutdown. Recovering without sending
+		// would leave the select below waiting for a listener that is gone.
+		defer func() {
+			if rec := recover(); rec != nil {
+				errCh <- fmt.Errorf("the HTTP server panicked: %v", rec)
+			}
+		}()
 		log.Info("listening", "address", cfg.Listen)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err

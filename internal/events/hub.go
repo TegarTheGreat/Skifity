@@ -7,9 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"skifity/internal/runsafe"
 )
 
 // Event is one message sent to subscribers of a topic.
@@ -217,6 +220,10 @@ func (h *Hub) Subscribe(ctx context.Context, lastSeq int64, topics ...string) *S
 
 	// Tie the subscription's life to the request context.
 	go func() {
+		// Closing an already-closed channel panics, and this runs in the
+		// panel's own process: the fan-out for one browser tab must not be
+		// able to end every other session on the panel.
+		defer runsafe.Recover(slog.Default(), "releasing an event subscription", nil)
 		<-ctx.Done()
 		h.mu.Lock()
 		if _, ok := h.subscribers[sub]; ok {

@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"skifity/internal/runsafe"
 )
 
 // Sending a plugin what happened.
@@ -163,6 +165,9 @@ func (d Dispatcher) Notify(ctx context.Context, event, teamID string, data any) 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// A plugin is somebody else's container and its answer is somebody
+			// else's bytes. A panic while reading one must not end the panel.
+			defer runsafe.Recover(d.log(), "sending an event to a plugin", nil)
 			if _, err := d.post(ctx, target, payload, NotifyTimeout); err != nil {
 				d.log().Warn("a plugin did not take an event",
 					"plugin", target.ID, "event", event, "error", err)

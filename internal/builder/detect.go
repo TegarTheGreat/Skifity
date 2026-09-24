@@ -67,6 +67,10 @@ type Detection struct {
 	// ComposeWarnings are the parts of the Compose file that did not carry
 	// over, named rather than dropped quietly.
 	ComposeWarnings []string `json:"compose_warnings,omitempty"`
+	// Needs are what the app will reach for once it is running: a database,
+	// the settings its .env.example lists, and data kept in a file that the
+	// next deploy erases. See needs.go.
+	Needs []Need `json:"needs,omitempty"`
 }
 
 // Tree is the subset of a repository the detector needs: the list of paths, and
@@ -124,13 +128,24 @@ func skipPath(p string) bool {
 // Read returns a file's contents, or "" when it was not fetched.
 func (t Tree) Read(name string) string { return t.Contents[name] }
 
-// Detect works out how to build a repository.
+// Detect works out how to build a repository, and what it will need once it is
+// running.
+//
+// The second half applies whatever the first decides. A repository with its own
+// Dockerfile still reads DATABASE_URL, and the Dockerfile says nothing about it.
+func Detect(tree Tree) Detection {
+	d := detectBuild(tree)
+	d.Needs = DetectNeeds(tree)
+	return d
+}
+
+// detectBuild works out how to build a repository.
 //
 // The order is deliberate. An explicit Dockerfile is a decision the repository's
 // author already made and must not be overridden. Compose is next, because a
 // repository with a Compose file is describing several services. Only then does
 // the language detection run.
-func Detect(tree Tree) Detection {
+func detectBuild(tree Tree) Detection {
 	if dockerfile := findDockerfile(tree); dockerfile != "" {
 		d := Detection{
 			Builder: BuilderDockerfile, DockerfilePath: dockerfile,

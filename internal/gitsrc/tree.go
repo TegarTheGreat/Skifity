@@ -49,6 +49,11 @@ var readableFiles = []string{
 	"deno.json", "bun.lockb", "Procfile",
 	"Dockerfile", "dockerfile", "docker/Dockerfile", "build/Dockerfile",
 	"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml",
+	// What the app will need once it runs. A Prisma schema names its database
+	// outright, and an .env.example lists the settings the app reads — the
+	// template, never the real file. See the test that holds that line.
+	"prisma/schema.prisma", "schema.prisma",
+	".env.example", ".env.sample", ".env.template",
 }
 
 // TreeRequest is a repository to look at.

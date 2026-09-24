@@ -2110,5 +2110,34 @@
       "settings": "the panel's settings",
       "account": "your account"
     }
+  },
+  "needs": {
+    "databasesTitle": "Databases this app needs",
+    "databaseCreate": "Create a {{engine}} database and connect it as {{variable}}",
+    "because": "Because {{source}} uses {{evidence}}.",
+    "databaseStarting": "A database takes about a minute to start, so the app may restart once while it waits. That is expected.",
+    "notProvidedTitle": "This app uses {{engine}}",
+    "notProvided": "This panel does not run {{engine}}. Use a hosted one and set {{variable}} under Variables.",
+    "ephemeralTitle": "This app keeps its data in a file",
+    "ephemeral": "It stores data through {{evidence}} ({{what}}) inside the container, and the next deploy replaces the container. Everything saved there is lost.",
+    "ephemeralFixDatabase": "Tick the database above and point the app at it instead.",
+    "ephemeralFixVolume": "Use a managed database instead, or add a volume for its data folder once the app is created.",
+    "variablesTitle": "Settings",
+    "variablesExpected": "This app expects the settings listed in {{source}}. Paste your .env here and they are saved before the first deploy.",
+    "variablesOptional": "Paste your .env here and its settings are saved before the first deploy.",
+    "variablesSecret": "Anything that looks like a key or a password is kept secret.",
+    "variablesPlaceholder": "OPENAI_API_KEY=sk-...",
+    "missing": "Still missing:",
+    "allSet": "Every setting this app expects is here.",
+    "databaseFailed": "The app was created, but its {{engine}} database was not",
+    "engine": {
+      "postgres": "PostgreSQL",
+      "mysql": "MySQL",
+      "redis": "Redis",
+      "mongodb": "MongoDB",
+      "sqlserver": "SQL Server",
+      "sqlite": "SQLite",
+      "file": "a data file"
+    }
   }
 }

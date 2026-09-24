@@ -563,6 +563,39 @@ export type Detection = {
   compose?: ComposeService[]
   /** Parts of the Compose file that do not carry over. */
   compose_warnings?: string[]
+  /**
+   * What the app will reach for once it runs, read from its own files: a
+   * database, data kept in a file the next deploy erases, and the settings its
+   * .env.example lists. Each one carries the package and the file it was read
+   * from, so the form can say why.
+   */
+  needs?: AppNeed[]
+}
+
+/** One thing an app needs, and the evidence for it. */
+export type AppNeed = {
+  kind: "database" | "ephemeral" | "variables"
+  /** postgres, mysql, redis, mongodb, sqlserver — or sqlite and file. */
+  engine?: string
+  /** Whether this panel can create it. */
+  provided: boolean
+  /** The package, provider line or file that says so. */
+  evidence?: string
+  /** The file the evidence was read from. */
+  source?: string
+  /** The name the app reads the connection from. */
+  variable?: string
+  /** For kind "variables": the names the app expects. */
+  variables?: string[]
+}
+
+/** What happened to a database asked for with a new app. */
+export type InitialDatabaseResult = {
+  engine: string
+  variable: string
+  database_id?: string
+  name?: string
+  error?: string
 }
 
 /** One service from a Compose file, as the panel would run it. */

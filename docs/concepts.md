@@ -166,6 +166,43 @@ form.
 A private repository needs a connected Git account with access to it. The token
 is only ever sent to the host that account is for.
 
+### What your app needs to run
+
+The same check reads what the app will reach for once it is running, and says so
+before the first deploy rather than after it crashes.
+
+**A database.** If the code uses a database — a `pg` or `mysql2` package, an
+`asyncpg` in `requirements.txt`, a Prisma schema that says
+`provider = "postgresql"` — the form offers to create one and connect it. It is
+ticked already. Leave it ticked and the panel makes the database, gives your app
+its address, and only then starts the first deploy, so the app never starts once
+without it. The name it is given is the one your code reads: from the Prisma
+schema, or from your `.env.example`, and otherwise the usual one for that
+database. A new database takes about a minute to start, so the app may restart
+once while it waits.
+
+A database this panel does not run, such as MongoDB, is named rather than left
+out: use a hosted one and set its address under Variables.
+
+**Data kept in a file.** SQLite, `lowdb` and a committed `.sqlite` file all keep
+data inside the container, and the next deploy replaces the container. Nothing
+fails and nothing is logged — the data is simply gone. The form says so in
+amber. Use a managed database instead, or add a volume for the folder the data
+is in.
+
+SQLite beside a real database is not warned about. That is almost always SQLite
+for development and the real one in production, which is what a Rails
+`Gemfile` does by default.
+
+**Settings.** If the repository has a `.env.example`, the form lists what it
+expects and shows which are still missing. Paste your `.env` into the box and
+they are saved before the first deploy. Anything that looks like a key, a token
+or a password — including a database address with a password in it — is stored
+as a secret: it is never shown again, and it is not handed to the MCP server.
+
+Everything this says comes with the file it read it from, so you can check it.
+The panel reads `.env.example` for the names; it never reads `.env` itself.
+
 ## How your code becomes an image
 
 Four ways, in the order the panel picks them:

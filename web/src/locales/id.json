@@ -2098,5 +2098,34 @@
       "settings": "setelan panel",
       "account": "akun Anda"
     }
+  },
+  "needs": {
+    "databasesTitle": "Database yang dibutuhkan app ini",
+    "databaseCreate": "Buat database {{engine}} dan sambungkan sebagai {{variable}}",
+    "because": "Karena {{source}} memakai {{evidence}}.",
+    "databaseStarting": "Database butuh sekitar satu menit untuk menyala, jadi app mungkin restart sekali sambil menunggu. Itu wajar.",
+    "notProvidedTitle": "App ini memakai {{engine}}",
+    "notProvided": "Panel ini tidak menjalankan {{engine}}. Pakai layanan terkelola di luar, lalu isi {{variable}} di Variabel.",
+    "ephemeralTitle": "App ini menyimpan datanya di dalam berkas",
+    "ephemeral": "Data disimpan lewat {{evidence}} ({{what}}) di dalam container, dan deploy berikutnya mengganti container itu. Semua yang tersimpan di sana hilang.",
+    "ephemeralFixDatabase": "Centang database di atas dan arahkan app ke sana.",
+    "ephemeralFixVolume": "Pakai database terkelola, atau tambahkan volume untuk folder datanya setelah app dibuat.",
+    "variablesTitle": "Pengaturan",
+    "variablesExpected": "App ini mengharapkan pengaturan yang tercantum di {{source}}. Tempel .env Anda di sini dan semuanya disimpan sebelum deploy pertama.",
+    "variablesOptional": "Tempel .env Anda di sini dan pengaturannya disimpan sebelum deploy pertama.",
+    "variablesSecret": "Apa pun yang tampak seperti kunci atau kata sandi disimpan sebagai rahasia.",
+    "variablesPlaceholder": "OPENAI_API_KEY=sk-...",
+    "missing": "Masih kurang:",
+    "allSet": "Semua pengaturan yang dibutuhkan app ini sudah ada.",
+    "databaseFailed": "App sudah dibuat, tapi database {{engine}}-nya belum",
+    "engine": {
+      "postgres": "PostgreSQL",
+      "mysql": "MySQL",
+      "redis": "Redis",
+      "mongodb": "MongoDB",
+      "sqlserver": "SQL Server",
+      "sqlite": "SQLite",
+      "file": "berkas data"
+    }
   }
 }

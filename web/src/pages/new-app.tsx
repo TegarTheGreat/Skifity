@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { cn } from "cn"
 
+import { AppNeeds } from "@/components/app-needs"
 import { ErrorDisplay } from "@/components/error-display"
 import { Page, PageHeader } from "@/components/page"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/select"
 import { useSession } from "@/hooks/use-session"
 import { api, type List } from "@/lib/api"
+import { parseDotEnv } from "@/lib/dotenv"
 import { queryClient } from "@/lib/query"
 import type {
   App,
@@ -31,6 +33,7 @@ import type {
   Deployment,
   Detection,
   GitSource,
+  InitialDatabaseResult,
   WebhookStatus,
 } from "@/lib/types"
 import { Spinner } from "@/components/ui/spinner"
@@ -69,6 +72,12 @@ export function NewAppPage() {
   // rather than an import: picking one fills the form in from it.
   const [composeService, setComposeService] = useState("")
   const [variables, setVariables] = useState<Record<string, string>>({})
+  // What detection found this app needs is offered, not imposed: this holds
+  // only the databases somebody unticked, and the rest is worked out below.
+  const [declined, setDeclined] = useState<string[]>([])
+  // A pasted .env, as typed. Parsed on every render rather than into state, so
+  // what is sent is always exactly what is in the box.
+  const [pastedEnv, setPastedEnv] = useState("")
 
   // A public repository needs no account. This picker only appears once one is
   // connected, so the common case stays a single field.
@@ -94,6 +103,9 @@ export function NewAppPage() {
         git_source_id: gitSourceID,
       }),
     onSuccess: (found) => {
+      // A different repository is a different set of needs; what was unticked
+      // for the last one says nothing about this one.
+      setDeclined([])
       // Only fields nobody has filled in, and only when the guess is a
       // statement rather than a question. Overwriting what somebody typed
       // because a heuristic disagreed is the behaviour that makes people stop
@@ -119,6 +131,12 @@ export function NewAppPage() {
   })
   const found = detect.data
 
+  const pasted = parseDotEnv(pastedEnv)
+  const needs = sourceType === "git" ? (found?.needs ?? []) : []
+  const databases = needs
+    .filter((n) => n.kind === "database" && n.provided && n.engine && !declined.includes(n.engine))
+    .map((n) => ({ engine: n.engine!, variable: n.variable ?? "" }))
+
   // "github.com/you/blog" becomes "blog", which is almost always the name the
   // user would have typed anyway.
   const suggestedName = (() => {
@@ -134,29 +152,49 @@ export function NewAppPage() {
 
   const create = useMutation({
     mutationFn: () =>
-      api.post<{ app: App; deployment?: Deployment; webhook?: WebhookStatus }>(
-        `/api/environments/${envId}/apps`,
-        {
-          name: (name.trim() || suggestedName).trim(),
-          source_type: sourceType,
-          repo_url: sourceType === "git" ? repoURL.trim() : "",
-          git_source_id: sourceType === "git" ? gitSourceID : "",
-          branch: branch.trim(),
-          root_dir: rootDir.trim(),
-          image: sourceType === "image" ? image.trim() : "",
-          builder,
-          dockerfile_path: dockerfilePath.trim(),
-          port: Number(port) || 0,
-          health_path: healthPath.trim(),
-          build_command: buildCommand.trim(),
-          static_dir: staticDir.trim(),
-          start_command: startCommand.trim(),
-          deploy: deployNow,
-          variables,
-        },
-      ),
+      api.post<{
+        app: App
+        deployment?: Deployment
+        webhook?: WebhookStatus
+        databases?: InitialDatabaseResult[]
+      }>(`/api/environments/${envId}/apps`, {
+        name: (name.trim() || suggestedName).trim(),
+        source_type: sourceType,
+        repo_url: sourceType === "git" ? repoURL.trim() : "",
+        git_source_id: sourceType === "git" ? gitSourceID : "",
+        branch: branch.trim(),
+        root_dir: rootDir.trim(),
+        image: sourceType === "image" ? image.trim() : "",
+        builder,
+        dockerfile_path: dockerfilePath.trim(),
+        port: Number(port) || 0,
+        health_path: healthPath.trim(),
+        build_command: buildCommand.trim(),
+        static_dir: staticDir.trim(),
+        start_command: startCommand.trim(),
+        deploy: deployNow,
+        // A pasted line wins over the same name from a Compose service:
+        // it is what the person typed last, into the box in front of them.
+        variables: { ...variables, ...pasted },
+        // Created and linked before the first deploy, so its first start
+        // finds the connection string there.
+        databases,
+      }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ["apps", envId] })
+      // A database that could not be made does not undo the app, so it has to
+      // be said here — the app page will not know it was ever asked for.
+      for (const database of result.databases ?? []) {
+        if (database.error) {
+          toast.warning(
+            t("needs.databaseFailed", { engine: t(`needs.engine.${database.engine}`) }),
+            {
+              description: database.error,
+              duration: 15000,
+            },
+          )
+        }
+      }
       // Whether pushes will deploy is worth knowing now rather than the first
       // time somebody pushes and nothing happens.
       if (result.webhook?.url) {
@@ -249,6 +287,21 @@ export function NewAppPage() {
 
                 {detect.error != null && <ErrorDisplay error={detect.error} compact />}
                 {found && <DetectionSummary detection={found} />}
+                {found && sourceType === "git" && (
+                  <AppNeeds
+                    needs={needs}
+                    declined={declined}
+                    onToggle={(engine, create) =>
+                      setDeclined(
+                        create ? declined.filter((e) => e !== engine) : [...declined, engine],
+                      )
+                    }
+                    pasted={pastedEnv}
+                    onPaste={setPastedEnv}
+                    pastedKeys={Object.keys(pasted)}
+                    otherKeys={Object.keys(variables)}
+                  />
+                )}
                 {found?.compose && found.compose.length > 0 && (
                   <ComposeServices
                     services={found.compose}

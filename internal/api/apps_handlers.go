@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"skifity/internal/builder"
 	"skifity/internal/errdoc"
 	"skifity/internal/events"
 	"skifity/internal/gitsrc"
@@ -60,6 +62,137 @@ type createAppRequest struct {
 	// list of names. Every value is sealed like any other variable, and none
 	// of them is audited.
 	Variables map[string]string `json:"variables,omitempty"`
+	// Databases are created in the app's environment and linked to it before
+	// its first deploy.
+	//
+	// This is what detection's "this app needs PostgreSQL" is for. Making the
+	// database, linking it, and then deploying used to be three screens, and
+	// the order was the whole trick: deploy first and the app starts once with
+	// no DATABASE_URL, which for anything built on an ORM is a first deploy that
+	// crashes. Somebody who has never deployed anything does not know the
+	// order, so it is done for them, here, in one request.
+	Databases []initialDatabase `json:"databases,omitempty"`
+}
+
+// initialDatabase is one database to create and link with a new app.
+type initialDatabase struct {
+	Engine string `json:"engine"`
+	// Variable is the name the app reads the connection from. Detection fills
+	// it in from the app's own files; empty means the panel's default for the
+	// engine.
+	Variable string `json:"variable,omitempty"`
+}
+
+// databaseResult says what happened to one of them.
+//
+// A database that could not be made does not undo the app: the app is what
+// somebody asked for, and a failed database is something they can retry from
+// the app's page. So each one reports on its own and the app is still created.
+type databaseResult struct {
+	Engine     string `json:"engine"`
+	Variable   string `json:"variable"`
+	DatabaseID string `json:"database_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// maxInitialDatabases bounds one request. Three engines are offered; four is
+// room for none of them twice and a margin.
+const maxInitialDatabases = 4
+
+// validateInitialDatabases refuses a bad request before anything is created,
+// so a typo cannot leave a half-made app behind it.
+func validateInitialDatabases(requested []initialDatabase) ([]initialDatabase, error) {
+	if len(requested) > maxInitialDatabases {
+		return nil, errdoc.BadRequest(fmt.Sprintf("A new app can be created with at most %d databases.", maxInitialDatabases))
+	}
+	seen := map[string]bool{}
+	out := make([]initialDatabase, 0, len(requested))
+	for _, want := range requested {
+		engine := strings.ToLower(strings.TrimSpace(want.Engine))
+		offered := false
+		for _, provided := range builder.ProvidedEngines {
+			if provided == engine {
+				offered = true
+			}
+		}
+		if !offered {
+			return nil, errdoc.BadRequest(fmt.Sprintf(
+				"%q is not a database this panel can create; it can create %s.",
+				want.Engine, strings.Join(builder.ProvidedEngines, ", ")))
+		}
+		if seen[engine] {
+			return nil, errdoc.BadRequest(fmt.Sprintf("%s is asked for twice.", engine))
+		}
+		seen[engine] = true
+
+		variable := strings.TrimSpace(want.Variable)
+		if variable == "" {
+			variable = defaultVarNameFor(engine)
+		}
+		key, err := kube.SanitiseEnvKey(variable)
+		if err != nil {
+			return nil, errdoc.BadRequest(err.Error())
+		}
+		out = append(out, initialDatabase{Engine: engine, Variable: key})
+	}
+	return out, nil
+}
+
+// createInitialDatabases makes and links each database, before the first
+// deploy. Linking writes the connection string as a secret variable and would
+// roll the app, but an app that has never been deployed has nothing to roll,
+// so the first deploy is the first time it starts — with the variable there.
+func (s *Server) createInitialDatabases(r *http.Request, env store.Environment, app store.App, wanted []initialDatabase) []databaseResult {
+	if len(wanted) == 0 {
+		return nil
+	}
+	teamID, _ := s.db.TeamIDForEnvironment(r.Context(), env.ID)
+	results := make([]databaseResult, 0, len(wanted))
+	for _, want := range wanted {
+		result := databaseResult{Engine: want.Engine, Variable: want.Variable}
+		if s.databases == nil {
+			result.Error = "This panel has no cluster connection, so it cannot create databases."
+			results = append(results, result)
+			continue
+		}
+		record, err := s.databases.Create(r.Context(), env, CreateDatabaseRequest{
+			Name: app.Name + " " + want.Engine, Engine: want.Engine,
+		})
+		if err != nil {
+			result.Error = problemText(err)
+			results = append(results, result)
+			continue
+		}
+		result.DatabaseID, result.Name = record.ID, record.Name
+		s.audit(r, teamID, "database.created", "database", record.ID, record.Name)
+		s.plugins.Notify(r.Context(), plugins.EventDatabaseCreated, teamID, map[string]any{
+			"database_id": record.ID, "database": record.Name,
+			"engine": record.Engine, "environment_id": record.EnvironmentID,
+		})
+
+		if err := s.databases.Link(r.Context(), record.ID, app.ID, want.Variable); err != nil {
+			result.Error = problemText(err)
+			results = append(results, result)
+			continue
+		}
+		s.audit(r, teamID, "database.linked", "database", record.ID, app.Name+" as "+want.Variable)
+		results = append(results, result)
+	}
+	return results
+}
+
+// problemText is an error in the words a person reads: a catalogued problem's
+// title and fix when it is one, the error itself otherwise.
+func problemText(err error) string {
+	var problem *errdoc.Problem
+	if errors.As(err, &problem) {
+		if problem.Fix != "" {
+			return problem.Title + ". " + problem.Fix
+		}
+		return problem.Title + "."
+	}
+	return err.Error()
 }
 
 func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +210,11 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		writeError(w, r, errdoc.BadRequest("An app needs a name."))
+		return
+	}
+	databases, err := validateInitialDatabases(req.Databases)
+	if err != nil {
+		writeError(w, r, err)
 		return
 	}
 	sourceType := req.SourceType
@@ -187,6 +325,14 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 
 	hook := s.ensureWebhookFor(r, app)
 
+	// Before the deploy, for the same reason as the variables above: the first
+	// start is the one that has to have them.
+	dbResults := s.createInitialDatabases(r, env, app, databases)
+
+	answer := map[string]any{"app": app, "webhook": hook}
+	if len(dbResults) > 0 {
+		answer["databases"] = dbResults
+	}
 	if req.Deploy && s.deployer != nil {
 		deployment, err := s.deployer.Deploy(r.Context(), DeployRequest{
 			AppID: app.ID, Trigger: "create", CreatedBy: user.ID,
@@ -195,13 +341,10 @@ func (s *Server) handleCreateApp(w http.ResponseWriter, r *http.Request) {
 			// The app exists; report the deploy failure without losing it.
 			s.log.Warn("could not start the first deploy", "app", app.ID, "error", err)
 		} else {
-			writeJSON(w, http.StatusCreated, map[string]any{
-				"app": app, "deployment": deployment, "webhook": hook,
-			})
-			return
+			answer["deployment"] = deployment
 		}
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"app": app, "webhook": hook})
+	writeJSON(w, http.StatusCreated, answer)
 }
 
 // webhookStatus is what the panel can tell somebody about deploy on push.

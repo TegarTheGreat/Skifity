@@ -2098,5 +2098,34 @@
       "settings": "面板设置",
       "account": "你的账户"
     }
+  },
+  "needs": {
+    "databasesTitle": "此应用需要的数据库",
+    "databaseCreate": "创建一个 {{engine}} 数据库，并以 {{variable}} 连接",
+    "because": "因为 {{source}} 使用了 {{evidence}}。",
+    "databaseStarting": "数据库大约需要一分钟启动，因此应用在等待时可能会重启一次。这是正常的。",
+    "notProvidedTitle": "此应用使用 {{engine}}",
+    "notProvided": "此面板不运行 {{engine}}。请使用托管服务，并在“变量”中设置 {{variable}}。",
+    "ephemeralTitle": "此应用把数据保存在文件中",
+    "ephemeral": "它通过 {{evidence}}（{{what}}）把数据保存在容器内，而下一次部署会替换容器。保存在那里的所有内容都会丢失。",
+    "ephemeralFixDatabase": "勾选上面的数据库，并让应用改用它。",
+    "ephemeralFixVolume": "请改用托管数据库，或在应用创建后为其数据目录添加一个卷。",
+    "variablesTitle": "设置",
+    "variablesExpected": "此应用需要 {{source}} 中列出的设置。把你的 .env 粘贴到这里，它们会在第一次部署前保存。",
+    "variablesOptional": "把你的 .env 粘贴到这里，其中的设置会在第一次部署前保存。",
+    "variablesSecret": "任何看起来像密钥或密码的内容都会作为机密保存。",
+    "variablesPlaceholder": "OPENAI_API_KEY=sk-...",
+    "missing": "仍缺少：",
+    "allSet": "此应用需要的所有设置都已就绪。",
+    "databaseFailed": "应用已创建，但其 {{engine}} 数据库没有创建成功",
+    "engine": {
+      "postgres": "PostgreSQL",
+      "mysql": "MySQL",
+      "redis": "Redis",
+      "mongodb": "MongoDB",
+      "sqlserver": "SQL Server",
+      "sqlite": "SQLite",
+      "file": "数据文件"
+    }
   }
 }

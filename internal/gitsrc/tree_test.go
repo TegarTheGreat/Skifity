@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"skifity/internal/builder"
 )
 
 // These run against a real HTTP server speaking each provider's API, so the
@@ -280,6 +282,40 @@ func TestTheFilesTheAnswerDependsOnAreRead(t *testing.T) {
 	for name, body := range bodies {
 		if tree.Contents[name] != body {
 			t.Errorf("%s was listed but read as %q", name, tree.Contents[name])
+		}
+	}
+}
+
+// The file with the real secrets is never fetched.
+//
+// Detection reads .env.example to learn the names of the settings an app
+// expects. .env beside it is where the values are — somebody's API keys, a
+// database password — and a panel that fetched it to find out the names would
+// be copying secrets out of a repository nobody meant to publish them from. It
+// is usually ignored by git, which is exactly why a repository that commits it
+// by mistake must not have it read.
+func TestTheRealEnvFileIsNeverFetched(t *testing.T) {
+	allowed := map[string]bool{".env.example": true, ".env.sample": true, ".env.template": true}
+	for _, file := range readableFiles {
+		base := file[strings.LastIndex(file, "/")+1:]
+		if !strings.HasPrefix(base, ".env") {
+			continue
+		}
+		if !allowed[base] {
+			t.Errorf("%q is fetched for detection; only a template of the settings may be", file)
+		}
+	}
+	// And the templates detection reads are the ones fetched, so a name added
+	// on one side is not silently missing from the other.
+	for _, file := range builder.EnvExampleFiles {
+		found := false
+		for _, fetched := range readableFiles {
+			if fetched == file {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("detection reads %q and it is never fetched", file)
 		}
 	}
 }

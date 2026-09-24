@@ -81,7 +81,13 @@ func TestCloneIsShallowAndPinned(t *testing.T) {
 	if !strings.Contains(script, "--depth 1") {
 		t.Fatal("the clone is not shallow; a large repository would take minutes")
 	}
-	if !strings.Contains(script, `git $GIT_AUTH fetch --depth 1 -q origin "$GIT_REF"`) {
+	// The ref comes from the environment, never written into the script.
+	//
+	// This used to assert the whole line, including `git $GIT_AUTH`, and so it
+	// held a broken clone in place: reading the script as text can only
+	// confirm the text. What the script does is checked by running it, in
+	// clonescript_test.go.
+	if !strings.Contains(script, `fetch --depth 1 -q origin "$GIT_REF"`) {
 		t.Fatalf("the ref is not fetched from the environment:\n%s", script)
 	}
 	if got := cloneEnv(t, job, "GIT_REF"); got != "a1b2c3d4e5f6a7b8" {

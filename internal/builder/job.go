@@ -308,24 +308,35 @@ func cloneScript(s JobSpec) string {
 	// on the one command that needs it instead, so it is never on disk.
 	b.WriteString(`git remote add origin "$REPO_URL"` + "\n")
 
+	// The credential travels as an argument of a function, not as a word in a
+	// string that gets split.
+	//
+	// It used to be built into GIT_AUTH and expanded unquoted, on the belief
+	// that it was "the two -c words this script built itself". It was four:
+	// the header's value is `Authorization: Basic <token>`, which has two
+	// spaces in it, so the shell handed git `-c
+	// http.<origin>/.extraHeader=Authorization:` and then `Basic` and the
+	// token as separate words — and git read `Basic` as the subcommand it was
+	// being asked to run. Every build from a private repository failed, with
+	// an error that says nothing about credentials.
+	//
+	// A function keeps the quoting where it belongs and adds no -c at all when
+	// there is no token, which is what the empty-string form was reaching for.
 	if s.CloneSecret != "" {
 		// Scoped to this repository's own host: an unscoped header would be
 		// sent to wherever a submodule points, which is somebody else's
 		// server being handed your token.
 		b.WriteString(`ORIGIN=$(printf '%s' "$REPO_URL" | sed -n 's#^\(https\{0,1\}://[^/]*\).*#\1#p')` + "\n")
 		b.WriteString(`AUTH=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 | tr -d '\n')` + "\n")
-		b.WriteString(`GIT_AUTH="-c http.${ORIGIN}/.extraHeader=Authorization: Basic ${AUTH}"` + "\n")
+		b.WriteString(`authed_git() { git -c "http.${ORIGIN}/.extraHeader=Authorization: Basic ${AUTH}" "$@"; }` + "\n")
 	} else {
-		b.WriteString(`GIT_AUTH=""` + "\n")
+		b.WriteString(`authed_git() { git "$@"; }` + "\n")
 	}
 
-	// Unquoted on purpose: GIT_AUTH is either empty or the two -c words this
-	// script built itself, and quoting it would pass one empty argument.
-	b.WriteString("# shellcheck disable=SC2086\n")
-	b.WriteString(`git $GIT_AUTH fetch --depth 1 -q origin "$GIT_REF"` + "\n")
+	b.WriteString(`authed_git fetch --depth 1 -q origin "$GIT_REF"` + "\n")
 	b.WriteString("git checkout -q FETCH_HEAD\n")
 	// Submodules are common enough that failing on them would be surprising.
-	b.WriteString(`git $GIT_AUTH submodule update --init --recursive --depth 1 -q 2>/dev/null || true` + "\n")
+	b.WriteString(`authed_git submodule update --init --recursive --depth 1 -q 2>/dev/null || true` + "\n")
 	b.WriteString(`echo "==> Checked out $(git rev-parse --short HEAD)"` + "\n")
 	return b.String()
 }

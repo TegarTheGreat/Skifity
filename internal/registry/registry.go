@@ -210,11 +210,29 @@ func RepoAndTag(image string) (repo, tag string, ok bool) {
 	if slash < 0 {
 		return "", "", false
 	}
+	// The first segment has to be a registry host, by Docker's own rule: it
+	// contains a dot or a colon, or it is localhost. Without this, "library/
+	// nginx:1.25" — an image from Docker Hub that is not in this registry at
+	// all — reads as the repository "nginx", and would speak for a repository
+	// of that name that happens to be here.
+	if !looksLikeHost(image[:slash]) {
+		return "", "", false
+	}
 	rest := image[slash+1:]
+
+	// A digest reference is not a tag, and the two are easy to confuse because
+	// "@sha256:..." has a colon in it. Splitting on the last colon turned
+	// "ns/app@sha256:abc" into the repository "ns/app@sha256" and the tag
+	// "abc": a repository that does not exist, so the real one is left with
+	// nothing marked as worth keeping. The comment here always said a digest
+	// was not something to guess about; the code did not check.
+	if at := strings.LastIndex(rest, "@"); at >= 0 {
+		return "", "", false
+	}
+
 	colon := strings.LastIndex(rest, ":")
 	if colon < 0 || colon < strings.LastIndex(rest, "/") {
-		// No tag. An untagged reference is a digest or a bare name, and neither
-		// is something this sweep should guess about.
+		// No tag. A bare name is not something this sweep should guess about.
 		return "", "", false
 	}
 	repo, tag = rest[:colon], rest[colon+1:]
@@ -222,6 +240,15 @@ func RepoAndTag(image string) (repo, tag string, ok bool) {
 		return "", "", false
 	}
 	return repo, tag, true
+}
+
+// looksLikeHost reports whether a reference's first segment names a registry.
+//
+// Docker's rule, and the only one that can tell "library/nginx" from
+// "registry:5000/app": a host has a dot or a port, or it is localhost.
+func looksLikeHost(segment string) bool {
+	return segment == "localhost" ||
+		strings.ContainsAny(segment, ".:")
 }
 
 // Prunable decides which of a repository's tags may be removed.

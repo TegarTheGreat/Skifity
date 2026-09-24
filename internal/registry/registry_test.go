@@ -167,3 +167,90 @@ func TestAnAppThatWasNeverBuiltIsNotAnError(t *testing.T) {
 		t.Fatalf("got %v tags for a repository that does not exist", tags)
 	}
 }
+
+// A reference this sweep cannot read has to say so, rather than producing a
+// repository that does not exist.
+//
+// What is kept is worked out from these. A reference read as the repository
+// "ns/app@sha256" leaves the real "ns/app" with nothing marked as worth
+// keeping, and everything in it becomes prunable — including the image the app
+// is running. The comment always said a digest was not something to guess
+// about; the code guessed.
+func TestRepoAndTagRefusesWhatItCannotRead(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		image string
+	}{
+		{"a digest, which has a colon of its own",
+			"skifity-registry:5000/team/web@sha256:" +
+				"0000000000000000000000000000000000000000000000000000000000000000"},
+		{"a digest with no tag anywhere",
+			"ghcr.io/example/app@sha256:" +
+				"1111111111111111111111111111111111111111111111111111111111111111"},
+		{"an image from Docker Hub, which is not in this registry",
+			"library/nginx:1.25"},
+		{"a bare name", "nginx"},
+		{"no tag", "skifity-registry:5000/team/web"},
+		{"nothing", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, tag, ok := RepoAndTag(tc.image)
+			if ok {
+				t.Errorf("read %q as %q:%q; it should have said it could not", tc.image, repo, tag)
+			}
+		})
+	}
+}
+
+// The references the panel really builds still read correctly.
+func TestRepoAndTagReadsWhatThePanelBuilds(t *testing.T) {
+	for _, tc := range []struct{ image, repo, tag string }{
+		{"skifity-registry.skifity-builds.svc.cluster.local:5000/team/web:abc123", "team/web", "abc123"},
+		{"skifity-registry:5000/team/web:buildcache", "team/web", "buildcache"},
+		{"localhost:5000/team/web:v2", "team/web", "v2"},
+		{"ghcr.io/example/app:1.4.0", "example/app", "1.4.0"},
+		// A deeper path, which a registry may well have.
+		{"registry.example.com/team/group/web:abc", "team/group/web", "abc"},
+	} {
+		t.Run(tc.image, func(t *testing.T) {
+			repo, tag, ok := RepoAndTag(tc.image)
+			if !ok {
+				t.Fatalf("could not read %q", tc.image)
+			}
+			if repo != tc.repo || tag != tc.tag {
+				t.Errorf("read %q as %q:%q, want %q:%q", tc.image, repo, tag, tc.repo, tc.tag)
+			}
+		})
+	}
+}
+
+// The consequence, stated as the property that matters: a reference the sweep
+// cannot read must never leave a repository unprotected by being half-read.
+func TestAnUnreadableReferenceProtectsNothingAndSpeaksForNothing(t *testing.T) {
+	keep := map[string]map[string]bool{}
+	for _, image := range []string{
+		"skifity-registry:5000/team/web:live",
+		"ghcr.io/example/app@sha256:" +
+			"2222222222222222222222222222222222222222222222222222222222222222",
+	} {
+		repo, tag, ok := RepoAndTag(image)
+		if !ok {
+			continue
+		}
+		if keep[repo] == nil {
+			keep[repo] = map[string]bool{}
+		}
+		keep[repo][tag] = true
+	}
+
+	if len(keep) != 1 {
+		t.Fatalf("the digest reference invented a repository: %v", keep)
+	}
+	if !keep["team/web"]["live"] {
+		t.Error("the image the app is running is not protected")
+	}
+	if prunable := Prunable([]string{"live", "old", CacheTag}, keep["team/web"]); len(prunable) != 1 ||
+		prunable[0] != "old" {
+		t.Errorf("the sweep would remove %v", prunable)
+	}
+}

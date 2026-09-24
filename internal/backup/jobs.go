@@ -356,14 +356,34 @@ func restoreScript(s JobSpec) string {
 		load = `redis-cli -h "$DB_HOST" -p "$DB_PORT" -a "$DB_PASSWORD" --no-auth-warning --pipe`
 	}
 
+	// No pipeline here, for the reason the backup side spells out and this side
+	// did not follow: `set -e` only sees the exit status of the last command in
+	// a pipeline. `gzip -dc backup.gz | psql` reported success whenever psql
+	// succeeded, however little it was given — so a truncated download or a
+	// corrupt archive restored part of a database and said it was finished.
+	// With a dump taken `--clean --if-exists`, part of a restore means tables
+	// dropped and not put back: data lost, reported as a success, by the one
+	// operation somebody runs precisely because they cannot afford to lose any.
+	//
+	// Decompressed to a file first, exactly as the backup stages its dump, so
+	// the archive's own exit status is the one `set -e` reads.
 	return fmt.Sprintf(`set -eu
 
 echo "==> Restoring $DB_NAME"
 
-gzip -dc %s | %s
+gzip -dc %s > %s.sql
+
+if [ ! -s %s.sql ]; then
+  echo "The backup unpacked to nothing, so there is nothing to restore. The archive may be truncated." >&2
+  exit 1
+fi
+
+%s < %s.sql
+
+rm -f %s.sql
 
 echo "==> Restore finished"
-`, dumpFile, load)
+`, dumpFile, dumpFile, dumpFile, load, dumpFile, dumpFile)
 }
 
 // URLSecret renders the Secret carrying a presigned URL.

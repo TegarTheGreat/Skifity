@@ -4026,6 +4026,24 @@ secret, and its deploy naming the upload's hash. Writing it found the one bug a
 reading would not have: the picker cleared its input straight after handing
 over the `FileList`, which is live, so every folder arrived empty.
 
+### A CLI for the computer people actually have
+
+The panel handed out the binary it was running, which is Linux. The Mac or
+Windows laptop most people deploy from got a file that would not run. The image
+now builds the other five platforms beside the panel's own (from the same
+commit, gzipped, about 90 MB together), `/api/cli/download?os=&arch=` serves
+them — the two values checked against a closed list before either touches a
+path — and `/api/meta` says which it has. The new-app page shows the commands
+for the visitor's own platform, with a selector. The Dockerfile's build loop was
+run as written, with `sh`, since there is no Docker here: the host's platform is
+skipped and the macOS build comes out a Mach-O binary.
+
+Not done: `Dockerfile.release`, the image GoReleaser packages, still carries
+only its own binary. Wiring GoReleaser's cross-builds into that context has
+never been run, and the file says so rather than copying a path nobody checked.
+A panel from that image answers `cli.platform_unavailable`, which names what it
+has and says the browser path needs no CLI at all.
+
 A database created with an app now owns the variable it is linked as: a pasted
 `DATABASE_URL` pointing at somebody's `localhost` is left out, by the API
 rather than by each client, and the form says so.

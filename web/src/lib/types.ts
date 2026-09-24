@@ -443,6 +443,8 @@ export type Meta = {
   server_now: string
   /** What the binary at /api/cli/download runs on, such as linux/amd64. */
   cli_platform: string
+  /** Every platform the download serves, this panel's own first. */
+  cli_platforms: string[]
 }
 
 export type CanvasNode = {

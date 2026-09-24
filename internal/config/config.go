@@ -80,6 +80,12 @@ type Config struct {
 	// starts and every server it adds later is given the same backend. After
 	// that the setting is the answer and this is ignored.
 	PodNetwork string `json:"pod_network" toml:"pod_network"`
+	// CLIDir holds the command line tool built for the platforms this panel
+	// does not run on — macOS, Windows, the other architecture — as
+	// skifity-<os>-<arch>[.exe].gz, which the image puts there. The panel
+	// serves its own binary for its own platform, and these for the rest, so
+	// the person deploying from a Mac gets a CLI that runs on it.
+	CLIDir string `json:"cli_dir" toml:"cli_dir"`
 }
 
 // Default returns the configuration used when nothing overrides it.
@@ -97,6 +103,7 @@ func Default() Config {
 		ShutdownGrace:     20 * time.Second,
 		SetupTokenPath:    filepath.Join(version.ConfigDir, "setup-token"),
 		ClusterTokenPath:  filepath.Join(version.ConfigDir, "cluster-token"),
+		CLIDir:            "/usr/local/share/skifity/cli",
 	}
 }
 
@@ -154,6 +161,7 @@ func (c *Config) applyEnv(lookup func(string) string) {
 	str("SETUP_TOKEN_PATH", &c.SetupTokenPath)
 	str("CLUSTER_TOKEN_PATH", &c.ClusterTokenPath)
 	str("POD_NETWORK", &c.PodNetwork)
+	str("CLI_DIR", &c.CLIDir)
 
 	if v := lookup(EnvPrefix + "DEV_MODE"); v != "" {
 		c.DevMode = truthy(v)

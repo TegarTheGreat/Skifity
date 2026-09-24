@@ -5,20 +5,36 @@ or an assistant can do.
 
 ## Getting it
 
-The installer puts it on the server it installs. Anywhere else, the panel serves
-the binary it is itself running:
+The installer puts it on the server it installs. Anywhere else, the panel
+serves it — for your computer, not only for the server the panel runs on:
 
 ```sh
-curl -fsS https://panel.example.com/api/cli/download -o /usr/local/bin/skifity
-chmod +x /usr/local/bin/skifity
+# macOS (Apple silicon; arch=amd64 for an Intel Mac)
+curl -fsS "https://panel.example.com/api/cli/download?os=darwin&arch=arm64" -o skifity
+chmod +x skifity
+
+# Linux
+curl -fsS "https://panel.example.com/api/cli/download?os=linux&arch=amd64" -o skifity
+chmod +x skifity
 ```
 
-That is always the version the panel is running, which is the point — a CLI a
-release behind its panel is a confusing afternoon. It is built for whatever the
-panel runs on; `/api/meta` says which platform that is. For a different one,
-build it from the repository: the panel, the CLI and the MCP server are one
-binary, so `make build` produces all three.
+```powershell
+# Windows
+curl.exe -fsS "https://panel.example.com/api/cli/download?os=windows&arch=amd64" -o skifity.exe
+```
 
+The panel's **New app → A folder on my computer** shows these with your panel's
+address and your computer's platform already filled in.
+
+With no platform named it is the binary the panel is itself running, which is
+always the same version as the panel — a CLI a release behind its panel is a
+confusing afternoon. The other platforms are built into the panel's image
+beside it, from the same commit, kept gzipped and unpacked as they are
+downloaded; they add about 90 MB to the image, and `docker build --build-arg
+CLI_PLATFORMS=""` leaves them out. `/api/meta` lists what a panel can serve
+(`cli_platforms`), and anything else is refused with a reason rather than
+handed over as a file that will not run. The panel, the CLI and the MCP server
+are one binary, so `make build` in the repository produces all three too.
 ## Signing in
 
 ```sh

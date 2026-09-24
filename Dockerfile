@@ -35,8 +35,32 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -X skifity/internal/version.Date=${DATE}" \
     -o /out/skifity ./cmd/skifity
 
+# The command line tool for every other platform, for /api/cli/download.
+#
+# The panel runs on Linux and hands out the binary it is running, which is the
+# one file that will not run on the Mac or the Windows laptop most people
+# deploy from. So the image carries the rest, gzipped — five binaries are most
+# of the image otherwise — and the panel unpacks one as it is downloaded.
+# CLI_PLATFORMS="" leaves them out, for an image that has to be small.
+ARG CLI_PLATFORMS="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64"
+RUN mkdir -p /out/cli && \
+    self="$(go env GOOS)/$(go env GOARCH)" && \
+    for target in ${CLI_PLATFORMS}; do \
+      [ "$target" = "$self" ] && continue; \
+      os="${target%/*}"; arch="${target#*/}"; ext=""; \
+      [ "$os" = "windows" ] && ext=".exe"; \
+      CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
+        -ldflags "-s -w \
+          -X skifity/internal/version.Version=${VERSION} \
+          -X skifity/internal/version.Commit=${COMMIT} \
+          -X skifity/internal/version.Date=${DATE}" \
+        -o "/out/cli/skifity-$os-$arch$ext" ./cmd/skifity && \
+      gzip -9 "/out/cli/skifity-$os-$arch$ext" || exit 1; \
+    done
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=backend /out/skifity /usr/local/bin/skifity
+COPY --from=backend /out/cli /usr/local/share/skifity/cli
 
 # 65532 is distroless's "nonroot" user. The installer chowns the panel's
 # directories to it, so the container never needs to run as root.

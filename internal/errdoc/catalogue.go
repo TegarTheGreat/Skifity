@@ -417,6 +417,26 @@ func UploadDeliveryFailed(detail string) *Problem {
 		Retry()
 }
 
+// CLIPlatformUnknown is a download for a platform no CLI is built for.
+func CLIPlatformUnknown(platform string) *Problem {
+	return New("cli.platform_unknown", "There is no command line tool for that platform").
+		WithCause("%s is not a platform the command line tool is built for. It is built for linux, darwin (macOS) and windows, on amd64 and arm64.", platform).
+		WithImpact("Nothing was downloaded.").
+		WithFix("Ask for one of those, for example ?os=darwin&arch=arm64 for a Mac with Apple silicon.").
+		WithDocs("/docs/cli#getting-it").
+		WithStatus(http.StatusBadRequest)
+}
+
+// CLIPlatformUnavailable is a platform this panel was not given a build for.
+func CLIPlatformUnavailable(platform, available string) *Problem {
+	return New("cli.platform_unavailable", "This panel does not have the command line tool for that platform").
+		WithCause("There is no build for %s beside this panel. It has: %s.", platform, available).
+		WithImpact("Nothing was downloaded. Deploying a folder from the panel's own New app page works without it.").
+		WithFix("Build it with `make release` and copy it into the panel's CLI directory, or use the panel's image, which carries every platform.").
+		WithDocs("/docs/cli#getting-it").
+		WithStatus(http.StatusNotFound)
+}
+
 // --- domains and TLS ---
 
 // DNSNotPointing reports a custom domain whose DNS does not resolve to us.

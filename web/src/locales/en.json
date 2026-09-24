@@ -1981,6 +1981,18 @@
         "cause": "The panel could not send the uploaded code into the build: {{0}}",
         "impact": "Nothing was built or deployed. The previous version is still running.",
         "fix": "Press Retry. If it fails again, check that the panel can reach the cluster's API and that the build pod started."
+      },
+      "cli_platform_unknown": {
+        "title": "There is no command line tool for that platform",
+        "cause": "{{0}} is not a platform the command line tool is built for. It is built for linux, darwin (macOS) and windows, on amd64 and arm64.",
+        "impact": "Nothing was downloaded.",
+        "fix": "Ask for one of those, for example ?os=darwin&arch=arm64 for a Mac with Apple silicon."
+      },
+      "cli_platform_unavailable": {
+        "title": "This panel does not have the command line tool for that platform",
+        "cause": "There is no build for {{0}} beside this panel. It has: {{1}}.",
+        "impact": "Nothing was downloaded. Deploying a folder from the panel's own New app page works without it.",
+        "fix": "Build it with `make release` and copy it into the panel's CLI directory, or use the panel's image, which carries every platform."
       }
     }
   },
@@ -2235,7 +2247,15 @@
     "sendFailed": "The app was created, but its code could not be sent. Send it again from the app's page.",
     "terminalTitle": "Prefer a terminal?",
     "terminalHelp": "Run these in the app's folder. The first time, skifity up creates the app, the database it uses and the link to the folder; after that, running it again sends and deploys the new version.",
-    "terminalPlatform": "This panel's binary is built for {{platform}}.",
-    "terminalAssistant": "An assistant that can run commands can do this for you, or connect to skifity mcp and use its deploy_folder tool."
+    "terminalAssistant": "An assistant that can run commands can do this for you, or connect to skifity mcp and use its deploy_folder tool.",
+    "platform": "Your computer",
+    "platforms": {
+      "darwin_arm64": "macOS (Apple silicon)",
+      "darwin_amd64": "macOS (Intel)",
+      "windows_amd64": "Windows",
+      "windows_arm64": "Windows on Arm",
+      "linux_amd64": "Linux",
+      "linux_arm64": "Linux on Arm"
+    }
   }
 }

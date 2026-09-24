@@ -259,20 +259,24 @@ type metaResponse struct {
 	// CLIPlatform is what the binary this panel is running was built for, so a
 	// page offering it to download can say whose machine it will run on.
 	CLIPlatform string `json:"cli_platform"`
+	// CLIPlatforms is every platform /api/cli/download can serve, this one
+	// first, so a page can offer the right file for the computer it is on.
+	CLIPlatforms []string `json:"cli_platforms"`
 }
 
 // handleMeta gives the frontend everything it needs before a user signs in.
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, metaResponse{
-		Product:     version.Name,
-		Version:     version.Version,
-		Commit:      version.Commit,
-		Tagline:     version.Tagline,
-		Locales:     []string{"en", "id", "hi", "ru", "zh-CN"},
-		DevMode:     s.cfg.DevMode,
-		SSO:         s.ssoStatus(r),
-		CLIPlatform: cliPlatform(),
-		ServerNow:   time.Now().UTC().Format(time.RFC3339),
+		Product:      version.Name,
+		Version:      version.Version,
+		Commit:       version.Commit,
+		Tagline:      version.Tagline,
+		Locales:      []string{"en", "id", "hi", "ru", "zh-CN"},
+		DevMode:      s.cfg.DevMode,
+		SSO:          s.ssoStatus(r),
+		CLIPlatform:  cliPlatform(),
+		CLIPlatforms: s.cliPlatforms(),
+		ServerNow:    time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

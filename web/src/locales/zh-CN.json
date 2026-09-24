@@ -1969,6 +1969,18 @@
         "cause": "面板无法把上传的代码发送到构建中：{{0}}",
         "impact": "没有构建或部署任何内容。之前的版本仍在运行。",
         "fix": "点击重试。如果仍然失败，请检查面板能否访问集群的 API，以及构建 Pod 是否已启动。"
+      },
+      "cli_platform_unknown": {
+        "title": "该平台没有命令行工具",
+        "cause": "{{0}} 不是命令行工具所构建的平台。它为 linux、darwin（macOS）和 windows 构建，支持 amd64 和 arm64。",
+        "impact": "没有下载任何内容。",
+        "fix": "请选择其中之一，例如 Apple 芯片的 Mac 使用 ?os=darwin&arch=arm64。"
+      },
+      "cli_platform_unavailable": {
+        "title": "此面板没有该平台的命令行工具",
+        "cause": "此面板旁没有 {{0}} 的构建。现有：{{1}}。",
+        "impact": "没有下载任何内容。在面板自己的“新建应用”页面部署文件夹不需要它。",
+        "fix": "用 `make release` 构建并复制到面板的 CLI 目录，或使用包含所有平台的面板镜像。"
       }
     }
   },
@@ -2221,7 +2233,15 @@
     "sendFailed": "应用已创建，但代码未能发送。请在应用页面重新发送。",
     "terminalTitle": "更喜欢用终端？",
     "terminalHelp": "在应用的文件夹中运行以下命令。第一次运行时，skifity up 会创建应用、它使用的数据库以及与该文件夹的关联；之后再次运行会发送并部署新版本。",
-    "terminalPlatform": "此面板的程序文件为 {{platform}} 构建。",
-    "terminalAssistant": "能运行命令的助手可以替你完成这些，或者连接 skifity mcp 并使用其 deploy_folder 工具。"
+    "terminalAssistant": "能运行命令的助手可以替你完成这些，或者连接 skifity mcp 并使用其 deploy_folder 工具。",
+    "platform": "你的电脑",
+    "platforms": {
+      "darwin_arm64": "macOS（Apple 芯片）",
+      "darwin_amd64": "macOS（Intel）",
+      "windows_amd64": "Windows",
+      "windows_arm64": "Arm 版 Windows",
+      "linux_amd64": "Linux",
+      "linux_arm64": "Arm 版 Linux"
+    }
   }
 }

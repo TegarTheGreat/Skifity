@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { ChevronRightIcon, FolderUpIcon, TerminalIcon } from "lucide-react"
@@ -9,6 +9,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import { api } from "@/lib/api"
 import {
@@ -173,11 +180,30 @@ export function SendFolderButton({ app }: { app: App }) {
 /**
  * The same thing from a terminal, for whoever would rather — and for an
  * assistant, which can run a command but cannot press a button.
+ *
+ * The commands are for the computer this page is open on: the panel runs on
+ * Linux, and a Linux binary is no use on the Mac most people deploy from. The
+ * platform is guessed from the browser and can be changed; a browser cannot
+ * tell an Apple silicon Mac from an Intel one, so a Mac is taken to be the
+ * kind sold for the last five years.
  */
 export function TerminalInstructions() {
   const { t } = useTranslation()
   const meta = useQuery({ queryKey: ["meta"], queryFn: () => api.get<Meta>("/api/meta") })
+  const [chosen, setChosen] = useState<string | null>(null)
+  const available = meta.data?.cli_platforms ?? (meta.data ? [meta.data.cli_platform] : [])
+  const platform = chosen ?? guessPlatform(available)
   const origin = window.location.origin
+  const [os, arch] = platform.split("/")
+  const url = `${origin}/api/cli/download?os=${os}&arch=${arch}`
+  const commands =
+    os === "windows"
+      ? `curl.exe -fsS "${url}" -o skifity.exe
+.\\skifity.exe login --url ${origin}
+.\\skifity.exe up`
+      : `curl -fsS "${url}" -o skifity && chmod +x skifity
+./skifity login --url ${origin}
+./skifity up`
 
   return (
     <Collapsible className="rounded-md border">
@@ -189,19 +215,40 @@ export function TerminalInstructions() {
       <CollapsibleContent>
         <div className="space-y-3 border-t p-4 text-sm">
           <p className="text-muted-foreground">{t("folder.terminalHelp")}</p>
-          <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
-            {`curl -fsS ${origin}/api/cli/download -o skifity && chmod +x skifity
-./skifity login --url ${origin}
-./skifity up`}
-          </pre>
-          {meta.data?.cli_platform && (
-            <p className="text-xs text-muted-foreground">
-              {t("folder.terminalPlatform", { platform: meta.data.cli_platform })}
-            </p>
+          {available.length > 1 && (
+            <Select value={platform} onValueChange={setChosen}>
+              <SelectTrigger className="w-full sm:w-64" aria-label={t("folder.platform")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {available.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {t(`folder.platforms.${p.replace("/", "_")}`, { defaultValue: p })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
+          <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs">
+            {commands}
+          </pre>
           <p className="text-xs text-muted-foreground">{t("folder.terminalAssistant")}</p>
         </div>
       </CollapsibleContent>
     </Collapsible>
   )
+}
+
+/** The platform this browser is most likely running on, among those offered. */
+function guessPlatform(available: string[]): string {
+  const agent = navigator.userAgent
+  const os = /Windows/i.test(agent)
+    ? "windows"
+    : /Macintosh|Mac OS X/i.test(agent)
+      ? "darwin"
+      : "linux"
+  const arch = os === "darwin" || /arm64|aarch64/i.test(agent) ? "arm64" : "amd64"
+  const exact = `${os}/${arch}`
+  if (available.includes(exact)) return exact
+  return available.find((p) => p.startsWith(`${os}/`)) ?? available[0] ?? exact
 }

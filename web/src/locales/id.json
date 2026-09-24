@@ -1969,6 +1969,18 @@
         "cause": "Panel tidak bisa mengirim kode unggahan ke dalam build: {{0}}",
         "impact": "Tidak ada yang di-build atau di-deploy. Versi sebelumnya masih berjalan.",
         "fix": "Tekan Coba lagi. Kalau gagal lagi, pastikan panel bisa menjangkau API cluster dan pod build-nya sudah berjalan."
+      },
+      "cli_platform_unknown": {
+        "title": "Tidak ada alat baris perintah untuk platform itu",
+        "cause": "{{0}} bukan platform yang dibuatkan alat baris perintahnya. Alat ini dibuat untuk linux, darwin (macOS), dan windows, di amd64 dan arm64.",
+        "impact": "Tidak ada yang diunduh.",
+        "fix": "Minta salah satunya, misalnya ?os=darwin&arch=arm64 untuk Mac dengan Apple silicon."
+      },
+      "cli_platform_unavailable": {
+        "title": "Panel ini tidak punya alat baris perintah untuk platform itu",
+        "cause": "Tidak ada build untuk {{0}} di samping panel ini. Yang ada: {{1}}.",
+        "impact": "Tidak ada yang diunduh. Men-deploy folder dari halaman Aplikasi baru di panel tetap bisa tanpanya.",
+        "fix": "Buat dengan `make release` lalu salin ke direktori CLI panel, atau pakai image panel, yang membawa semua platform."
       }
     }
   },
@@ -2221,7 +2233,15 @@
     "sendFailed": "Aplikasinya sudah dibuat, tetapi kodenya gagal dikirim. Kirim lagi dari halaman aplikasinya.",
     "terminalTitle": "Lebih suka terminal?",
     "terminalHelp": "Jalankan ini di folder aplikasinya. Pertama kali, skifity up membuat aplikasinya, database yang dipakainya, dan tautan ke folder itu; setelah itu, menjalankannya lagi akan mengirim dan men-deploy versi baru.",
-    "terminalPlatform": "Berkas program panel ini dibuat untuk {{platform}}.",
-    "terminalAssistant": "Asisten yang bisa menjalankan perintah bisa melakukannya untuk Anda, atau hubungkan ke skifity mcp dan pakai alat deploy_folder-nya."
+    "terminalAssistant": "Asisten yang bisa menjalankan perintah bisa melakukannya untuk Anda, atau hubungkan ke skifity mcp dan pakai alat deploy_folder-nya.",
+    "platform": "Komputer Anda",
+    "platforms": {
+      "darwin_arm64": "macOS (Apple silicon)",
+      "darwin_amd64": "macOS (Intel)",
+      "windows_amd64": "Windows",
+      "windows_arm64": "Windows di Arm",
+      "linux_amd64": "Linux",
+      "linux_arm64": "Linux di Arm"
+    }
   }
 }

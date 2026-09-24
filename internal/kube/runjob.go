@@ -7,6 +7,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"skifity/internal/cron"
 	"skifity/internal/version"
 )
 
@@ -213,6 +214,16 @@ func BuildCronJob(s RunSpec, schedule string) (*batchv1.CronJob, error) {
 	}
 	if schedule == "" {
 		return nil, fmt.Errorf("a scheduled command needs a schedule")
+	}
+	// Canonicalised here rather than by the caller, so that every rendering of
+	// a scheduled command agrees: the one applied to the cluster and the one
+	// the Advanced view shows. Kubernetes parses this string with its own
+	// implementation, and cron has two spellings for Sunday; see
+	// cron.Canonical. Doing it in one caller meant the panel sent one string
+	// and displayed another.
+	schedule, err = cron.Canonical(schedule)
+	if err != nil {
+		return nil, err
 	}
 
 	// Forbid, not Allow: a job that is still running when the next one is due

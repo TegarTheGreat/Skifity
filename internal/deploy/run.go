@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"skifity/internal/api"
-	"skifity/internal/cron"
 	"skifity/internal/crypto"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
@@ -245,20 +244,12 @@ func applyScheduledCommands(ctx context.Context, applier cronApplier, spec kube.
 		}
 		name := kube.CronJobName(appSlug, job.Name)
 
-		// The string the cluster is given is the one this panel's parser
-		// agrees with. Kubernetes parses the schedule itself, with a different
-		// implementation, and the two are allowed to disagree about how Sunday
-		// is spelled; see cron.Canonical. Without this the panel validates one
-		// dialect and the cluster runs another.
-		schedule, err := cron.Canonical(job.Schedule)
-		if err != nil {
-			failures = append(failures, scheduleFailure{Job: job.Name, Reason: err.Error()})
-			continue
-		}
-
+		// BuildCronJob canonicalises the schedule, so what the cluster is
+		// given is the string this panel's parser agrees with, and the same
+		// string the Advanced view shows. See cron.Canonical.
 		object, err := kube.BuildCronJob(kube.RunSpec{
 			App: spec, Name: name, Command: job.Command, Kind: kube.RunKindScheduled,
-		}, schedule)
+		}, job.Schedule)
 		if err != nil {
 			failures = append(failures, scheduleFailure{Job: job.Name, Reason: err.Error()})
 			continue

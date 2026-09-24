@@ -827,3 +827,92 @@ func TestASecretVariablesValueNeverLeavesThePanel(t *testing.T) {
 		t.Errorf("the stored value is %q", plaintext)
 	}
 }
+
+// Saying nothing about a secret is not saying "not a secret".
+//
+// Every path that leaves the field out is a path a secret arrives by: a pasted
+// .env file, the MCP server when a model omits the flag, the CLI without
+// --secret. They all used to store the value as an ordinary variable, which the
+// API then handed back to anybody on the team, to the browser, and to a model.
+func TestSilenceAboutASecretKeepsItSecret(t *testing.T) {
+	h := newHarness(t)
+	acme := h.newTenant("acme")
+
+	status, body := h.do(acme, http.MethodPost, "/api/environments/"+acme.env.ID+"/apps", map[string]any{
+		"name": "shop", "repo_url": "https://github.com/acme/shop",
+		// A pasted .env on the new-app form arrives as a plain map.
+		"variables": map[string]string{
+			"OPENAI_API_KEY": "sk-proj-abcdefghijklmnopqrstuvwxyz0123",
+			"NODE_ENV":       "production",
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create app: %d %s", status, body)
+	}
+	var answer struct {
+		App store.App `json:"app"`
+	}
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatalf("decode app: %v", err)
+	}
+	app := answer.App
+
+	put := func(fields map[string]any) {
+		t.Helper()
+		status, body := h.do(acme, http.MethodPut, "/api/apps/"+app.ID+"/variables", fields)
+		if status >= 300 {
+			t.Fatalf("set %v: %d %s", fields["key"], status, body)
+		}
+	}
+	secret := func(key string) bool {
+		t.Helper()
+		rows, err := h.db.ListVariables(t.Context(), app.ID)
+		if err != nil {
+			t.Fatalf("list variables: %v", err)
+		}
+		for _, row := range rows {
+			if row.Key == key {
+				return row.IsSecret
+			}
+		}
+		t.Fatalf("%s is not set at all", key)
+		return false
+	}
+
+	if !secret("OPENAI_API_KEY") {
+		t.Error("an API key pasted into the new-app form was stored as an ordinary value")
+	}
+	if secret("NODE_ENV") {
+		t.Error("NODE_ENV was made a secret, so nobody can read back something harmless")
+	}
+
+	// A connection string, whose password is in the value and not the name.
+	put(map[string]any{"key": "DATABASE_URL", "value": "postgres://shop:hunter2@db:5432/shop"})
+	if !secret("DATABASE_URL") {
+		t.Error("a connection string with a password in it was stored as an ordinary value")
+	}
+
+	// The MCP case: a secret overwritten by a caller that left the flag out.
+	put(map[string]any{"key": "PAYMENTS", "value": "first", "is_secret": true})
+	put(map[string]any{"key": "PAYMENTS", "value": "second"})
+	if !secret("PAYMENTS") {
+		t.Error("overwriting a secret without saying anything turned it into an ordinary value")
+	}
+
+	// An explicit answer is still obeyed. It only reveals the value just sent.
+	put(map[string]any{"key": "PAYMENTS", "value": "third", "is_secret": false})
+	if secret("PAYMENTS") {
+		t.Error("an explicit is_secret=false was ignored")
+	}
+
+	// And the value of a secret still never comes back.
+	status, body = h.do(acme, http.MethodGet, "/api/apps/"+app.ID+"/variables", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list: %d %s", status, body)
+	}
+	for _, leaked := range []string{"sk-proj-abcdefghijklmnopqrstuvwxyz0123", "hunter2"} {
+		if strings.Contains(body, leaked) {
+			t.Errorf("%q came back from the API", leaked)
+		}
+	}
+}

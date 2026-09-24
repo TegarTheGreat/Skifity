@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { parseDotEnv } from "@/lib/dotenv"
 import { api, type List } from "@/lib/api"
 import { queryClient } from "@/lib/query"
 
@@ -108,17 +109,13 @@ export function VariablesEditor({
 
   const saveBulk = useMutation({
     mutationFn: async (text: string) => {
-      for (const line of text.split("\n")) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith("#")) continue
-        const index = trimmed.indexOf("=")
-        if (index < 1) continue
-        const key = trimmed.slice(0, index).trim()
-        // A quoted value is what a .env file looks like; strip the quotes so a
-        // pasted file works without the user editing every line.
-        const raw = trimmed.slice(index + 1).trim()
-        const value = raw.replace(/^(["'])(.*)\1$/, "$2")
-        await api.put(`${base}/variables`, { key, value, is_secret: false, build_time: false })
+      // is_secret is left out on purpose. It used to say false for every
+      // line, and a pasted .env is exactly where somebody's API keys are, so
+      // they were stored as ordinary values that came back from the API and
+      // sat on this page. Left out, the panel keeps a secret a secret and
+      // decides a new one by the rule its log redaction uses.
+      for (const [key, value] of Object.entries(parseDotEnv(text))) {
+        await api.put(`${base}/variables`, { key, value, build_time: false })
       }
     },
     onSuccess: () => {

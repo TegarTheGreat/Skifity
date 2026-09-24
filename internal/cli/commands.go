@@ -643,6 +643,15 @@ func cmdEnv(ctx context.Context, args []string, out io.Writer) error {
 
 	sub, values := envSubcommand(positional)
 
+	// Whether --secret was on the command line at all, as opposed to left at
+	// its default. See the set subcommand.
+	secretGiven := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "secret" {
+			secretGiven = true
+		}
+	})
+
 	cfg, err := LoadConfig()
 	if err != nil {
 		return err
@@ -690,9 +699,14 @@ func cmdEnv(ctx context.Context, args []string, out io.Writer) error {
 			if !found {
 				return errdoc.BadRequest(fmt.Sprintf("%q is not in the form KEY=value.", pair))
 			}
-			body := map[string]any{
-				"key": key, "value": value,
-				"is_secret": *secret, "build_time": *buildTime,
+			body := map[string]any{"key": key, "value": value, "build_time": *buildTime}
+			// Only when --secret was actually given. Sending the flag's default
+			// said "not a secret" on every set, so overwriting an API key
+			// without remembering the flag turned it into a variable anybody
+			// could read back. Left out, the panel keeps a secret a secret and
+			// decides a new one by its name and value.
+			if secretGiven {
+				body["is_secret"] = *secret
 			}
 			var result struct {
 				RequiresRebuild bool `json:"requires_rebuild"`

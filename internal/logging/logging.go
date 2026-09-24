@@ -116,6 +116,37 @@ func redactAttr(a slog.Attr) slog.Attr {
 	return a
 }
 
+// LooksSecret reports whether a variable should be stored as a secret when
+// nobody said either way.
+//
+// It is the same definition the log redaction uses, on purpose: a key that the
+// logger would never write out is a key whose value should not come back from
+// the API either, and two lists of what counts as sensitive is one list that
+// is wrong. One rule is added that the logger has no need of. A connection
+// string carries its password inside the value — `DATABASE_URL=postgres://
+// shop:hunter2@db/shop` — under a key that matches nothing above.
+//
+// The direction of a mistake matters. Marking something secret that was not
+// costs somebody the ability to read it back; they can still see the name and
+// overwrite it. Missing a secret hands it to every member of the team, to the
+// browser, and — through the MCP server — to a language model.
+func LooksSecret(key, value string) bool {
+	if sensitiveKey.MatchString(key) {
+		return true
+	}
+	for _, re := range valuePatterns {
+		if re.MatchString(value) {
+			return true
+		}
+	}
+	return credentialInURL.MatchString(value)
+}
+
+// credentialInURL matches scheme://user:password@host, the shape of every
+// database and cache connection string. The user part may be empty, which is
+// how Redis writes a password-only URL.
+var credentialInURL = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.\-]*://[^/\s:@]*:[^/\s@]+@`)
+
 // Scrub removes secret-shaped substrings from free text. It is exported because
 // command output and build logs pass through it before reaching the UI.
 func Scrub(s string) string {

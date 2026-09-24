@@ -14,6 +14,7 @@ import (
 	"skifity/internal/events"
 	"skifity/internal/gitsrc"
 	"skifity/internal/kube"
+	"skifity/internal/logging"
 	"skifity/internal/plugins"
 	"skifity/internal/settings"
 	"skifity/internal/store"
@@ -280,7 +281,10 @@ func (s *Server) setInitialVariables(r *http.Request, app store.App, values map[
 		if err != nil {
 			return err
 		}
-		variable := store.Variable{AppID: app.ID, Key: key}
+		// Nobody says which of these is a secret, because they arrive as a
+		// map — from a Compose file, or from a pasted .env. That is exactly
+		// where API keys are, so the same rule decides as everywhere else.
+		variable := store.Variable{AppID: app.ID, Key: key, IsSecret: secretness(nil, false, key, values[raw])}
 		if err := s.db.SetVariable(r.Context(), &variable, sealed); err != nil {
 			return err
 		}
@@ -559,10 +563,31 @@ func (s *Server) handleListVariables(w http.ResponseWriter, r *http.Request) {
 }
 
 type setVariableRequest struct {
-	Key       string `json:"key"`
-	Value     string `json:"value"`
-	IsSecret  bool   `json:"is_secret,omitempty"`
-	BuildTime bool   `json:"build_time,omitempty"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	// IsSecret is nil when the caller said nothing, which is not the same as
+	// saying no. See secretness.
+	IsSecret  *bool `json:"is_secret,omitempty"`
+	BuildTime bool  `json:"build_time,omitempty"`
+}
+
+// secretness decides whether a variable is stored as a secret.
+//
+// asked is what the caller said, and nil when it said nothing. It used to be a
+// plain bool, so saying nothing meant "not a secret" — and every path that says
+// nothing is a path a secret arrives by. A pasted .env file, where somebody's
+// API keys live. The MCP server, which sent false whenever a model left the
+// field out, so a model overwriting STRIPE_KEY turned it into a variable the
+// next list_variables handed back. The CLI without --secret.
+//
+// Now silence means: keep it a secret if it was one, and otherwise decide by
+// the same rule the log redaction uses. An explicit answer is still obeyed —
+// it only ever reveals the value the caller has just sent, never the old one.
+func secretness(asked *bool, wasSecret bool, key, value string) bool {
+	if asked != nil {
+		return *asked
+	}
+	return wasSecret || logging.LooksSecret(key, value)
 }
 
 func (s *Server) handleSetVariable(w http.ResponseWriter, r *http.Request) {
@@ -587,7 +612,21 @@ func (s *Server) handleSetVariable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	variable := store.Variable{AppID: app.ID, Key: key, IsSecret: req.IsSecret, BuildTime: req.BuildTime}
+	existing, err := s.db.ListVariables(r.Context(), app.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	wasSecret := false
+	for _, row := range existing {
+		if row.Key == key {
+			wasSecret = row.IsSecret
+		}
+	}
+	variable := store.Variable{
+		AppID: app.ID, Key: key, BuildTime: req.BuildTime,
+		IsSecret: secretness(req.IsSecret, wasSecret, key, req.Value),
+	}
 	if err := s.db.SetVariable(r.Context(), &variable, sealed); err != nil {
 		writeError(w, r, err)
 		return
@@ -675,7 +714,21 @@ func (s *Server) handleSetSharedVariable(w http.ResponseWriter, r *http.Request)
 		writeError(w, r, err)
 		return
 	}
-	variable := store.SharedVariable{ProjectID: project.ID, Key: key, IsSecret: req.IsSecret}
+	existing, err := s.db.ListSharedVariables(r.Context(), project.ID)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	wasSecret := false
+	for _, row := range existing {
+		if row.Key == key {
+			wasSecret = row.IsSecret
+		}
+	}
+	variable := store.SharedVariable{
+		ProjectID: project.ID, Key: key,
+		IsSecret: secretness(req.IsSecret, wasSecret, key, req.Value),
+	}
 	if err := s.db.SetSharedVariable(r.Context(), &variable, sealed); err != nil {
 		writeError(w, r, err)
 		return

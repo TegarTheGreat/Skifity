@@ -120,3 +120,39 @@ func TestScrubIsUsableOnItsOwn(t *testing.T) {
 		t.Fatalf("a GitHub token survived: %s", got)
 	}
 }
+
+// A variable nobody marked is stored as a secret when it looks like one.
+//
+// The case this exists for is a pasted .env file, which is where a person's
+// API keys live. Stored as ordinary variables they came back from the API, sat
+// on the page for every member of the team, and were handed by the MCP server
+// to a language model.
+func TestLooksSecretCatchesWhatAPastedEnvFileHolds(t *testing.T) {
+	for _, tc := range []struct {
+		key, value string
+		secret     bool
+	}{
+		{"OPENAI_API_KEY", "sk-proj-abcdefghijklmnopqrstuvwxyz0123", true},
+		{"STRIPE_SECRET_KEY", "sk_live_x", true},
+		{"GITHUB_TOKEN", "ghp_abcdefghijklmnopqrstuvwxyz0123", true},
+		{"SESSION_PASSWORD", "hunter2", true},
+		{"JWT_PRIVATE_KEY", "-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----", true},
+		// The password is in the value and the key says nothing.
+		{"DATABASE_URL", "postgres://shop:hunter2@db.internal:5432/shop", true},
+		{"REDIS_URL", "redis://:hunter2@cache:6379", true},
+		// A value that looks like a key, under an innocent name.
+		{"UPSTREAM", "sk-abcdefghijklmnopqrstuvwxyz012345", true},
+
+		// Ordinary configuration stays readable.
+		{"NODE_ENV", "production", false},
+		{"LOG_LEVEL", "debug", false},
+		{"PUBLIC_URL", "https://shop.example.test", false},
+		// A URL with a user and no password is not a credential.
+		{"UPSTREAM_URL", "https://api@example.test/v1", false},
+		{"DATABASE_URL", "postgres://db.internal:5432/shop", false},
+	} {
+		if got := LooksSecret(tc.key, tc.value); got != tc.secret {
+			t.Errorf("LooksSecret(%q, %q) = %v, want %v", tc.key, tc.value, got, tc.secret)
+		}
+	}
+}

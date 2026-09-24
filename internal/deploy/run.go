@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"skifity/internal/api"
+	"skifity/internal/cron"
 	"skifity/internal/crypto"
 	"skifity/internal/errdoc"
 	"skifity/internal/kube"
@@ -211,34 +212,93 @@ func (d *Deployer) streamRun(ctx context.Context, deployment store.Deployment, n
 	}
 }
 
+// cronApplier is the part of the cluster that a scheduled command needs.
+//
+// An interface, and the only one in this package, because the thing worth
+// proving about scheduled commands is what happens when the cluster refuses
+// one — and that cannot be shown against a real cluster here.
+type cronApplier interface {
+	Apply(ctx context.Context, obj any) error
+}
+
+// scheduleFailure is one scheduled command the cluster would not take.
+type scheduleFailure struct {
+	// Job is the name the person gave it, not the Kubernetes object's.
+	Job    string
+	Reason string
+}
+
+// applyScheduledCommands renders and applies an app's scheduled commands.
+//
+// It returns the names it applied and the ones that were refused, rather than
+// stopping at the first refusal. A person with three nightly jobs and one bad
+// schedule should end up with two running jobs and one clear message, not with
+// nothing.
+func applyScheduledCommands(ctx context.Context, applier cronApplier, spec kube.AppSpec,
+	appSlug string, jobs []store.AppJob,
+) (map[string]bool, []scheduleFailure) {
+	applied := map[string]bool{}
+	var failures []scheduleFailure
+	for _, job := range jobs {
+		if !job.Enabled {
+			continue
+		}
+		name := kube.CronJobName(appSlug, job.Name)
+
+		// The string the cluster is given is the one this panel's parser
+		// agrees with. Kubernetes parses the schedule itself, with a different
+		// implementation, and the two are allowed to disagree about how Sunday
+		// is spelled; see cron.Canonical. Without this the panel validates one
+		// dialect and the cluster runs another.
+		schedule, err := cron.Canonical(job.Schedule)
+		if err != nil {
+			failures = append(failures, scheduleFailure{Job: job.Name, Reason: err.Error()})
+			continue
+		}
+
+		object, err := kube.BuildCronJob(kube.RunSpec{
+			App: spec, Name: name, Command: job.Command, Kind: kube.RunKindScheduled,
+		}, schedule)
+		if err != nil {
+			failures = append(failures, scheduleFailure{Job: job.Name, Reason: err.Error()})
+			continue
+		}
+		if err := applier.Apply(ctx, object); err != nil {
+			failures = append(failures, scheduleFailure{Job: job.Name, Reason: err.Error()})
+			continue
+		}
+		applied[name] = true
+	}
+	return applied, failures
+}
+
 // applyScheduledJobs applies an app's scheduled commands and removes the ones
 // it no longer has.
 //
 // They are applied with the rest of the app's objects, from the same image, so
 // a nightly job always runs the version that is deployed rather than whatever
 // it was when somebody wrote the schedule.
-func (d *Deployer) applyScheduledJobs(ctx context.Context, spec kube.AppSpec, app store.App) error {
+//
+// A scheduled command the cluster refuses does not fail the deployment. It
+// used to, and that was wrong twice over: the app's own objects are applied
+// before this runs, so the failure arrived after the new version was already
+// rolling out and the panel recorded as failed a deployment the cluster was
+// busy completing — and one schedule the API server would not take blocked
+// every future deploy of that app, for ever, with a Kubernetes message about a
+// CronJob on a page about an app. The refusal is written into the deployment's
+// log instead, where the person who caused it is looking.
+func (d *Deployer) applyScheduledJobs(ctx context.Context, deploymentID string, spec kube.AppSpec, app store.App) error {
 	jobs, err := d.db.ListAppJobs(ctx, app.ID)
 	if err != nil {
 		return err
 	}
 
-	wanted := map[string]bool{}
-	for _, job := range jobs {
-		name := kube.CronJobName(app.Slug, job.Name)
-		if !job.Enabled {
-			continue
-		}
-		cron, err := kube.BuildCronJob(kube.RunSpec{
-			App: spec, Name: name, Command: job.Command, Kind: kube.RunKindScheduled,
-		}, job.Schedule)
-		if err != nil {
-			return errdoc.BadRequest(err.Error())
-		}
-		if err := d.cluster.Client().Applier().Apply(ctx, cron); err != nil {
-			return err
-		}
-		wanted[name] = true
+	wanted, failures := applyScheduledCommands(ctx, d.cluster.Client().Applier(), spec, app.Slug, jobs)
+	for _, failure := range failures {
+		d.appendLog(ctx, deploymentID,
+			"The scheduled command \""+failure.Job+"\" could not be scheduled: "+failure.Reason)
+		d.log.Warn("a scheduled command was refused by the cluster",
+			"app", app.ID, "job", failure.Job, "error", failure.Reason)
 	}
 
 	// A schedule that was removed or switched off has to stop running, and

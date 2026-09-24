@@ -116,3 +116,108 @@ func TestNextRun(t *testing.T) {
 		t.Fatalf("NextRun = %s, want %s", next, want)
 	}
 }
+
+// What the panel validated has to be what the cluster runs.
+//
+// Kubernetes parses the schedule string itself, with a different
+// implementation, so any spelling this parser accepts and that one does not is
+// a scheduled command stored, shown with a next-run time, and refused by the
+// API server.
+func TestCanonicalRewritesTheSundayThisParserAcceptsAndOthersNeedNot(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"0 3 * * 7", "0 3 * * 0"},
+		{"0 3 * * 0", "0 3 * * 0"},
+		{"0 3 * * 1-7", "0 3 * * 0,1,2,3,4,5,6"},
+		{"0 3 * * 6,7", "0 3 * * 0,6"},
+		{"0 3 * * 0-7/2", "0 3 * * 0,2,4,6"},
+		// "*" carries meaning beyond its values, so it is never expanded.
+		{"0 3 * * *", "0 3 * * *"},
+		{"*/15 * * * *", "*/15 * * * *"},
+		// Extra spacing is normalised away, because the string is compared and
+		// stored rather than only parsed.
+		{"0   3 * *   7", "0 3 * * 0"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			got, err := Canonical(tc.in)
+			if err != nil {
+				t.Fatalf("Canonical(%q): %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Errorf("Canonical(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// Rewriting a schedule is only safe if it still means the same thing. This is
+// the property that makes Canonical worth having rather than dangerous.
+func TestCanonicalNeverChangesWhenAScheduleFires(t *testing.T) {
+	expressions := []string{
+		"0 3 * * 7", "0 3 * * 0", "0 3 * * 1-7", "0 3 * * 6,7", "0 3 * * 0-7/2",
+		"0 3 * * *", "*/15 * * * *", "0 0 1 * *", "30 2 * * 1-5",
+		"0 0 1 1 7", "5/15 * * * 7", "0 0 29 2 *", "0 12 13 * 5",
+		// Both fields restricted: cron matches either, and that is exactly the
+		// rule a careless rewrite would break.
+		"0 4 1 * 7", "0 4 15 * 0",
+	}
+	for _, expression := range expressions {
+		t.Run(expression, func(t *testing.T) {
+			original, err := ParseSchedule(expression)
+			if err != nil {
+				t.Fatalf("parse %q: %v", expression, err)
+			}
+			canonical, err := Canonical(expression)
+			if err != nil {
+				t.Fatalf("Canonical(%q): %v", expression, err)
+			}
+			rewritten, err := ParseSchedule(canonical)
+			if err != nil {
+				t.Fatalf("the canonical form %q does not parse: %v", canonical, err)
+			}
+
+			// Every 13 minutes across four years, which crosses a leap day and
+			// every weekday-of-month combination.
+			start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+			end := start.AddDate(4, 0, 0)
+			for at := start; at.Before(end); at = at.Add(13 * time.Minute) {
+				if original.Matches(at) != rewritten.Matches(at) {
+					t.Fatalf("%q and its canonical form %q disagree at %s: %v and %v",
+						expression, canonical, at.Format(time.RFC3339),
+						original.Matches(at), rewritten.Matches(at))
+				}
+			}
+		})
+	}
+}
+
+func TestCanonicalRefusesWhatTheParserRefuses(t *testing.T) {
+	for _, bad := range []string{"", "0 3 * *", "0 3 * * 8", "@daily", "0 3 * * MON"} {
+		if _, err := Canonical(bad); err == nil {
+			t.Errorf("Canonical(%q) accepted it", bad)
+		}
+	}
+}
+
+// A schedule that fires only in a leap year fires. Saying "this schedule never
+// fires" to somebody whose backup is in fact scheduled is worse than saying
+// nothing.
+func TestNextRunFindsTheTwentyNinthOfFebruary(t *testing.T) {
+	after := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
+	next, err := NextRun("0 0 29 2 *", after)
+	if err != nil {
+		t.Fatalf("NextRun for a leap-day schedule: %v", err)
+	}
+	want := time.Date(2028, 2, 29, 0, 0, 0, 0, time.UTC)
+	if !next.Equal(want) {
+		t.Errorf("next run is %s, want %s", next.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+}
+
+// A schedule that genuinely never fires still says so, rather than the horizon
+// being widened until every mistake looks like a valid schedule.
+func TestAScheduleThatCannotFireStillSaysSo(t *testing.T) {
+	after := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	if _, err := NextRun("0 0 30 2 *", after); err == nil {
+		t.Error("the 30th of February was reported as a time that comes round")
+	}
+}

@@ -511,6 +511,12 @@ func (s *Server) handleDeleteAppJob(w http.ResponseWriter, r *http.Request) {
 // answers a bad one with a rejected object and the panel would have to explain
 // that afterwards. The same parser the backup schedules use is a five-field
 // cron expression, which is what people expect to type.
+//
+// It is stored in the form this panel's parser agrees with, not verbatim.
+// Kubernetes parses the string itself, with a different implementation, and
+// validating one dialect while the cluster runs another is how "0 3 * * 7"
+// — an ordinary way to write Sunday — was accepted, stored, shown with a
+// next-run time and then refused by the API server. See cron.Canonical.
 func buildAppJob(appID, id string, req appJobRequest) (store.AppJob, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -520,8 +526,8 @@ func buildAppJob(appID, id string, req appJobRequest) (store.AppJob, error) {
 	if command == "" {
 		return store.AppJob{}, errdoc.BadRequest("Enter the command to run on the schedule.")
 	}
-	schedule := strings.TrimSpace(req.Schedule)
-	if _, err := cron.ParseSchedule(schedule); err != nil {
+	schedule, err := cron.Canonical(strings.TrimSpace(req.Schedule))
+	if err != nil {
 		return store.AppJob{}, errdoc.BadRequest(
 			"That is not a schedule Skifity understands. Use five cron fields, for example \"0 3 * * *\" for every day at 03:00 UTC.")
 	}

@@ -3,6 +3,7 @@ package cron
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -173,6 +174,65 @@ func contains(values []int, v int) bool {
 	return false
 }
 
+// Canonical returns the expression as this parser understood it.
+//
+// # Why this has to exist
+//
+// The panel validates a schedule here and then hands the raw string to
+// Kubernetes, which parses it with a different implementation. Those two are
+// allowed to disagree, and on one point they reliably do: cron's day-of-week
+// field has two spellings for Sunday, 0 and 7, and this parser accepts both
+// while the cluster's need not. A schedule written "0 3 * * 7" — a completely
+// ordinary way to say Sunday — passed validation, was stored, was shown on the
+// page with a next-run time this package worked out, and was then refused by
+// the API server.
+//
+// So the string that goes to the cluster is the one this parser agrees with.
+// What was validated is what runs, which is the only version of that sentence
+// worth anything.
+//
+// Only the day-of-week field is rewritten, and only when it is not "*". Two
+// reasons for the exception: "*" carries meaning beyond its values — cron
+// matches day-of-month or day-of-week when both are restricted — so expanding
+// it would change what the schedule means; and a field rewritten into a list
+// for no reason is a schedule somebody no longer recognises as the one they
+// typed.
+func Canonical(expression string) (string, error) {
+	schedule, err := ParseSchedule(expression)
+	if err != nil {
+		return "", err
+	}
+	fields := strings.Fields(expression)
+	if fields[4] == "*" {
+		return strings.Join(fields, " "), nil
+	}
+	fields[4] = joinValues(schedule.DaysOfWeek)
+	return strings.Join(fields, " "), nil
+}
+
+// joinValues renders a field's values, sorted and without repeats.
+//
+// Sorted because "0-7" parses to a set ending in a second Sunday and a reader
+// should not have to know that; deduplicated for the same reason.
+func joinValues(values []int) string {
+	seen := map[int]bool{}
+	sorted := make([]int, 0, len(values))
+	for _, v := range values {
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		sorted = append(sorted, v)
+	}
+	slices.Sort(sorted)
+
+	parts := make([]string, 0, len(sorted))
+	for _, v := range sorted {
+		parts = append(parts, strconv.Itoa(v))
+	}
+	return strings.Join(parts, ",")
+}
+
 // DueNow reports whether a schedule fires in the minute now falls in.
 //
 // The scheduler runs once a minute and compares against the minute, so a backup
@@ -191,10 +251,16 @@ func NextRun(expression string, after time.Time) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	// Scanning minute by minute for up to a year is simple and fast enough:
-	// this runs when a user opens a settings page, not in a hot loop.
+	// Scanning minute by minute is simple and fast enough: this runs when a
+	// user opens a settings page, not in a hot loop.
+	//
+	// Five years and not one. "0 0 29 2 *" is a valid schedule that fires only
+	// in a leap year, so a one-year horizon answered "this schedule never
+	// fires" for a schedule that fires — and the panel showed that sentence to
+	// somebody whose backup was in fact scheduled. Five covers the longest gap
+	// the five-field form can express.
 	candidate := after.UTC().Truncate(time.Minute).Add(time.Minute)
-	limit := candidate.AddDate(1, 0, 0)
+	limit := candidate.AddDate(5, 0, 0)
 	for candidate.Before(limit) {
 		if schedule.Matches(candidate) {
 			return candidate, nil

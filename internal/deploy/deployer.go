@@ -326,7 +326,7 @@ func (d *Deployer) apply(ctx context.Context, deployment store.Deployment, app s
 
 	// Scheduled commands run the version that is deployed, so they are applied
 	// with it rather than when somebody writes the schedule.
-	if err := d.applyScheduledJobs(ctx, spec, app); err != nil {
+	if err := d.applyScheduledJobs(ctx, deployment.ID, spec, app); err != nil {
 		return err
 	}
 

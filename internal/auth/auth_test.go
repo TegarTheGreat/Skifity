@@ -2,12 +2,16 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/argon2"
 
 	"skifity/internal/crypto"
 	"skifity/internal/store"
@@ -543,5 +547,118 @@ func TestATwoFactorCodeCannotBeUsedTwice(t *testing.T) {
 	// ...and not twice.
 	if _, err := service.Login(ctx, email, password, next, "198.51.100.10", "test"); !errors.Is(err, ErrInvalidTOTP) {
 		t.Fatalf("the same code was accepted a second time: %v", err)
+	}
+}
+
+// oldHashOf makes a valid argon2id hash with parameters this build considers
+// out of date, so the upgrade path can be exercised with a real password.
+func oldHashOf(t *testing.T, password string) string {
+	t.Helper()
+	salt := []byte("sixteen-byte-slt")
+	const weakMemory, weakTime, weakParallelism = 4096, 1, 1
+	sum := argon2.IDKey([]byte(password), salt, weakTime, weakMemory, weakParallelism, argonKeyLen)
+	encoded := fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
+		argon2.Version, weakMemory, weakTime, weakParallelism,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(sum))
+	if !NeedsRehash(encoded) {
+		t.Fatalf("this build does not consider %q out of date, so the upgrade path is not exercised", encoded)
+	}
+	if err := VerifyPassword(password, encoded); err != nil {
+		t.Fatalf("the old-parameter hash does not verify: %v", err)
+	}
+	return encoded
+}
+
+// Signing in with an out-of-date hash replaces it.
+//
+// The write used to be thrown away unread, so a rehash that never landed looked
+// exactly like one that did and the parameters would never actually move.
+func TestSigningInUpgradesAnOutOfDateHash(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+	keyring, err := crypto.InitKeyring(filepath.Join(t.TempDir(), "master.key"))
+	if err != nil {
+		t.Fatalf("create a keyring: %v", err)
+	}
+	service := NewService(db, keyring, time.Hour, false)
+
+	const email = "person@example.test"
+	const password = "a reasonable passphrase"
+	user := store.User{Email: email, Name: "Person", PasswordHash: oldHashOf(t, password), Locale: "en"}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+
+	if _, err := service.Login(ctx, email, password, "", "203.0.113.1", "test"); err != nil {
+		t.Fatalf("sign in: %v", err)
+	}
+
+	after, err := db.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("read the user back: %v", err)
+	}
+	if NeedsRehash(after.PasswordHash) {
+		t.Error("the hash was not upgraded, and nothing said so")
+	}
+	if err := VerifyPassword(password, after.PasswordHash); err != nil {
+		t.Fatalf("the upgraded hash does not accept the password: %v", err)
+	}
+}
+
+// Upgrading a hash writes the hash and nothing else.
+//
+// It happens in the middle of a sign-in, on a row read before the password was
+// even checked. Writing all eleven columns from that copy meant the sign-in put
+// back the name, locale, theme — and whether the account is disabled — as they
+// were when it started, undoing whatever had changed in between.
+func TestUpgradingAHashTouchesNothingElse(t *testing.T) {
+	ctx := context.Background()
+	db, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatalf("open the database: %v", err)
+	}
+	defer db.Close()
+
+	user := store.User{Email: "person@example.test", Name: "Person", PasswordHash: "placeholder", Locale: "en"}
+	if err := db.CreateUser(ctx, &user); err != nil {
+		t.Fatalf("create the user: %v", err)
+	}
+	// The copy a sign-in would be holding: read before anything changed.
+	stale, err := db.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("read the user: %v", err)
+	}
+
+	// Somebody else changes the row while the sign-in is in flight.
+	changed := stale
+	changed.Locale = "id"
+	changed.Name = "Renamed"
+	changed.Disabled = true
+	if err := db.UpdateUser(ctx, &changed); err != nil {
+		t.Fatalf("change the user: %v", err)
+	}
+
+	// What the sign-in does with its stale copy in hand.
+	if err := db.UpdatePasswordHash(ctx, stale.ID, "the-upgraded-hash"); err != nil {
+		t.Fatalf("upgrade the hash: %v", err)
+	}
+
+	after, err := db.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("read the user back: %v", err)
+	}
+	if after.PasswordHash != "the-upgraded-hash" {
+		t.Errorf("the hash was not written: %q", after.PasswordHash)
+	}
+	if !after.Disabled {
+		t.Error("the account was put back to enabled")
+	}
+	if after.Locale != "id" || after.Name != "Renamed" {
+		t.Errorf("the other change was undone: locale %q, name %q", after.Locale, after.Name)
 	}
 }

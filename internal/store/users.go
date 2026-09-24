@@ -111,6 +111,26 @@ func (db *DB) UpdateUser(ctx context.Context, u *User) error {
 	return nil
 }
 
+// UpdatePasswordHash writes only the password hash.
+//
+// Separate from UpdateUser, which writes eleven columns from whatever the
+// caller last read. Upgrading a hash happens in the middle of an ordinary
+// sign-in, minutes after the row was read, so a full-row write there would put
+// back the name, locale, theme — and whether the account is disabled — as they
+// were when the sign-in began. An administrator disabling somebody while they
+// are signing in should not have it undone by the sign-in.
+func (db *DB) UpdatePasswordHash(ctx context.Context, id, hash string) error {
+	res, err := db.Exec(ctx,
+		`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, Now(), id)
+	if err != nil {
+		return fmt.Errorf("update password hash: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // TouchUserLogin records a successful sign-in.
 func (db *DB) TouchUserLogin(ctx context.Context, id string) error {
 	_, err := db.Exec(ctx, `UPDATE users SET last_login_at = ? WHERE id = ?`, Now(), id)

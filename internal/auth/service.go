@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -219,10 +220,22 @@ func (s *Service) Login(ctx context.Context, email, password, totpCode, ip, user
 	}
 
 	// Upgrade a hash made with older parameters now that we have the password.
+	//
+	// Only the hash is written. This runs in the middle of a sign-in, on a row
+	// read before the password was even checked, so writing the whole row would
+	// put back the name, locale, theme and whether the account is disabled as
+	// they were when the sign-in started — an administrator disabling somebody
+	// mid-sign-in would find the sign-in had undone it.
+	//
+	// A failure is not the sign-in's failure: the password was right and the
+	// old hash still works. It is logged rather than dropped, because a rehash
+	// that never lands means the parameters never actually move.
 	if NeedsRehash(user.PasswordHash) {
 		if rehashed, err := s.hashPassword(ctx, password); err == nil {
-			user.PasswordHash = rehashed
-			_ = s.db.UpdateUser(ctx, &user)
+			if err := s.db.UpdatePasswordHash(ctx, user.ID, rehashed); err != nil {
+				slog.Default().Warn("a password hash could not be upgraded",
+					"user", user.ID, "error", err)
+			}
 		}
 	}
 

@@ -277,13 +277,28 @@ func backupScript(s JobSpec) string {
 echo "==> Backing up $DB_NAME"
 
 # A pipeline hides a failing dump behind a successful gzip, and a dump that
-# failed halfway still compresses cleanly. The status is checked explicitly.
+# failed halfway still compresses cleanly. Without one, the dump's own exit
+# status is the command's, and set -e stops here.
 %s > %s.raw
+
+# An empty dump is not a small backup, it is no backup.
+#
+# Every engine here writes a header even for a database with nothing in it, so
+# zero bytes means the dump produced nothing while still reporting success.
+# Checking after gzip cannot see this: compressing an empty file gives about
+# twenty bytes, which every "is the file non-empty" test happily accepts, and
+# the result is uploaded, recorded, and found to be worthless on the day
+# somebody needs it.
+if [ ! -s %s.raw ]; then
+  echo "The dump came back empty, so there is nothing to back up. The database may be unreachable or the credentials may be wrong." >&2
+  exit 1
+fi
+
 gzip -c %s.raw > %s
 rm -f %s.raw
 
 echo "==> Dumped $(wc -c < %s) compressed bytes"
-`, dump, dumpFile, dumpFile, dumpFile, dumpFile, dumpFile)
+`, dump, dumpFile, dumpFile, dumpFile, dumpFile, dumpFile, dumpFile)
 }
 
 // uploadScript sends the staged dump to the storage service.
